@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# PyInstaller build artifacts (the exe in dist/ is kept for sharing)
+build/
+*.spec
+
+# App runtime metadata written into organized folders
+.phorg/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/

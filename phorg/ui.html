@@ -1,0 +1,2623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>phorg — Storage Organizer</title>
+<style>
+:root{
+  --bg0:#0b0f1a; --bg1:#0f1420; --card:#151d2e; --card2:#1b2740; --line:#2a3a58;
+  --txt:#e8eef9; --mut:#93a3bd; --mut2:#6b7a97;
+  --accent:#4f8cff; --accent2:#7c5cff; --good:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+  --media:#3b82f6; --docs:#22c55e; --system:#ef4444; --extracted:#a855f7;
+  --reclaim:#f59e0b; --personal:#64748b;
+  --shadow:0 10px 40px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;color:var(--txt);font:14px/1.5 'Segoe UI',system-ui,-apple-system,Arial,sans-serif;
+  background:radial-gradient(1200px 700px at 12% -8%,#182036 0%,transparent 60%),
+             radial-gradient(1000px 700px at 110% 0%,#20183a 0%,transparent 55%),
+             linear-gradient(160deg,var(--bg0),var(--bg1));
+  background-attachment:fixed;}
+::selection{background:#4f8cff55}
+a{color:var(--accent);text-decoration:none}
+button{font:inherit;cursor:pointer}
+.hidden{display:none!important}
+
+/* layout */
+.app{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+.side{border-right:1px solid var(--line);padding:20px 16px;position:sticky;top:0;height:100vh;
+  display:flex;flex-direction:column;gap:6px;background:rgba(10,14,24,.55);backdrop-filter:blur(6px)}
+.brand{display:flex;align-items:center;gap:11px;margin:2px 6px 20px}
+.logo{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:20px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 6px 18px #4f8cff44}
+.brand b{font-size:17px;letter-spacing:.2px}
+.brand span{display:block;font-size:11px;color:var(--mut);font-weight:400;margin-top:-2px}
+.nav{display:flex;flex-direction:column;gap:3px}
+.nav button{display:flex;align-items:center;gap:11px;background:transparent;border:0;color:var(--mut);
+  padding:10px 12px;border-radius:10px;text-align:left;width:100%;transition:.15s}
+.nav button .ic{width:20px;text-align:center;font-size:16px}
+.nav button:hover{background:#ffffff0d;color:var(--txt)}
+.nav button.active{background:linear-gradient(90deg,#4f8cff22,#7c5cff11);color:var(--txt);
+  box-shadow:inset 0 0 0 1px #4f8cff33}
+.nav button:disabled{opacity:.4;cursor:not-allowed}
+.side .foot{margin-top:auto;font-size:11px;color:var(--mut2);padding:10px 8px;line-height:1.6}
+.conn-pill{margin:0 6px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;
+  background:var(--card);font-size:12px;color:var(--mut)}
+.conn-pill b{color:var(--txt);display:block;font-size:12.5px;word-break:break-all}
+.conn-pill .st{display:inline-flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mut2)}
+.dot.on{background:var(--good);box-shadow:0 0 8px var(--good)}
+
+.main{padding:30px 34px 60px;max-width:1180px;width:100%}
+.page{animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+h1{font-size:24px;margin:0 0 4px}
+.lead{color:var(--mut);margin:0 0 24px;font-size:13.5px}
+
+/* cards */
+.card{background:linear-gradient(180deg,var(--card),#131a2a);border:1px solid var(--line);
+  border-radius:16px;padding:22px;box-shadow:var(--shadow)}
+.card+.card{margin-top:18px}
+.grid{display:grid;gap:16px}
+.stat-grid{grid-template-columns:repeat(auto-fit,minmax(165px,1fr))}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;position:relative;overflow:hidden}
+.stat .k{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.stat .v{font-size:26px;font-weight:750;margin-top:5px;line-height:1.1}
+.stat .v small{font-size:12px;color:var(--mut);font-weight:500}
+.stat .spark{position:absolute;right:-6px;bottom:-10px;font-size:52px;opacity:.06}
+
+/* connection page */
+.choose{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.choice{border:1.5px solid var(--line);border-radius:16px;padding:22px;cursor:pointer;transition:.18s;
+  background:var(--card);position:relative}
+.choice:hover{border-color:var(--accent);transform:translateY(-2px)}
+.choice.sel{border-color:var(--accent);box-shadow:0 0 0 3px #4f8cff2a}
+.choice .big{font-size:34px}
+.choice h3{margin:12px 0 4px;font-size:17px}
+.choice p{margin:0;color:var(--mut);font-size:12.5px}
+.choice .check{position:absolute;top:14px;right:16px;color:var(--accent);font-size:18px;opacity:0;transition:.15s}
+.choice.sel .check{opacity:1}
+
+label.fld{display:block;margin:16px 0 6px;font-size:12.5px;color:var(--mut);font-weight:600}
+input[type=text],select{width:100%;background:var(--bg1);border:1px solid var(--line);color:var(--txt);
+  border-radius:10px;padding:11px 13px;font-size:13.5px;transition:.15s}
+input[type=text]:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px #4f8cff22}
+.row{display:flex;gap:10px;align-items:center}
+.row input[type=text]{flex:1}
+
+.btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:0;padding:11px 20px;
+  border-radius:11px;font-weight:650;font-size:13.5px;transition:.15s;box-shadow:0 6px 18px #4f8cff33}
+.btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.btn:active{transform:none}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none;filter:none}
+.btn.ghost{background:var(--card2);color:var(--txt);box-shadow:none;border:1px solid var(--line)}
+.btn.ghost:hover{border-color:var(--accent)}
+.btn.warn{background:linear-gradient(135deg,#f59e0b,#ef4444);box-shadow:0 6px 18px #ef444433}
+.btn.sm{padding:8px 14px;font-size:12.5px;border-radius:9px}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+
+/* toggles */
+.toggle{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:13px;cursor:pointer}
+.toggle input{display:none}
+.tk{width:40px;height:22px;border-radius:20px;background:#2b3a58;position:relative;transition:.18s;flex:none}
+.tk::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+  background:#fff;transition:.18s}
+.toggle input:checked+.tk{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.toggle input:checked+.tk::after{left:20px}
+.toggle .desc{color:var(--mut);font-size:11.5px}
+
+/* operations */
+.op-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+.op{border:1px solid var(--line);border-radius:15px;padding:18px;background:var(--card);cursor:pointer;
+  transition:.18s;position:relative;overflow:hidden}
+.op:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 12px 30px #0006}
+.op .oic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:22px;margin-bottom:12px}
+.op h3{margin:0 0 5px;font-size:15.5px}
+.op p{margin:0;color:var(--mut);font-size:12.5px;min-height:34px}
+.op .go{margin-top:12px;color:var(--accent);font-size:12.5px;font-weight:600}
+.op.selected{border-color:var(--accent);box-shadow:0 0 0 2px #4f8cff33}
+
+/* bars */
+.bars{display:flex;flex-direction:column;gap:9px;margin-top:6px}
+.bar{display:grid;grid-template-columns:180px 1fr 92px;align-items:center;gap:12px;font-size:12.5px}
+.bar .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)}
+ .bar .track{display:block;height:12px;border-radius:8px;background:#0d1424;overflow:hidden;border:1px solid #23324e}
+ .bar .fill{display:block;height:100%;min-width:3px;border-radius:8px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.bar .amt{text-align:right;color:var(--mut);font-variant-numeric:tabular-nums}
+
+/* preview */
+.preview{margin-top:18px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.preview .ph{padding:14px 18px;background:var(--card2);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{background:#0e1626;border:1px solid var(--line);border-radius:20px;padding:4px 11px;font-size:11.5px;color:var(--mut)}
+.chip b{color:var(--txt)}
+.oplist{max-height:320px;overflow:auto;font:12px/1.5 'Cascadia Code',Consolas,monospace}
+.oprow{display:flex;gap:10px;padding:7px 18px;border-top:1px solid #1c2740;align-items:center}
+.oprow:nth-child(odd){background:#0e152322}
+.oprow .tag{font-size:10px;padding:2px 7px;border-radius:6px;font-weight:700;flex:none}
+.tag.move{background:#4f8cff22;color:#8fb6ff}
+.tag.mkdir{background:#22c55e22;color:#7ee6a6}
+.tag.rmdir{background:#f59e0b22;color:#f5c877}
+.oprow .pth{color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oprow .arw{color:var(--mut2)}
+.oprow .dst{color:var(--txt)}
+
+.callout{border-radius:12px;padding:13px 16px;font-size:12.5px;display:flex;gap:10px;align-items:flex-start}
+.callout.safe{background:#22c55e14;border:1px solid #22c55e33;color:#a7e9c1}
+.callout.warn{background:#f59e0b14;border:1px solid #f59e0b33;color:#f3d59a}
+.callout.info{background:#4f8cff14;border:1px solid #4f8cff33;color:#a9c6ff}
+.callout.bad{background:#ef444414;border:1px solid #ef444433;color:#f4a9a9}
+
+/* modal */
+.overlay{position:fixed;inset:0;background:#04070ecc;backdrop-filter:blur(3px);display:grid;place-items:center;z-index:50}
+.modal{width:min(560px,92vw);max-height:82vh;background:linear-gradient(180deg,var(--card),#121926);
+  border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+.modal .mh{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.modal .mh h3{margin:0;font-size:16px}
+.modal .mb{padding:12px 12px;overflow:auto}
+.modal .mf{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:center}
+.crumbs{padding:2px 8px 10px;color:var(--mut);font-size:12px;word-break:break-all}
+.fitem{display:flex;align-items:center;gap:11px;padding:10px 14px;border-radius:10px;cursor:pointer;transition:.12s}
+.fitem:hover{background:#ffffff0d}
+.fitem .fi{font-size:16px}
+.x{background:transparent;border:0;color:var(--mut);font-size:20px;line-height:1;padding:4px 8px;border-radius:8px}
+.x:hover{background:#ffffff11;color:var(--txt)}
+
+/* toast */
+#toasts{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:10px;z-index:80}
+.toast{min-width:240px;max-width:360px;padding:13px 16px;border-radius:12px;box-shadow:var(--shadow);
+  font-size:13px;display:flex;gap:10px;align-items:flex-start;animation:slide .25s ease;border:1px solid var(--line);background:var(--card2)}
+.toast.good{border-color:#22c55e55}.toast.bad{border-color:#ef444455}.toast.info{border-color:#4f8cff55}
+@keyframes slide{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
+
+.spin{width:16px;height:16px;border:2.5px solid #ffffff44;border-top-color:#fff;border-radius:50%;
+  display:inline-block;animation:sp .7s linear infinite;vertical-align:-3px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.empty{color:var(--mut);text-align:center;padding:40px 10px}
+.empty .big{font-size:44px;opacity:.5}
+.sect-t{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);margin:26px 0 12px}
+details.advbox{margin:8px 0 0}
+details.advbox>summary{cursor:pointer;color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.6px;margin:18px 0 10px;list-style:none;user-select:none}
+details.advbox>summary::-webkit-details-marker{display:none}
+details.advbox>summary::before{content:"▸ ";color:var(--accent)}
+details.advbox[open]>summary::before{content:"▾ "}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:2px 22px;margin-top:6px} /* thumbnail review grid */
+ .cardh{margin:0 0 10px;font-size:14px;display:flex;align-items:center;gap:8px}
+ .presetbar{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap;
+   background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:8px 12px}
+ .orline{text-align:center;color:var(--mut2);font-size:12px;margin:14px 0 10px}
+ .subhint{color:var(--mut);font-size:11.5px;margin-top:8px}
+ .grp-h{display:flex;align-items:center;gap:8px;margin:18px 0 8px;font-weight:600;font-size:14px}
+ .grp-h .cnt{color:var(--mut);font-size:12px;font-weight:400}
+ .grp-h .dot{width:9px;height:9px;border-radius:50%;background:var(--accent)}
+ .thumbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(116px,1fr));gap:10px}
+ .thumb{position:relative;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;cursor:pointer;user-select:none}
+ .thumb.sel{outline:2px solid var(--accent);border-color:var(--accent)}
+ .thumb img{width:100%;height:92px;object-fit:cover;border-radius:6px;background:#0d1424;display:block}
+ .thumb .cb{position:absolute;top:9px;left:9px;width:18px;height:18px;accent-color:var(--accent);cursor:pointer;z-index:2}
+ .thumb .nm{color:var(--mut);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:5px 2px 4px}
+ .thumb select{width:100%;font-size:10.5px;padding:4px 6px;border-radius:6px;background:var(--bg1);color:var(--txt);border:1px solid var(--line)}
+ .bulkbar{position:sticky;top:8px;z-index:6;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  background:var(--card2);border:1px solid var(--accent);border-radius:12px;padding:10px 14px;margin-bottom:12px;box-shadow:var(--shadow)}
+ .bulkbar b{color:var(--txt)} .bulkbar select{font-size:12px;padding:6px 10px;border-radius:8px;background:var(--bg1);color:var(--txt);border:1px solid var(--line)}
+ .grp-h select{margin-left:auto;font-size:11px;padding:3px 8px;border-radius:6px;background:var(--bg1);color:var(--txt);border:1px solid var(--line);font-weight:400}
+ /* cluster cards */
+ .clustergrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:8px}
+ .clustercard{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px}
+ .clustercard.sel{outline:2px solid var(--accent);border-color:var(--accent)}
+ .clustercard img{width:100%;height:120px;object-fit:cover;border-radius:8px;background:#0d1424;display:block;cursor:zoom-in}
+ .clustercard .cc{color:var(--mut);font-size:11.5px;margin:6px 2px 6px}
+ .clustercard .ccb{position:absolute;top:14px;left:14px;width:18px;height:18px;accent-color:var(--accent);cursor:pointer;z-index:2}
+ .clustercard input{width:100%;font-size:12px;padding:6px 8px;border-radius:7px;background:var(--bg1);color:var(--txt);border:1px solid var(--line)}
+ .clustercard .sug{color:var(--good);font-size:10.5px;margin:4px 2px 0}
+ /* lightbox */
+ .lbov{position:fixed;inset:0;background:#04070ee6;backdrop-filter:blur(4px);display:flex;flex-direction:column;z-index:90}
+ .lbtop{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;color:var(--txt)}
+ .lbtop .lbname{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .lbmain{flex:1;display:flex;align-items:center;justify-content:center;gap:14px;padding:0 14px;min-height:0}
+ .lbmain img{max-width:82vw;max-height:76vh;object-fit:contain;border-radius:10px;box-shadow:var(--shadow);background:#0d1424}
+ .lbnav{background:#ffffff14;border:1px solid var(--line);color:#fff;width:46px;height:46px;border-radius:50%;font-size:22px;flex:none}
+ .lbnav:hover{background:#ffffff26}
+ .lbmeta{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:14px 18px 20px}
+ .lbchip{background:var(--card2);border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12px;color:var(--mut)}
+ .lbchip b{color:var(--txt)}
+ /* editable gallery preview */
+ .galhint{padding:2px 20px 8px;color:var(--mut);font-size:12.5px} .galrm{position:absolute;top:8px;right:8px;z-index:3;width:22px;height:22px;border-radius:50%;
+  border:1px solid var(--line);background:#1a1030cc;color:#ff8a8a;font-size:13px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;opacity:.85}
+ .galrm:hover{background:#3a1420;border-color:var(--bad);opacity:1}
+ /* drag-drop overlay */
+ #dropOverlay{position:fixed;inset:0;z-index:120;display:none;align-items:center;justify-content:center;  background:#04070ecc;backdrop-filter:blur(3px)}
+ #dropOverlay.on{display:flex}
+ #dropOverlay .dropinner{border:3px dashed var(--accent);border-radius:18px;padding:48px 70px;text-align:center;
+  color:var(--txt);font-size:52px;background:var(--card)}
+ #dropOverlay .dropinner div{font-size:16px;margin-top:12px;color:var(--mut)}
+ /* accessibility */
+ body.bigtext{font-size:18px} body.bigtext .desc,body.bigtext .ht,body.bigtext .lead{font-size:14px}
+ body.contrast{--txt:#ffffff;--mut:#c7d2e0;--line:#4b5b78}
+ body.contrast .callout,body.contrast .card,body.contrast .chip{border-width:2px}
+ /* accent swatches + palette */
+ .accentrow{display:flex;gap:10px;margin-top:6px}
+ .swatch{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0}
+ .swatch.sel{border-color:var(--txt);box-shadow:0 0 0 2px var(--accent)}
+ .fitem.psel{background:var(--card2);outline:1px solid var(--accent)}
+ /* history */
+ .histrow{display:flex;align-items:center;gap:10px;padding:9px 2px;border-top:1px solid #1c2740;font-size:13px}
+ .rclist{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+ .rcrow{display:flex;align-items:center;gap:10px;padding:9px 2px;border-top:1px solid #1c2740}
+ .rcrow:first-child{border-top:0}
+ .rcrow .ri{font-size:18px;width:24px;text-align:center}
+ .rcrow .rl{flex:1;display:flex;flex-direction:column;font-size:13px}
+ .rcrow .rl b{color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:52vw}
+ .rcrow .rs{color:var(--mut);font-size:11.5px} .histrow:first-child{border-top:0}
+ .histrow .hl{flex:1} .histrow .ht{color:var(--mut2);font-size:11.5px}
+ /* sliders */
+ .slider{margin:12px 0}
+ .slider label{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mut);margin-bottom:6px}
+ .slider label b{color:var(--txt)}
+ .slider input[type=range]{width:100%;accent-color:var(--accent)}
+ .slider .ends{display:flex;justify-content:space-between;font-size:11px;color:var(--mut2);margin-top:2px}@media(max-width:760px){.app{grid-template-columns:1fr}.side{position:static;height:auto}.choose{grid-template-columns:1fr}.opts{grid-template-columns:1fr}.bar{grid-template-columns:110px 1fr 70px}}
+/* light theme */
+body.light{--bg0:#dde6f6;--bg1:#eaf1fb;--card:#ffffff;--card2:#e3ecfb;--line:#c2d2ec;
+  --txt:#0d1f47;--mut:#3d5588;--mut2:#6b7fa8;
+  --accent:#1e40af;--accent2:#2563eb;
+  --shadow:0 10px 30px rgba(20,40,90,.16)}
+body.light{background:radial-gradient(1200px 700px at 12% -8%,#cfe0fb 0%,transparent 60%),
+  radial-gradient(1000px 700px at 110% 0%,#d7e6ff 0%,transparent 55%),linear-gradient(160deg,#dde8fa,#eef4fd)}
+body.light .side{background:rgba(233,240,253,.75);border-right:1px solid #c2d2ec}
+body.light .card{background:linear-gradient(180deg,#ffffff,#f2f7ff);border-color:#cdddf3}
+body.light .oprow:nth-child(odd){background:#1e40af08}
+body.light .track,body.light .thumb img,body.light .clustercard img,body.light .lbmain img{background:#dbe6f7}
+body.light .chip,body.light .stat{background:#e9f0fc}
+body.light .preview .ph,body.light .bulkbar{background:#e3ecfb}
+body.light .nav button.active{background:#d3e0f8;box-shadow:inset 0 0 0 1px #1e40af55}
+body.light .btn.ghost{background:#e3ecfb}
+/* treemap */
+.tmap{width:100%;margin-top:14px}
+.tmap .tmcrumb{font-size:12px;color:var(--mut);margin-bottom:8px}
+.tmap .tmcrumb .tmc{cursor:pointer;color:var(--accent)}
+.tmap .tmcrumb .tmc:hover{text-decoration:underline}
+.tmbox{position:relative;width:100%;height:280px;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.tmbox .tcell{position:absolute;overflow:hidden;border:1px solid #0b0f1a55;box-sizing:border-box;
+  padding:6px 8px;color:#fff;font-size:11.5px;line-height:1.25;cursor:default;transition:filter .12s}
+.tmbox .tcell.drill{cursor:pointer}
+.tmbox .tcell:hover{filter:brightness(1.12)}
+.tmbox .tcell b{font-size:12px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px #0007}
+.tmbox .tcell span{opacity:.9;text-shadow:0 1px 2px #0007}
+.themebtn{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);
+  color:var(--txt);border-radius:10px;padding:8px 11px;margin:0 6px 10px;font-size:12.5px;width:calc(100% - 12px)}
+.themebtn:hover{border-color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="logo">🗂️</div>
+      <div><b>phorg</b><span>Storage Organizer</span></div>
+    </div>
+    <div class="conn-pill" id="connPill">
+      <div class="st"><span class="dot" id="connDot"></span><span id="connState">Not connected</span></div>
+      <b id="connRoot">Choose a source to begin</b>
+    </div>
+    <nav class="nav" id="nav" style="margin-top:14px">
+      <button data-page="connect" class="active"><span class="ic">🔌</span> Connect</button>
+      <button data-page="dashboard" data-need="conn" disabled><span class="ic">📊</span> Dashboard</button>
+      <button data-page="organize" data-need="conn" disabled><span class="ic">✨</span> Organize</button>
+      <button data-page="photos" data-need="conn" disabled><span class="ic">🖼️</span> Photo AI</button>
+      <button data-page="wedding" data-need="conn" disabled><span class="ic">💍</span> Wedding</button>
+      <button data-page="compress" data-need="conn" disabled><span class="ic">🗜️</span> Compress</button>
+      <button data-page="report" data-need="conn" disabled><span class="ic">📄</span> Report</button>
+      <button data-page="safety"><span class="ic">🛡️</span> Safety</button>
+    </nav>
+    <div class="foot">
+      Files are only <b>moved</b>, never deleted. Every action previews first &amp;
+      verifies the file count afterwards.
+    </div>
+    <button class="themebtn" id="themeBtn" title="Toggle light / dark">🌙 <span>Dark theme</span></button>
+  </aside>
+
+  <main class="main" id="main"></main>
+</div>
+
+<div id="modalHost"></div>
+<div id="dropOverlay"><div class="dropinner">📂<div>Drop a folder to connect</div></div></div>
+<div id="toasts"></div>
+
+<script>
+// ---------------------------------------------------------------- state
+const S = {
+  connected:false, backend:"local", root:"", adb:"", device:"",
+  depth:3, recursive:false, sort:false, include_hidden:false, protect:"",
+  scan:null, lastPlan:null, activeOp:null, page:"connect",
+  photoCats:{blurry:true,single:true,couple:true,group:true,scenery:true,people:false,
+    duplicates:true,similar:false,screenshot:true,document:true,best:false,video:true},
+  people:[{name:"Bride",samples:""},{name:"Groom",samples:""}], photoJob:null,
+  granularity:"month", useExif:true,
+  blurThreshold:50, personThreshold:78, photoItems:[], photoTest:false,
+  photoSel:new Set(), clusterJob:null, clusters:[], clusterSel:new Set(),
+  renameTemplate:"{date}_{category}_{seq}", renameStart:1, renamePad:3, renameExt:"",
+  copyMode:false,
+};
+const _ed=new Date();
+const _eY=_ed.getFullYear();
+const _eM=`${_eY}-${String(_ed.getMonth()+1).padStart(2,"0")}`;
+const _eD=`${_eM}-${String(_ed.getDate()).padStart(2,"0")}`;
+const OPS = {
+  junk:{icon:"🧹",color:"#f59e0b",title:"Junk Sweep",
+    desc:"Move temp, cache, zero-byte &amp; .tmp files into a review folder.",cmd:"junk"},
+  cleanup:{icon:"✨",color:"#10b981",title:"Recommended Cleanup",
+    desc:"One click: junk sweep → duplicate files → organize by type, all previewed together.",
+    cmd:"cleanup",opt:["recursive"]},
+  type:{icon:"📁",color:"#3b82f6",title:"Organize by Type",
+    desc:"Sort into Images, Videos, Audio, Documents, Archives…",cmd:"type",opt:["recursive"]},
+  date:{icon:"📅",color:"#06b6d4",title:"Sort Photos by Date",
+    desc:"File photos &amp; videos into Year / Month folders by capture date.",cmd:"date",
+    opt:["recursive"],choices:{key:"granularity",label:"Folder depth",
+      options:[["month",`Year / Month  (e.g. ${_eY} / ${_eM})`],["year",`Year only  (e.g. ${_eY})`],
+               ["day",`Year / Month / Day  (e.g. ${_eY} / ${_eM} / ${_eD})`]]}},
+  size:{icon:"📏",color:"#7c5cff",title:"Organize by Size",
+    desc:"Group files into size tiers, from Huge to Tiny.",cmd:"size",opt:["recursive"]},
+  rename:{icon:"🔤",color:"#e879f9",title:"Bulk Rename",
+    desc:"Rename files with a template like {date}_{category}_{seq}. Preview first.",
+    cmd:"rename",opt:["recursive"],rename:true},
+  "fix-ext":{icon:"🔧",color:"#22c55e",title:"Fix Extensions",
+    desc:"Detect real file types by magic bytes &amp; repair extensions.",cmd:"fix-ext",opt:["sort","recursive"]},
+  dedupe:{icon:"🧬",color:"#14b8a6",title:"Find Duplicate Files",
+    desc:"Find byte-identical files anywhere in the tree &amp; move copies to a review folder.",cmd:"dedupe",dupe:true},
+  "similar-names":{icon:"🪪",color:"#f43f5e",title:"Similar Filenames",
+    desc:"Group “name (1).jpg”, “name-copy.jpg” style near-duplicates &amp; keep one.",cmd:"similar-names",opt:["recursive"]},
+  flatten:{icon:"📤",color:"#f97316",title:"Flatten Folders",
+    desc:"Pull files out of every sub-folder into this folder, then remove the empties.",cmd:"flatten"},
+  location:{icon:"📍",color:"#0ea5e9",title:"Sort by Location",
+    desc:"Group geotagged photos into Places/ folders by their GPS coordinates.",cmd:"location",opt:["recursive"]},
+  empties:{icon:"🗑️",color:"#ef4444",title:"Remove Empty Folders",
+    desc:"Recursively remove folders that contain no files.",cmd:"empties"},
+};
+const PHOTO_OP={icon:"🖼️",color:"#ec4899",title:"Categorize Photos (AI)",
+  desc:"Sort images by content: portraits, groups, blurry, duplicates &amp; more."};
+
+// ---------------------------------------------------------------- helpers
+const $ = (s,r=document)=>r.querySelector(s);
+const el = (t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const esc = s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+function fmtKb(kb){kb=+kb||0;if(kb>=1048576)return (kb/1048576).toFixed(2)+" GB";
+  if(kb>=1024)return (kb/1024).toFixed(1)+" MB";return kb+" KB";}
+function num(n){return (+n||0).toLocaleString();}
+
+async function api(path,body){
+  const r = await fetch("/api/"+path,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body||{})});
+  const data = await r.json().catch(()=>({error:"Bad response"}));
+  if(!r.ok||data.error) throw new Error(data.error||("HTTP "+r.status));
+  return data;
+}
+let toastId=0;
+function toast(msg,kind="info",ms=3800){
+  const host=$("#toasts");const t=el("div","toast "+kind);
+  const ic={good:"✅",bad:"⚠️",info:"ℹ️"}[kind]||"ℹ️";
+  t.innerHTML=`<span>${ic}</span><span>${msg}</span>`;host.appendChild(t);
+  setTimeout(()=>{t.style.opacity=0;t.style.transform="translateX(30px)";
+    setTimeout(()=>t.remove(),250);},ms);
+}
+function busy(btn,on,label){
+  if(!btn)return;
+  if(on){btn.dataset.orig=btn.innerHTML;btn.disabled=true;
+    btn.innerHTML=`<span class="spin"></span> ${label||"Working…"}`;}
+  else{btn.disabled=false;btn.innerHTML=btn.dataset.orig||btn.innerHTML;}
+}
+
+// ---------------------------------------------------------------- nav
+function setConn(on){
+  S.connected=on;
+  $("#connDot").classList.toggle("on",on);
+  $("#connState").textContent=on?(S.backend==="adb"?"Phone connected":"Folder ready"):"Not connected";
+  $("#connRoot").textContent=on?S.root:"Choose a source to begin";
+  document.querySelectorAll('[data-need="conn"]').forEach(b=>b.disabled=!on);
+}
+function go(page){
+  S.page=page;
+  document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
+  const m=$("#main");m.innerHTML="";
+  ({connect:pageConnect,dashboard:pageDashboard,organize:pageOrganize,
+    photos:pagePhotos,wedding:pageWedding,compress:pageCompress,report:pageReport,safety:pageSafety}[page]||pageConnect)(m);
+}
+$("#nav").addEventListener("click",e=>{const b=e.target.closest("button");
+  if(!b||b.disabled)return;go(b.dataset.page);});
+
+// ---------------------------------------------------------------- Connect page
+function pageConnect(m){
+  const p=el("div","page");
+  const welcomed=(()=>{try{return localStorage.getItem("phorg-welcomed");}catch(e){return 1;}})();
+  p.innerHTML=`
+    <h1>Connect a source</h1>
+    <p class="lead">Organize a folder on this PC, or an Android phone over USB (ADB).</p>
+    ${welcomed?"":`<div class="callout info" id="welcomeTip" style="margin-bottom:16px">👋
+      <div>Welcome! Pick a folder (or phone), then <b>preview</b> any action before it runs — nothing
+      changes until you press <b>Apply</b>, the file count is re-verified, and you can always <b>Undo</b>.
+      <a href="#" id="welcomeX">Got it</a></div></div>`}
+    <div class="card">
+      <div class="choose">
+        <div class="choice ${S.backend==='local'?'sel':''}" data-b="local">
+          <span class="check">●</span><div class="big">💻</div>
+          <h3>Local folder</h3><p>Any folder on this computer — Downloads, a messy drive, backups…</p>
+        </div>
+        <div class="choice ${S.backend==='adb'?'sel':''}" data-b="adb">
+          <span class="check">●</span><div class="big">📱</div>
+          <h3>Android phone</h3><p>Connect over USB with debugging on. Requires ADB platform-tools.</p>
+        </div>
+      </div>
+      <div id="connBody"></div>
+    </div>`;
+  m.appendChild(p);
+  const wx=$("#welcomeX");if(wx)wx.onclick=e=>{e.preventDefault();
+    try{localStorage.setItem("phorg-welcomed","1");}catch(_){}; $("#welcomeTip").remove();};
+  p.querySelectorAll(".choice").forEach(c=>c.onclick=()=>{
+    S.backend=c.dataset.b;p.querySelectorAll(".choice").forEach(x=>x.classList.remove("sel"));
+    c.classList.add("sel");renderConnBody();});
+  renderConnBody();
+}
+function renderConnBody(){
+  const host=$("#connBody");if(!host)return;
+  if(S.backend==="local"){
+    const recent=loadRecent();
+    host.innerHTML=`
+      <label class="fld">Folder to organize</label>
+      <div class="row">
+        <input type="text" id="rootIn" placeholder="e.g. C:\\Users\\me\\Downloads" value="${esc(S.root)}"/>
+        <button class="btn ghost" id="browseBtn">📂 Browse</button>
+      </div>
+      ${recent.length?`<div style="margin-top:10px">
+        <div style="color:var(--mut);font-size:11.5px;margin-bottom:5px">Recent folders</div>
+        <div class="chips">${recent.map(r=>`<span class="chip" data-recent="${esc(r)}"
+          style="cursor:pointer" title="${esc(r)}">📁 ${esc(r.split(/[\\/]/).pop()||r)}</span>`).join("")}</div></div>`:""}
+      <div class="btn-row">
+        <button class="btn" id="connectBtn">Connect &amp; scan →</button>
+      </div>`;
+    $("#browseBtn").onclick=()=>openBrowser();
+    const ri=$("#rootIn");
+    ri.oninput=e=>S.root=e.target.value.trim();
+    ri.onkeydown=e=>{if(e.key==="Enter")doConnect();};
+    ri.focus();
+    host.querySelectorAll("[data-recent]").forEach(ch=>ch.onclick=()=>{
+      S.root=ch.dataset.recent;$("#rootIn").value=S.root;doConnect();});
+    $("#connectBtn").onclick=doConnect;
+  } else {
+    host.innerHTML=`
+      <label class="fld">Path to adb (leave blank to auto-detect)</label>
+      <input type="text" id="adbIn" placeholder="auto-detect" value="${esc(S.adb)}"/>
+      <label class="fld">Device</label>
+      <div class="row">
+        <select id="devSel"><option value="">— detect devices —</option></select>
+        <button class="btn ghost" id="detectBtn">🔍 Detect</button>
+      </div>
+      <label class="fld">Root path on phone</label>
+      <input type="text" id="rootIn" value="${esc(S.root||'/storage/emulated/0')}"/>
+      <div class="btn-row"><button class="btn" id="connectBtn">Connect &amp; scan →</button></div>`;
+    $("#adbIn").oninput=e=>S.adb=e.target.value.trim();
+    $("#rootIn").oninput=e=>S.root=e.target.value.trim();
+    $("#devSel").onchange=e=>S.device=e.target.value;
+    $("#detectBtn").onclick=detectDevices;
+    $("#connectBtn").onclick=doConnect;
+  }
+}
+async function detectDevices(e){
+  const btn=e.target;busy(btn,true,"Detecting…");
+  try{
+    const d=await api("devices",{adb:S.adb});
+    S.adb=d.adb;const sel=$("#devSel");sel.innerHTML="";
+    if(!d.devices.length){sel.innerHTML='<option value="">No devices found</option>';
+      toast("No phone detected. Enable USB debugging and tap Allow.","bad");}
+    else{d.devices.forEach(dv=>{const o=el("option");o.value=dv.serial;
+      o.textContent=(dv.model?dv.model+"  ":"")+"("+dv.serial+")";sel.appendChild(o);});
+      S.device=d.devices[0].serial;toast(d.devices.length+" device(s) found","good");}
+  }catch(err){toast(err.message,"bad");}finally{busy(btn,false);}
+}
+async function doConnect(e){
+  if(!S.root){toast("Pick a folder or path first","bad");return;}
+  const btn=$("#connectBtn");busy(btn,true,"Scanning…");
+  try{
+    const d=await api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth});
+    S.scan=d;S.root=d.root;setConn(true);
+    if(S.backend==="local"){pushRecent(d.root);
+      try{localStorage.setItem("phorg-lastroot",d.root);localStorage.setItem("phorg-lastbackend",S.backend);}catch(e){}}
+    toast("Connected — "+num(d.meta.rootFiles)+" files scanned","good");
+    go("dashboard");
+  }catch(err){toast(err.message,"bad");setConn(false);}finally{busy(btn,false);}
+}
+function loadRecent(){try{return JSON.parse(localStorage.getItem("phorg-recent")||"[]");}catch(e){return [];}}
+function pushRecent(root){try{let r=loadRecent().filter(x=>x!==root);r.unshift(root);
+  localStorage.setItem("phorg-recent",JSON.stringify(r.slice(0,6)));}catch(e){}}
+
+// ---------------------------------------------------------------- folder browser modal
+async function openBrowser(onPick, startPath){
+  let cur=(startPath!=null?startPath:S.root)||"";
+  const host=$("#modalHost");
+  host.innerHTML=`<div class="overlay"><div class="modal">
+    <div class="mh"><h3>📂 Choose a folder</h3><button class="x" id="mClose">×</button></div>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="mb" id="fileList"></div>
+    <div class="mf"><span style="color:var(--mut);font-size:12px" id="selPath"></span>
+      <div class="row"><button class="btn ghost sm" id="upBtn">↑ Up</button>
+      <button class="btn sm" id="pickBtn">Select this folder</button></div></div>
+  </div></div>`;
+  const close=()=>host.innerHTML="";
+  $("#mClose").onclick=close;
+  host.querySelector(".overlay").onclick=e=>{if(e.target===host.querySelector(".overlay"))close();};
+  async function load(path){
+    let d;try{d=await api("browse",{path});}catch(err){toast(err.message,"bad");return;}
+    cur=d.path;$("#crumbs").textContent=d.path||"This PC";
+    $("#selPath").textContent=d.path?("Selected: "+d.path):"";
+    const list=$("#fileList");list.innerHTML="";
+    $("#upBtn").disabled=(d.parent===null&&!d.drives.length);
+    $("#upBtn").onclick=()=>load(d.parent||"");
+    $("#pickBtn").disabled=!d.path;
+    $("#pickBtn").onclick=()=>{
+      if(onPick){onPick(d.path);}
+      else{S.root=d.path;const ri=$("#rootIn");if(ri)ri.value=d.path;}
+      close();};
+    if(d.drives&&d.drives.length){d.drives.forEach(dr=>{
+      const it=el("div","fitem",`<span class="fi">💽</span><span>${esc(dr.name)}</span>`);
+      it.onclick=()=>load(dr.path);list.appendChild(it);});}
+    if(d.home){const it=el("div","fitem",`<span class="fi">🏠</span><span>Home</span>`);
+      it.onclick=()=>load(d.home);list.appendChild(it);}
+    if(!d.dirs.length&&!(d.drives||[]).length)
+      list.appendChild(el("div","empty","No sub-folders here."));
+    d.dirs.forEach(f=>{const it=el("div","fitem",
+      `<span class="fi">📁</span><span>${esc(f.name)}</span>`);
+      it.onclick=()=>load(f.path);list.appendChild(it);});
+  }
+  load(cur);
+}
+
+// ---------------------------------------------------------------- Dashboard
+function pageDashboard(m){
+  const p=el("div","page");const sc=S.scan;const meta=sc?sc.meta:{};
+  const tree=(sc?sc.tree:[]).slice();
+  const useKb=tree.some(t=>(+t.kb||0)>0);
+  const metric=t=>useKb?(+t.kb||0):(+t.files||0);
+  // sort by whichever metric we're charting so the bars are meaningful
+  tree.sort((a,b)=>metric(b)-metric(a));
+  const maxV=Math.max(1,...tree.map(metric));
+  const diskPct=meta.diskTotalKb?Math.round(meta.diskUsedKb/meta.diskTotalKb*100):0;
+  p.innerHTML=`
+    <h1>Dashboard</h1>
+    <p class="lead">${esc(S.backend==='adb'?'Phone':'Folder')}: <b>${esc(S.root)}</b></p>
+    <div class="grid stat-grid">
+      <div class="stat"><div class="k">Total used</div><div class="v">${fmtKb(meta.rootKb)}</div><div class="spark">💾</div></div>
+      <div class="stat"><div class="k">Files</div><div class="v">${num(meta.rootFiles)}</div><div class="spark">📄</div></div>
+      <div class="stat"><div class="k">Top folders</div><div class="v">${tree.length}</div><div class="spark">📁</div></div>
+      <div class="stat"><div class="k">Loose at root</div><div class="v">${num(meta.rootLoose)}</div><div class="spark">🧺</div></div>
+      ${meta.diskTotalKb?`<div class="stat"><div class="k">Disk</div><div class="v">${diskPct}% <small>of ${fmtKb(meta.diskTotalKb)}</small></div><div class="spark">🗄️</div></div>`:""}
+    </div>
+    <div class="card" style="margin-top:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div><h3 style="margin:0">Largest folders</h3>
+          <div style="color:var(--mut);font-size:11.5px;margin-top:2px">by ${useKb?"size on disk":"number of files"}</div></div>
+        <button class="btn ghost sm" id="rescan">↻ Rescan</button>
+      </div>
+      <div class="bars" id="bars" style="margin-top:16px"></div>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <h3 style="margin:0">Storage map</h3>
+      <div style="color:var(--mut);font-size:11.5px;margin-top:2px">Bigger blocks use more space — click a block with a › to zoom in.</div>
+      <div class="tmap" id="tmap"></div>
+    </div>
+    <div class="card" id="searchCard" style="margin-top:18px">
+      <h3 style="margin:0">Find a file</h3>
+      <div style="color:var(--mut);font-size:11.5px;margin:2px 0 10px">Search the whole tree by name, then jump to its folder.</div>
+      <input type="text" id="treeSearch" placeholder="🔎 Type a file name…" style="width:100%"/>
+      <div id="searchResults" style="margin-top:10px"></div>
+    </div>
+    <div class="card" id="reclaimCard" style="margin-top:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div><h3 style="margin:0">Space you could reclaim</h3>
+          <div style="color:var(--mut);font-size:11.5px;margin-top:2px">Duplicates, junk &amp; large old files — nothing is touched until you preview.</div></div>
+        <button class="btn ghost sm" id="reclaimBtn">🔎 Scan for savings</button>
+      </div>
+      <div id="reclaimOut" style="margin-top:12px"></div>
+    </div>
+    <div class="card" id="histCard" style="margin-top:18px;display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div><h3 style="margin:0 0 6px">Recent activity</h3>
+        <div style="color:var(--mut);font-size:11.5px;margin-bottom:6px">The most recent operation can be undone.</div></div>
+        <button class="btn ghost sm" id="exportLog">⬇️ Export log (CSV)</button>
+      </div>
+      <div id="histList"></div>
+    </div>
+    <div class="btn-row"><button class="btn" id="toOrg">Organize this →</button></div>`;
+  m.appendChild(p);
+  const tm=$("#tmap");if(tm)renderTreemap(tm,tree);
+  if(S.backend==="local")loadHistory();
+  if(S.backend!=="local"){const rc=$("#reclaimCard");if(rc)rc.style.display="none";}
+  const rcb=$("#reclaimBtn");if(rcb)rcb.onclick=doReclaim;
+  const elog=$("#exportLog");if(elog)elog.onclick=exportAuditLog;
+  const tsIn=$("#treeSearch");
+  if(tsIn){let tmr;tsIn.oninput=e=>{clearTimeout(tmr);const q=e.target.value;
+    tmr=setTimeout(()=>doTreeSearch(q),300);};}
+  const bars=$("#bars");
+  if(!tree.length){
+    bars.appendChild(el("div","empty",'<div class="big">🎉</div>No sub-folders — nothing to chart.'));
+  } else {
+    tree.slice(0,14).forEach(t=>{
+      const v=metric(t);
+      const pct=Math.max(4,Math.round(v/maxV*100));
+      const amt=useKb?fmtKb(t.kb):num(t.files)+" file"+(t.files==1?"":"s");
+      const b=el("div","bar");
+      b.innerHTML=`<span class="nm" title="${esc(t.name)} — ${fmtKb(t.kb)}, ${num(t.files)} files">${esc(t.name)}</span>
+        <span class="track"><span class="fill" style="width:${pct}%"></span></span>
+        <span class="amt" title="${num(t.files)} files">${amt}</span>`;
+      bars.appendChild(b);
+    });
+  }
+  $("#toOrg").onclick=()=>go("organize");
+  $("#rescan").onclick=async e=>{busy(e.target,true,"Scanning…");
+    try{S.scan=await api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth});
+      go("dashboard");toast("Rescanned","good");}
+    catch(err){toast(err.message,"bad");}finally{busy(e.target,false);}};
+}
+const OP_LABEL={junk:"🧹 Junk sweep",type:"📁 Organize by type",size:"📏 Organize by size",
+  "fix-ext":"🔧 Fix extensions",empties:"🗑️ Remove empties",date:"📅 Sort by date",
+  dedupe:"🧬 Find duplicates",flatten:"📤 Flatten folders",location:"📍 Sort by location",
+  cleanup:"✨ Recommended cleanup","similar-names":"🪪 Similar filenames",rename:"🔤 Bulk rename",
+  compress:"🗜️ Compress images",
+  photos:"🖼️ Photo categorize",operation:"Operation"};
+async function loadHistory(){
+  let d;try{d=await api("history",{root:S.root});}catch(err){return;}
+  const card=$("#histCard");if(!card)return;
+  if((!d.items||!d.items.length)&&!d.redoable){card.style.display="none";return;}
+  card.style.display="block";
+  renderHistory(d.items||[],d.undoableId,d.redoable);
+}
+function renderHistory(items,undoableId,redoable){
+  const list=$("#histList");if(!list)return;
+  const rows=items.slice().reverse().map(it=>{
+    const when=new Date(it.ts*1000).toLocaleString();
+    return `<div class="histrow">
+      <span class="hl">${esc(OP_LABEL[it.label]||it.label)} — <b>${num(it.moves)}</b> file(s)
+        <span class="ht">· ${esc(when)}</span></span>
+      ${it.moves>1?`<button class="btn ghost sm" data-undo-part-id="${esc(it.id)}" title="Undo only some folders">📂</button>`:""}
+      <button class="btn ghost sm" data-undo-id="${esc(it.id)}">↩️ Undo</button>
+    </div>`;
+  }).join("");
+  list.innerHTML=rows+(redoable?`<div class="histrow">
+    <span class="hl" style="color:var(--mut)">Undone: ${esc(OP_LABEL[redoable.label]||redoable.label)} — ${num(redoable.count)} file(s)</span>
+    <button class="btn ghost sm" id="redoBtn">↪️ Redo</button></div>`:"");
+  list.querySelectorAll("[data-undo-id]").forEach(ub=>ub.onclick=async e=>{
+    busy(e.target,true,"Undoing…");
+    try{const r=await api("undo",{root:S.root,id:e.target.dataset.undoId});
+      toast(`Undone — moved ${num(r.restored)} file(s) back`,"good");
+      S.scan=await api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth});
+      loadHistory();
+    }catch(err){toast(err.message,"bad");busy(e.target,false);}
+  });
+  list.querySelectorAll("[data-undo-part-id]").forEach(pb=>pb.onclick=()=>
+    openPartialUndo(pb.dataset.undoPartId));
+  const rb=$("#redoBtn");
+  if(rb)rb.onclick=async e=>{
+    busy(e.target,true,"Redoing…");
+    try{const r=await api("redo",{root:S.root});
+      toast(`Redone — moved ${num(r.redone)} file(s)`,"good");
+      S.scan=await api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth});
+      loadHistory();
+    }catch(err){toast(err.message,"bad");busy(e.target,false);}
+  };
+}
+async function doReclaim(e){
+  const btn=e.target;busy(btn,true,"Scanning…");
+  const out=$("#reclaimOut");
+  try{
+    const d=await api("reclaim",{backend:S.backend,root:S.root});
+    const row=(icon,label,c,kb,cmd)=>`<div class="rcrow">
+      <span class="ri">${icon}</span>
+      <span class="rl"><b>${esc(label)}</b><span class="rs">${num(c)} item(s) · ${fmtKb(kb)}</span></span>
+      ${cmd?`<button class="btn ghost sm" data-rcgo="${cmd}">Preview →</button>`:""}</div>`;
+    const total=d.totalKb;
+    let html=`<div class="callout ${total?'info':'safe'}">${total?`💡 Up to <b>${fmtKb(total)}</b> looks reclaimable.`:'✅ Nothing obvious to reclaim — looking tidy!'}</div>
+      <div class="rclist">
+        ${row("🧬","Duplicate files",d.duplicates.count,d.duplicates.kb,"dedupe")}
+        ${row("🧹","Junk files",d.junk.count,d.junk.kb,"junk")}
+        ${row("🗄️","Large files older than 6 months",d.largeOld.count,d.largeOld.kb,"")}
+      </div>`;
+    if(d.largeOld.items&&d.largeOld.items.length){
+      html+=`<div style="color:var(--mut);font-size:11.5px;margin-top:10px">Biggest old files:</div>
+        <div class="rclist">`+d.largeOld.items.slice(0,6).map(it=>`<div class="rcrow">
+          <span class="ri">📄</span><span class="rl"><b title="${esc(it.path)}">${esc(it.name)}</b>
+          <span class="rs">${fmtKb(it.kb)} · ${new Date(it.mtime*1000).toLocaleDateString()}</span></span></div>`).join("")+`</div>`;
+    }
+    out.innerHTML=html;
+    out.querySelectorAll("[data-rcgo]").forEach(b=>b.onclick=()=>{
+      S.activeOp=b.dataset.rcgo;go("organize");});
+  }catch(err){toast(err.message,"bad");}finally{busy(btn,false);}
+}
+async function doTreeSearch(q){
+  const out=$("#searchResults");if(!out)return;
+  q=(q||"").trim();
+  if(q.length<2){out.innerHTML="";return;}
+  let d;try{d=await api("search",{backend:S.backend,root:S.root,query:q});}
+  catch(err){out.innerHTML=`<div class="callout bad">${esc(err.message)}</div>`;return;}
+  if(!d.results.length){out.innerHTML=`<div style="color:var(--mut);font-size:12.5px">No files match “${esc(q)}”.</div>`;return;}
+  out.innerHTML=`<div style="color:var(--mut);font-size:11.5px;margin-bottom:6px">${num(d.count)}${d.truncated?"+":""} match(es)</div>`+
+    d.results.slice(0,40).map(r=>`<div class="histrow">
+      <span class="hl" title="${esc(r.path)}">📄 <b>${esc(r.name)}</b>
+        <span class="ht">· ${esc(r.folder||"(root)")} · ${fmtKb(r.kb)}</span></span>
+      <button class="btn ghost sm" data-openf="${encodeURIComponent(r.path)}">📂 Open</button></div>`).join("");
+  out.querySelectorAll("[data-openf]").forEach(b=>b.onclick=()=>{
+    api("open",{path:decodeURIComponent(b.dataset.openf),reveal:true}).catch(()=>toast("Couldn't open folder","bad"));});
+}
+async function exportAuditLog(e){
+  const btn=e.target;busy(btn,true,"Exporting…");
+  try{
+    const d=await api("audit",{root:S.root});
+    if(!d.rows.length){toast("No moves logged yet","info");busy(btn,false);return;}
+    const esc2=s=>`"${String(s==null?"":s).replace(/"/g,'""')}"`;
+    const lines=["timestamp,action,from,to"];
+    d.rows.forEach(r=>lines.push([esc2(new Date((r.ts||0)*1000).toISOString()),
+      esc2(OP_LABEL[r.label]||r.label),esc2(r.src),esc2(r.dst)].join(",")));
+    const blob=new Blob([lines.join("\n")],{type:"text/csv"});
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");
+    a.href=url;a.download="phorg-audit-log.csv";document.body.appendChild(a);a.click();
+    a.remove();URL.revokeObjectURL(url);
+    toast(`Exported ${num(d.rows.length)} moves`,"good");
+  }catch(err){toast(err.message,"bad");}finally{busy(btn,false);}
+}
+
+// ---------------------------------------------------------------- Organize
+function pageOrganize(m){
+  const p=el("div","page");
+  p.innerHTML=`
+    <h1>Organize</h1>
+    <p class="lead">Pick an action. You'll always see a full preview before anything changes.</p>
+    <div class="btn-row" style="margin:-6px 0 4px"><button class="btn ghost sm" id="rulesBtn">⚙️ Custom rules</button>
+      <button class="btn ghost sm" id="recipesBtn">🧪 Recipes</button></div>
+    <div class="grid op-grid" id="opGrid"></div>
+    <div id="opPanel"></div>`;
+  m.appendChild(p);
+  $("#rulesBtn").onclick=openRulesEditor;
+  $("#recipesBtn").onclick=openRecipes;
+  const grid=$("#opGrid");
+  Object.entries(OPS).forEach(([key,o])=>{
+    const c=el("div","op");
+    c.innerHTML=`<div class="oic" style="background:${o.color}22;color:${o.color}">${o.icon}</div>
+      <h3>${o.title}</h3><p>${o.desc}</p><div class="go">Configure →</div>`;
+    c.onclick=()=>selectOp(key);grid.appendChild(c);
+  });
+  if(S.activeOp&&OPS[S.activeOp])selectOp(S.activeOp);
+}
+function selectOp(key){
+  S.activeOp=key;S.lastPlan=null;
+  document.querySelectorAll(".op").forEach((c,i)=>
+    c.classList.toggle("selected",Object.keys(OPS)[i]===key));
+  const o=OPS[key];const panel=$("#opPanel");
+  if(o.custom){selectPhotoOp(o,panel);return;}
+  const opts=o.opt||[];
+  const optHtml=`
+    <label class="toggle" title="Skips Android, MIUI, hidden and app-data folders so apps keep working">
+      <input type="checkbox" id="protectChk" ${!S.include_hidden?"checked":""}/>
+      <span class="tk"></span><span>🛡️ Protect app &amp; system folders
+      <span class="desc"> — skips Android, MIUI, hidden &amp; app-data folders (recommended)</span></span></label>
+    ${opts.includes("recursive")?toggleHtml("recursive","Include sub-folders","Recurse into nested folders"):""}
+    ${opts.includes("sort")?toggleHtml("sort","Sort into type folders","Also file corrected items by type"):""}
+    ${key!=="empties"?`<label class="toggle" title="Leave originals untouched and place sorted copies instead"><input type="checkbox" id="copyChk" ${S.copyMode?"checked":""}/>
+      <span class="tk"></span><span>📋 Copy instead of move<span class="desc"> — keep originals, place sorted copies</span></span></label>`:""}
+    ${o.choices?`<label class="toggle"><input type="checkbox" id="exifChk" ${S.useExif?"checked":""}/>
+      <span class="tk"></span><span>Use photo capture date (EXIF)<span class="desc"> — fall back to file date</span></span></label>`:""}`;
+  const choiceHtml=o.choices?`
+    <label class="fld">${o.choices.label}</label>
+    <select id="choiceSel">${o.choices.options.map(([v,l])=>
+      `<option value="${v}" ${S[o.choices.key]===v?"selected":""}>${l}</option>`).join("")}</select>`:"";
+  const renameHtml=o.rename?`
+    <label class="fld">Name template</label>
+    <input type="text" id="rnTpl" placeholder="{date}_{category}_{seq}" value="${esc(S.renameTemplate)}"/>
+    <div class="chips" style="margin-top:8px">${["{date}","{category}","{seq}","{orig}","{parent}","{ext}"]
+      .map(t=>`<span class="chip" data-tok="${t}" style="cursor:pointer" title="Insert token">${t}</span>`).join("")}</div>
+    <div class="row" style="margin-top:10px;gap:10px">
+      <div style="flex:1"><label class="fld">Start number</label>
+        <input type="number" id="rnStart" min="0" value="${esc(S.renameStart)}"/></div>
+      <div style="flex:1"><label class="fld">Digits (zero-pad)</label>
+        <input type="number" id="rnPad" min="1" max="8" value="${esc(S.renamePad)}"/></div>
+      <div style="flex:1"><label class="fld">Only extension</label>
+        <input type="text" id="rnExt" placeholder="all (e.g. jpg)" value="${esc(S.renameExt)}"/></div>
+    </div>
+    <div id="rnPreview" class="callout info" style="margin-top:10px;display:none"></div>`:"";
+  panel.innerHTML=`
+    <div class="card" style="margin-top:20px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="oic" style="background:${o.color}22;color:${o.color};margin:0">${o.icon}</div>
+        <div><h3 style="margin:0">${o.title}</h3>
+        <div style="color:var(--mut);font-size:12.5px">${o.desc}</div></div>
+      </div>
+      <div class="sect-t">Options</div>
+      <div class="opts">${optHtml}</div>
+      ${choiceHtml}
+      ${renameHtml}
+      <label class="fld">Extra protected folders (comma-separated)</label>
+      <input type="text" id="protectIn" placeholder="e.g. Backups, Work" value="${esc(S.protect)}"/>
+      <div class="row" style="margin-top:12px;gap:8px;align-items:center">
+        <span style="color:var(--mut);font-size:12.5px">💾 Presets</span>
+        <select id="orgPresetSel" style="flex:1">${orgPresetOptions()}</select>
+        <button class="btn ghost sm" id="orgPresetApply">Apply</button>
+        <button class="btn sm" id="orgPresetSave">Save…</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="previewBtn">👁️ Preview plan</button>
+        ${o.dupe?`<button class="btn ghost" id="dupeReviewBtn">🖼️ Review duplicates visually</button>`:""}
+        <button class="btn ghost" id="watchBtn" title="Auto-run this whenever the folder changes">🔁 Auto-run on changes</button>
+        <button class="btn ghost" id="scheduleBtn" title="Run this on a schedule">⏰ Schedule…</button>
+      </div>
+      <div id="watchOut"></div>
+      <div id="schedOut"></div>
+      <div id="planOut"></div>
+    </div>`;
+  panel.querySelectorAll(".toggle input[data-k]").forEach(t=>t.onchange=e=>S[e.target.dataset.k]=e.target.checked);
+  $("#protectChk").onchange=e=>S.include_hidden=!e.target.checked;
+  if($("#exifChk"))$("#exifChk").onchange=e=>S.useExif=e.target.checked;
+  if($("#choiceSel"))$("#choiceSel").onchange=e=>S[o.choices.key]=e.target.value;
+  if($("#rnTpl")){
+    $("#rnTpl").oninput=e=>{S.renameTemplate=e.target.value;updateRenamePreview();};
+    $("#rnStart").oninput=e=>{S.renameStart=+e.target.value||0;updateRenamePreview();};
+    $("#rnPad").oninput=e=>{S.renamePad=Math.max(1,+e.target.value||3);updateRenamePreview();};
+    $("#rnExt").oninput=e=>{S.renameExt=e.target.value.trim();loadRenameSamples();};
+    panel.querySelectorAll("[data-tok]").forEach(ch=>ch.onclick=()=>{
+      const inp=$("#rnTpl");inp.value=(inp.value||"")+ch.dataset.tok;
+      S.renameTemplate=inp.value;inp.focus();updateRenamePreview();});
+    loadRenameSamples();
+  }
+  if($("#copyChk"))$("#copyChk").onchange=e=>S.copyMode=e.target.checked;
+  $("#protectIn").oninput=e=>S.protect=e.target.value;
+  $("#orgPresetSave").onclick=()=>{
+    const name=(prompt("Name this preset (e.g. “Deep clean”):")||"").trim();if(!name)return;
+    const p=loadPresets();p[name]=currentConfig();savePresetStore(p);
+    toast("Preset “"+name+"” saved","good");selectOp(S.activeOp);};
+  $("#orgPresetApply").onclick=()=>{
+    const name=$("#orgPresetSel").value;if(!name){toast("Pick a preset first","bad");return;}
+    applyConfig(loadPresets()[name]);toast("Preset applied","good");selectOp(S.activeOp);};
+  $("#previewBtn").onclick=doPreview;
+  if($("#dupeReviewBtn"))$("#dupeReviewBtn").onclick=openDupeReview;
+  $("#watchBtn").onclick=toggleWatch;
+  $("#scheduleBtn").onclick=openScheduleDialog;
+  refreshWatchBtn();refreshScheduleBtn();
+  panel.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+// live rename preview
+async function loadRenameSamples(){
+  if(!$("#rnTpl"))return;
+  try{S._rnSamples=(await api("rename/sample",{backend:S.backend,root:S.root,
+    recursive:S.recursive,only_ext:S.renameExt})).samples;}catch(e){S._rnSamples=[];}
+  updateRenamePreview();
+}
+function applyTemplateJS(tpl,vals,seq){
+  let s=tpl||"";
+  const map={date:vals.date,category:vals.category,orig:vals.orig,parent:vals.parent,ext:vals.ext,n:seq,seq:seq};
+  Object.keys(map).forEach(k=>{s=s.split("{"+k+"}").join(map[k]==null?"":map[k]);});
+  return s.replace(/[\\/:*?"<>|]+/g,"_").replace(/\s+/g," ").trim().replace(/^[.\s]+|[.\s]+$/g,"")||"file";
+}
+function updateRenamePreview(){
+  const box=$("#rnPreview");if(!box)return;
+  const s=S._rnSamples||[];
+  if(!s.length){box.style.display="none";return;}
+  const pad=Math.max(1,S.renamePad||3);
+  const rows=s.slice(0,3).map((v,i)=>{
+    const seq=String((+S.renameStart||0)+i).padStart(pad,"0");
+    const stem=applyTemplateJS(S.renameTemplate,v,seq);
+    const nn=v.ext?`${stem}.${v.ext}`:stem;
+    return `<div style="font-size:12.5px"><span style="color:var(--mut)">${esc(v.name)}</span> → <b>${esc(nn)}</b></div>`;
+  }).join("");
+  box.style.display="block";box.innerHTML=`<div style="margin-bottom:4px">✏️ Live preview</div>${rows}`;
+}
+function orgPresetOptions(){
+  const p=loadPresets();const names=Object.keys(p);
+  if(!names.length)return `<option value="">No presets saved yet</option>`;
+  return `<option value="">Choose a preset…</option>`+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+}
+function toggleHtml(k,label,desc){
+  return `<label class="toggle"><input type="checkbox" data-k="${k}" ${S[k]?"checked":""}/>
+    <span class="tk"></span><span>${label}<span class="desc"> — ${desc}</span></span></label>`;
+}
+async function doPreview(e){
+  const btn=e.target;busy(btn,true,"Building plan…");
+  try{
+    const d=await api("plan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,
+      command:OPS[S.activeOp].cmd,recursive:S.recursive,sort:S.sort,
+      granularity:S.granularity,use_exif:S.useExif,copy:S.copyMode,
+      template:S.renameTemplate,start:S.renameStart,pad:S.renamePad,only_ext:S.renameExt,
+      rules:loadRules(),
+      include_hidden:S.include_hidden,protect:S.protect});
+    S.lastPlan=d;renderPlan(d);
+  }catch(err){toast(err.message,"bad");}finally{busy(btn,false);}
+}
+// ---- custom rules (extension map + junk exts), saved locally ----
+function loadRules(){try{return JSON.parse(localStorage.getItem("phorg-rules")||"{}");}catch(e){return {};}}
+function saveRules(r){try{localStorage.setItem("phorg-rules",JSON.stringify(r));}catch(e){}}
+function openRulesEditor(){
+  const r=loadRules();const ext=r.ext||{};const junk=(r.junkExts||[]);
+  const extRows=Object.entries(ext).map(([k,v])=>`${k} = ${v}`).join("\n");
+  const host=$("#modalHost");
+  host.innerHTML=`<div class="overlay"><div class="modal">
+    <div class="mh"><h3>⚙️ Custom rules</h3><button class="x" id="rClose">×</button></div>
+    <div class="mb" style="padding:16px 18px">
+      <label class="fld">Extension → folder map <span style="color:var(--mut)">(one per line, e.g. <code>raw = Photos/RAW</code>)</span></label>
+      <textarea id="rExt" rows="7" style="width:100%;font-family:monospace;font-size:12.5px;padding:8px;border-radius:8px;background:var(--bg1);color:var(--txt);border:1px solid var(--line)">${esc(extRows)}</textarea>
+      <label class="fld" style="margin-top:12px">Extra junk extensions <span style="color:var(--mut)">(comma-separated, swept by Junk Sweep)</span></label>
+      <input type="text" id="rJunk" placeholder="e.g. aae, ini, ds_store" value="${esc(junk.join(', '))}"/>
+      <div style="color:var(--mut);font-size:11.5px;margin-top:8px">These apply to <b>Organize by Type</b> and <b>Junk Sweep</b>. Saved in this browser.</div>
+    </div>
+    <div class="mf"><span></span><div class="row">
+      <button class="btn ghost sm" id="rReset">Reset</button>
+      <button class="btn sm" id="rSave">Save rules</button></div></div>
+  </div></div>`;
+  const close=()=>host.innerHTML="";
+  $("#rClose").onclick=close;
+  host.querySelector(".overlay").onclick=e=>{if(e.target===host.querySelector(".overlay"))close();};
+  $("#rReset").onclick=()=>{saveRules({});toast("Rules cleared","good");close();};
+  $("#rSave").onclick=()=>{
+    const map={};$("#rExt").value.split("\n").forEach(line=>{
+      const m=line.split("=");if(m.length>=2){const k=m[0].trim().toLowerCase().replace(/^\./,"");
+        const v=m.slice(1).join("=").trim();if(k&&v)map[k]=v;}});
+    const je=$("#rJunk").value.split(",").map(x=>x.trim().toLowerCase().replace(/^\./,"")).filter(Boolean);
+    saveRules({ext:map,junkExts:je});
+    toast("Rules saved","good");close();
+    if(S.activeOp&&$("#previewBtn"))toast("Preview again to apply the new rules","info");
+  };
+}
+// ---- recipes (chained multi-step workflows) ----
+function loadRecipes(){try{return JSON.parse(localStorage.getItem("phorg-recipes")||"{}");}catch(e){return {};}}
+function saveRecipes(r){try{localStorage.setItem("phorg-recipes",JSON.stringify(r));}catch(e){}}
+const RECIPE_OPS=["cleanup","junk","dedupe","similar-names","type","size","date","location","fix-ext","empties","flatten"];
+function openRecipes(){
+  const host=$("#modalHost");const rc=loadRecipes();
+  const names=Object.keys(rc);
+  host.innerHTML=`<div class="overlay"><div class="modal">
+    <div class="mh"><h3>🧪 Recipes — chained workflows</h3><button class="x" id="rcX">×</button></div>
+    <div class="mb" style="padding:16px 18px">
+      ${names.length?`<label class="fld">Your recipes</label>
+       <div class="rclist">${names.map(n=>`<div class="rcrow">
+         <span class="rl"><b>${esc(n)}</b><span class="rs">${rc[n].map(c=>OP_LABEL[c]||c).join(" → ")}</span></span>
+         <button class="btn sm" data-run="${esc(n)}">▶ Run</button>
+         <button class="btn ghost sm" data-del="${esc(n)}">🗑️</button></div>`).join("")}</div><hr style="border-color:var(--line);margin:14px 0">`:""}
+      <label class="fld">Build a new recipe <span style="color:var(--mut)">— pick steps in order</span></label>
+      <div class="opts" style="grid-template-columns:1fr 1fr">
+        ${RECIPE_OPS.map(c=>`<label class="toggle"><input type="checkbox" data-step="${c}"/>
+          <span class="tk"></span><span>${esc(OP_LABEL[c]||c)}</span></label>`).join("")}</div>
+      <label class="fld" style="margin-top:10px">Recipe name</label>
+      <input type="text" id="rcName" placeholder="e.g. Deep tidy"/>
+    </div>
+    <div class="mf"><span style="color:var(--mut2);font-size:11.5px">Runs each step in order, applied &amp; journalled (each step can be undone).</span>
+      <button class="btn sm" id="rcSave">Save recipe</button></div>
+  </div></div>`;
+  const close=()=>host.innerHTML="";
+  $("#rcX").onclick=close;
+  host.querySelector(".overlay").onclick=e=>{if(e.target===host.querySelector(".overlay"))close();};
+  $("#rcSave").onclick=()=>{
+    const steps=[...host.querySelectorAll("[data-step]:checked")].map(c=>c.dataset.step);
+    const name=($("#rcName").value||"").trim();
+    if(!name||!steps.length){toast("Name it and pick at least one step","bad");return;}
+    const r=loadRecipes();r[name]=steps;saveRecipes(r);toast("Recipe saved","good");openRecipes();
+  };
+  host.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{
+    const r=loadRecipes();delete r[b.dataset.del];saveRecipes(r);openRecipes();});
+  host.querySelectorAll("[data-run]").forEach(b=>b.onclick=()=>{const steps=loadRecipes()[b.dataset.run];close();runRecipe(b.dataset.run,steps);});
+}
+async function runRecipe(name,steps){
+  const panel=$("#opPanel");
+  panel.innerHTML=`<div class="card" style="margin-top:20px"><h3 style="margin:0 0 6px">🧪 Running “${esc(name)}”</h3>
+    <div id="rcProg"></div></div>`;
+  const prog=$("#rcProg");let totalMoves=0;const done=[];
+  for(const cmd of steps){
+    prog.innerHTML=done.map(d=>`<div class="histrow"><span class="hl">✅ ${esc(OP_LABEL[d.cmd]||d.cmd)}</span><span style="color:var(--mut)">${num(d.moves)} change(s)</span></div>`).join("")
+      +`<div class="callout info" style="margin-top:8px"><span class="spin"></span> ${esc(OP_LABEL[cmd]||cmd)}…</div>`;
+    try{
+      const plan=await api("plan",{backend:S.backend,root:S.root,command:cmd,
+        recursive:S.recursive,rules:loadRules(),include_hidden:S.include_hidden,protect:S.protect});
+      let moves=0;
+      if(plan.total){const d=await api("apply",{planId:plan.planId});moves=d.applied||0;totalMoves+=moves;}
+      done.push({cmd,moves});
+    }catch(err){done.push({cmd,moves:0,err:err.message});}
+  }
+  prog.innerHTML=done.map(d=>`<div class="histrow"><span class="hl">${d.err?"⚠️":"✅"} ${esc(OP_LABEL[d.cmd]||d.cmd)}${d.err?` — ${esc(d.err)}`:""}</span><span style="color:var(--mut)">${num(d.moves)} change(s)</span></div>`).join("")
+    +`<div class="callout safe" style="margin-top:10px">🎉 Recipe done — <b>${num(totalMoves)}</b> change(s) across ${num(steps.length)} step(s). Undo any step from the Dashboard's Recent activity.</div>`;
+  toast(`Recipe “${name}” done`,"good");
+  api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth}).then(sc=>S.scan=sc).catch(()=>{});
+}
+// ---- watch folder (auto-run on changes) ----
+async function refreshWatchBtn(){
+  const b=$("#watchBtn");if(!b)return;
+  if(S.backend!=="local"){b.style.display="none";return;}
+  try{const st=await api("watch/status",{root:S.root});
+    if(st.watching){b.textContent=`⏹️ Stop auto-run (${OP_LABEL[st.command]||st.command}${st.runs?` · ran ${st.runs}×`:""})`;
+      b.classList.add("warn");b.dataset.on="1";}
+    else{b.textContent="🔁 Auto-run on changes";b.classList.remove("warn");b.dataset.on="";}
+  }catch(e){}
+}
+async function toggleWatch(e){
+  const b=e.target;
+  if(b.dataset.on){
+    busy(b,true,"Stopping…");
+    try{await api("watch/stop",{root:S.root});toast("Auto-run stopped","good");}
+    catch(err){toast(err.message,"bad");}
+    busy(b,false);refreshWatchBtn();return;
+  }
+  if(!confirm(`Auto-run “${OPS[S.activeOp].title}” automatically whenever this folder changes?\n\nIt applies moves without a preview each time (you can still Undo). Stop it anytime.`))return;
+  busy(b,true,"Starting…");
+  try{
+    await api("watch/start",{backend:S.backend,root:S.root,command:OPS[S.activeOp].cmd,
+      recursive:S.recursive,sort:S.sort,granularity:S.granularity,use_exif:S.useExif,
+      template:S.renameTemplate,start:S.renameStart,pad:S.renamePad,only_ext:S.renameExt,
+      rules:loadRules(),include_hidden:S.include_hidden,protect:S.protect});
+    toast("Watching folder — it'll auto-tidy on changes","good");
+    $("#watchOut").innerHTML=`<div class="callout info" style="margin-top:12px">🔁 Auto-running <b>${esc(OPS[S.activeOp].title)}</b> whenever this folder changes. Everything is journalled, so you can Undo.</div>`;
+  }catch(err){toast(err.message,"bad");}
+  busy(b,false);refreshWatchBtn();
+}
+// ---- scheduled runs ----
+async function refreshScheduleBtn(){
+  const b=$("#scheduleBtn");if(!b)return;
+  if(S.backend!=="local"){b.style.display="none";return;}
+  try{const st=await api("schedule/status",{root:S.root});
+    if(st.scheduled){const when=st.mode==="daily"?`daily ${st.at}`:`every ${st.interval_h}h`;
+      b.textContent=`⏹️ Stop schedule (${OP_LABEL[st.command]||st.command} · ${when})`;
+      b.classList.add("warn");b.dataset.on="1";
+      if($("#schedOut"))$("#schedOut").innerHTML=`<div class="callout info" style="margin-top:12px">⏰ Scheduled <b>${esc(OP_LABEL[st.command]||st.command)}</b> ${when}${st.runs?` · ran ${st.runs}×`:""}. Journalled, so you can Undo.</div>`;}
+    else{b.textContent="⏰ Schedule…";b.classList.remove("warn");b.dataset.on="";}
+  }catch(e){}
+}
+async function openScheduleDialog(e){
+  const b=e.target;
+  if(b.dataset.on){busy(b,true,"Stopping…");
+    try{await api("schedule/stop",{root:S.root});toast("Schedule stopped","good");}
+    catch(err){toast(err.message,"bad");}
+    if($("#schedOut"))$("#schedOut").innerHTML="";busy(b,false);refreshScheduleBtn();return;}
+  const host=$("#modalHost");
+  host.innerHTML=`<div class="overlay"><div class="modal">
+    <div class="mh"><h3>⏰ Schedule “${esc(OPS[S.activeOp].title)}”</h3><button class="x" id="sClose">×</button></div>
+    <div class="mb" style="padding:16px 18px">
+      <label class="toggle"><input type="radio" name="smode" value="interval" checked/> <span>Every N hours</span></label>
+      <input type="number" id="sInterval" min="0.1" step="0.5" value="24" style="width:120px;margin:6px 0 14px"/>
+      <label class="toggle"><input type="radio" name="smode" value="daily"/> <span>Daily at a set time</span></label>
+      <input type="time" id="sAt" value="18:00" style="width:140px;margin-top:6px"/>
+      <div style="color:var(--mut);font-size:11.5px;margin-top:12px">Runs the action automatically (applied &amp; journalled — you can Undo). Only while the app is open.</div>
+    </div>
+    <div class="mf"><span></span><div class="row">
+      <button class="btn ghost sm" id="sCancel">Cancel</button>
+      <button class="btn sm" id="sStart">Start schedule</button></div></div>
+  </div></div>`;
+  const close=()=>host.innerHTML="";
+  $("#sClose").onclick=close;$("#sCancel").onclick=close;
+  host.querySelector(".overlay").onclick=ev=>{if(ev.target===host.querySelector(".overlay"))close();};
+  $("#sStart").onclick=async()=>{
+    const mode=host.querySelector('input[name=smode]:checked').value;
+    try{
+      await api("schedule/start",{backend:S.backend,root:S.root,command:OPS[S.activeOp].cmd,
+        mode,interval_hours:+$("#sInterval").value||24,at:$("#sAt").value||"18:00",
+        recursive:S.recursive,sort:S.sort,granularity:S.granularity,use_exif:S.useExif,copy:S.copyMode,
+        template:S.renameTemplate,start:S.renameStart,pad:S.renamePad,only_ext:S.renameExt,
+        rules:loadRules(),include_hidden:S.include_hidden,protect:S.protect});
+      toast("Scheduled","good");close();refreshScheduleBtn();
+    }catch(err){toast(err.message,"bad");}
+  };
+}
+// ---- visual duplicate review (#9) ----
+async function openDupeReview(e){
+  const btn=e.target;busy(btn,true,"Scanning…");
+  let d;try{d=await api("dupe/groups",{backend:S.backend,root:S.root});}
+  catch(err){toast(err.message,"bad");busy(btn,false);return;}
+  busy(btn,false);
+  if(!d.groups.length){toast("No byte-identical duplicates found 🎉","good");return;}
+  openDupeReviewFrom(d.groups,"Duplicate review");
+}
+function openDupeReviewFrom(groups,title){
+  S._dupeGroups=groups.map(g=>({...g,keep:g.keep||g.members[0]}));
+  const wasted=groups.reduce((s,g)=>s+(g.extraKb||(g.kb*(g.members.length-1))||0),0);
+  const host=$("#modalHost");
+  host.innerHTML=`<div class="lbov" id="dupov">
+    <div class="lbtop"><span class="lbname">🖼️ ${esc(title)} — ${num(groups.length)} set(s), ${fmtKb(wasted)} reclaimable</span>
+      <button class="x" id="dupClose">×</button></div>
+    <div class="galhint">Pick the <b>one</b> copy to keep in each set; the rest move to <code>Duplicates_Review/</code>. Nothing is deleted.</div>
+    <div style="flex:1;overflow:auto;padding:2px 18px 18px" id="dupBody"></div>
+    <div class="lbmeta" style="border-top:1px solid var(--line)">
+      <button class="btn warn" id="dupApply">⚡ File the extras</button>
+      <button class="btn ghost" id="dupCancelBtn">Cancel</button></div>
+  </div>`;
+  const close=()=>{host.innerHTML="";document.onkeydown=null;};
+  $("#dupClose").onclick=close;$("#dupCancelBtn").onclick=close;
+  document.onkeydown=ev=>{if(ev.key==="Escape"&&$("#dupov"))close();};
+  renderDupeGroups();
+  $("#dupApply").onclick=applyDupeReview;
+}
+function renderDupeGroups(){
+  const body=$("#dupBody");if(!body)return;
+  body.innerHTML=S._dupeGroups.map((g,gi)=>`<div class="card" style="margin-top:12px">
+    <div style="color:var(--mut);font-size:12px;margin-bottom:8px">Set ${gi+1} — ${fmtKb(g.kb)} · ${g.members.length} copies</div>
+    <div class="thumbgrid">${g.members.map(pth=>`<div class="thumb ${g.keep===pth?'sel':''}" data-dg="${gi}" data-dp="${encodeURIComponent(pth)}" style="cursor:pointer">
+      <img loading="lazy" src="/api/thumb?size=300&path=${encodeURIComponent(pth)}" alt=""/>
+      <div class="nm" title="${esc(pth)}">${g.keep===pth?"⭐ keep · ":""}${esc(pth.split(/[\\/]/).pop())}</div></div>`).join("")}</div>
+  </div>`).join("");
+  body.querySelectorAll("[data-dp]").forEach(t=>t.onclick=()=>{
+    const gi=+t.dataset.dg;S._dupeGroups[gi].keep=decodeURIComponent(t.dataset.dp);renderDupeGroups();});
+}
+async function applyDupeReview(e){
+  const assignments=[];
+  S._dupeGroups.forEach(g=>g.members.forEach(pth=>{
+    if(pth!==g.keep)assignments.push({path:pth,category:"Duplicates_Review"});}));
+  if(!assignments.length){toast("Nothing to file","info");return;}
+  const btn=e.target;busy(btn,true,"Filing…");
+  const out=document.createElement("div");$("#dupBody").prepend(out);
+  try{
+    const d=await runApplyJob("categorize/apply/start",{backend:S.backend,root:S.root,assignments},out);
+    renderApplyResult(out,d);btn.remove();$("#dupCancelBtn").textContent="Close";
+    toast("Duplicates filed","good");
+    api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth}).then(sc=>S.scan=sc).catch(()=>{});
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+function renderPlan(d){
+  const out=$("#planOut");
+  if(!d.total){
+    out.innerHTML=`<div class="callout safe" style="margin-top:18px">✅ Nothing to do — this is already tidy!</div>`;
+    return;
+  }
+  const c=d.counts;
+  const rows=d.preview.map(o=>{
+    const base=s=>String(s).split("/").pop();
+    if(o.kind==="move")return `<div class="oprow"><span class="tag move">MOVE</span>
+      <span class="pth" title="${esc(o.a)}">${esc(base(o.a))}</span>
+      <span class="arw">→</span><span class="dst" title="${esc(o.b)}">${esc(o.b.replace(S.root,"").replace(/^[\\/]+/,""))}</span></div>`;
+    if(o.kind==="mkdir")return `<div class="oprow"><span class="tag mkdir">MKDIR</span>
+      <span class="dst">${esc(o.a.replace(S.root,"").replace(/^[\\/]+/,""))}</span></div>`;
+    return `<div class="oprow"><span class="tag rmdir">RMDIR</span>
+      <span class="pth" title="${esc(o.a)}">${esc(o.a.replace(S.root,"").replace(/^[\\/]+/,""))}</span></div>`;
+  }).join("");
+  const more=d.total>d.preview.length?`<div class="oprow" style="color:var(--mut2);justify-content:center">… and ${num(d.total-d.preview.length)} more operations</div>`:"";
+  S.planExclude=new Set();
+  const srcF=(d.sourceFolders||[]).filter(f=>f.count>0);
+  const folderBox=srcF.length>1?`
+    <div class="card" style="margin-top:14px">
+      <h4 class="cardh">📂 Folders to include <span style="color:var(--mut);font-weight:400;font-size:12px">— untick any you want to leave alone</span></h4>
+      <div class="opts">${srcF.map(f=>`<label class="toggle">
+        <input type="checkbox" class="incf" data-folder="${esc(f.folder)}" checked/>
+        <span class="tk"></span><span>${f.folder?"📁 "+esc(f.folder):"🗂️ (top level)"}<span class="desc"> — ${num(f.count)} file(s)</span></span></label>`).join("")}</div>
+    </div>`:"";
+  out.innerHTML=`
+    <div class="preview">
+      <div class="ph">
+        <div class="chips">
+          ${c.moves?`<span class="chip">📦 <b>${num(c.moves)}</b> moves</span>`:""}
+          ${c.mkdirs?`<span class="chip">📁 <b>${num(c.mkdirs)}</b> new folders</span>`:""}
+          ${c.rmdirs?`<span class="chip">🗑️ <b>${num(c.rmdirs)}</b> removals</span>`:""}
+        </div>
+        <span style="color:var(--mut);font-size:12px">Dry-run preview</span>
+      </div>
+      ${d.total>12?`<div style="padding:8px 12px;border-top:1px solid #1c2740">
+        <input type="text" id="planSearch" placeholder="🔎 Filter operations…" style="width:100%"/></div>`:""}
+      <div class="oplist" id="oplist">${rows}${more}</div>
+    </div>
+    ${folderBox}
+    <div class="callout info" style="margin-top:14px">ℹ️ This is a preview only — nothing has changed yet.
+      Applying will move files (never delete) and re-verify the total file count afterwards.</div>
+    <div class="btn-row">
+      <button class="btn warn" id="applyBtn">⚡ Apply ${num(c.moves+c.rmdirs)} change(s)</button>
+      <button class="btn ghost" id="cancelBtn">Cancel</button>
+    </div>
+    <div id="applyOut"></div>`;
+  const ps=$("#planSearch");if(ps)ps.oninput=e=>{
+    const q=e.target.value.trim().toLowerCase();
+    $("#oplist").querySelectorAll(".oprow").forEach(r=>{
+      r.style.display=!q||r.textContent.toLowerCase().includes(q)?"":"none";});
+  };
+  const totalMoves=c.moves;
+  out.querySelectorAll(".incf").forEach(cb=>cb.onchange=e=>{
+    const f=e.target.dataset.folder;
+    if(e.target.checked)S.planExclude.delete(f);else S.planExclude.add(f);
+    let kept=totalMoves;
+    srcF.forEach(sf=>{if(S.planExclude.has(sf.folder))kept-=sf.count;});
+    $("#applyBtn").innerHTML=`⚡ Apply ${num(kept+c.rmdirs)} change(s)`;
+    $("#applyBtn").disabled=kept<=0;
+  });
+  $("#applyBtn").onclick=doApply;
+  $("#cancelBtn").onclick=()=>{S.lastPlan=null;out.innerHTML="";};
+}
+async function doApply(e){
+  if(!S.lastPlan)return;
+  const btn=e.target;busy(btn,true,"Applying…");
+  const out=$("#applyOut");
+  $("#cancelBtn")&&$("#cancelBtn").remove();
+  try{
+    const d=await runApplyJob("apply/start",{planId:S.lastPlan.planId,
+      exclude:[...(S.planExclude||[])]},out);
+    renderApplyResult(out,d);
+    btn.remove();
+    toast(d.cancelled?"Stopped":"Applied successfully",d.cancelled?"info":"good");
+    api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth})
+      .then(sc=>S.scan=sc).catch(()=>{});
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+// runs an apply/*-start job with a live progress bar + Stop; resolves to result
+function runApplyJob(startPath,body,host){
+  return new Promise((resolve,reject)=>{(async()=>{
+    let d;try{d=await api(startPath,body);}catch(err){return reject(err);}
+    const jobId=d.jobId;
+    const verb=(body&&body._verb)||"Moved";
+    host.innerHTML=`<div class="preview" style="margin-top:16px"><div class="ph">
+      <div class="chips"><span class="chip" id="apStat">⚡ Working…</span></div>
+      <button class="btn ghost sm" id="apCancel">Stop</button></div>
+      <div style="padding:14px 18px"><div class="track" style="display:block;height:14px;border-radius:8px;background:#0d1424;border:1px solid #23324e;overflow:hidden">
+        <div id="apBar" class="fill" style="display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
+        <div id="apCount" style="color:var(--mut);font-size:12px;margin-top:8px">Preparing…</div></div></div>`;
+    $("#apCancel").onclick=()=>{api("apply/cancel",{jobId}).catch(()=>{});const s=$("#apStat");if(s)s.textContent="Stopping…";};
+    const poll=async()=>{
+      let pr;try{pr=await api("apply/progress",{jobId});}catch(err){return reject(err);}
+      const t=pr.total||0,dn=pr.done||0,pct=t?Math.round(dn/t*100):0;
+      const bar=$("#apBar");if(bar)bar.style.width=pct+"%";
+      const c=$("#apCount");if(c)c.textContent=t?`${verb} ${num(dn)} of ${num(t)} (${pct}%)`:"Working…";
+      if(pr.error)return reject(new Error(pr.error));
+      if(!pr.finished){setTimeout(poll,450);return;}
+      resolve(pr.result);
+    };poll();
+  })();});
+}
+function renderApplyResult(host,d){
+  let box="";
+  if(d.cancelled)box=`<div class="callout warn" style="margin-top:16px">⏹️ Stopped — applied ${num(d.applied)} operation(s) before stopping.</div>`;
+  else if(d.copyMode)box=`<div class="callout safe" style="margin-top:16px">✅ Done — copied ${num(d.copied||d.applied)} file(s). Originals left untouched${d.verified===true?` (count now <b>${num(d.after)}</b>)`:""}.</div>`;
+  else if(d.verified===true)box=`<div class="callout safe" style="margin-top:16px">✅ Done — applied ${num(d.applied)} operation(s).
+    File count verified unchanged (<b>${num(d.after)}</b>). No data lost.</div>`;
+  else if(d.verified===false)box=`<div class="callout bad" style="margin-top:16px">⚠️ Applied ${num(d.applied)} operation(s), but file count changed
+    ${num(d.before)} → ${num(d.after)}. Please review.</div>`;
+  else box=`<div class="callout safe" style="margin-top:16px">✅ Done — applied ${num(d.applied)} item(s).</div>`;
+  if(d.merged)box+=`<div class="callout info" style="margin-top:10px">🧬 Skipped ${num(d.merged)} file(s) that were already there identically (no duplicate <code>_1</code> copies made).</div>`;
+  if(d.movedSummary&&d.movedSummary.length){
+    box+=`<div class="card" style="margin-top:12px"><div style="color:var(--mut);font-size:12px;margin-bottom:6px">📂 Where things went</div>
+      ${d.movedSummary.map(m=>`<div class="histrow"><span class="hl">${esc(m.folder)}</span><span style="color:var(--mut)">${num(m.count)} file(s)</span></div>`).join("")}</div>`;
+  }
+  if(d.log&&d.log.length)box+=`<div class="callout warn" style="margin-top:10px">${d.log.slice(0,6).map(esc).join("<br>")}</div>`;
+  host.innerHTML=box+undoBar(d.undo);
+  wireUndo(host,d.undo);
+}
+function undoBar(undo){
+  if(!undo||!undo.available)return "";
+  return `<div class="btn-row"><button class="btn ghost" data-undo="1">↩️ Undo all — ${num(undo.count)} file(s)</button>
+    ${undo.count>1?`<button class="btn ghost" data-undo-part="1">📂 Undo only some folders…</button>`:""}</div>`;
+}
+function wireUndo(container,undo){
+  if(!undo||!undo.available)return;
+  const pb=container.querySelector("[data-undo-part]");
+  if(pb)pb.onclick=()=>openPartialUndo(null);
+  const b=container.querySelector("[data-undo]");if(!b)return;
+  b.onclick=async e=>{
+    busy(e.target,true,"Undoing…");
+    try{
+      const r=await api("undo",{root:undo.root});
+      e.target.closest(".btn-row").innerHTML=
+        `<div class="callout safe" style="width:100%">↩️ Undone — moved ${num(r.restored)} file(s) back to where they were.</div>`;
+      toast("Undone","good");
+      api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth})
+        .then(sc=>S.scan=sc).catch(()=>{});
+    }catch(err){toast(err.message,"bad");busy(e.target,false);}
+  };
+}
+// ---- partial undo: move back only chosen destination folders ----
+async function openPartialUndo(id){
+  let d;try{d=await api("history/folders",id?{root:S.root,id}:{root:S.root});}
+  catch(err){toast(err.message,"bad");return;}
+  if(!d.folders||!d.folders.length){toast("Nothing to undo here","info");return;}
+  const host=$("#modalHost");
+  host.innerHTML=`<div class="overlay"><div class="modal">
+    <div class="mh"><h3>↩️ Undo specific folders</h3><button class="x" id="puX">×</button></div>
+    <div class="mb" style="padding:16px 18px">
+      <div style="color:var(--mut);font-size:12.5px;margin-bottom:10px">Tick the folders you want to move back
+        (from <b>${esc(OP_LABEL[d.label]||d.label||"the last operation")}</b>). Everything else stays put.</div>
+      ${d.folders.map(f=>`<label class="toggle"><input type="checkbox" class="puf" data-folder="${esc(f.folder)}"/>
+        <span class="tk"></span><span>${f.folder?"📁 "+esc(f.folder):"🗂️ (top level)"}<span class="desc"> — ${num(f.count)} file(s)</span></span></label>`).join("")}
+    </div>
+    <div class="mf"><span></span><div class="row">
+      <button class="btn ghost sm" id="puCancel">Cancel</button>
+      <button class="btn sm" id="puGo">↩️ Undo selected</button></div></div>
+  </div></div>`;
+  const close=()=>host.innerHTML="";
+  $("#puX").onclick=close;$("#puCancel").onclick=close;
+  host.querySelector(".overlay").onclick=e=>{if(e.target===host.querySelector(".overlay"))close();};
+  $("#puGo").onclick=async e=>{
+    const folders=[...host.querySelectorAll(".puf:checked")].map(c=>c.dataset.folder);
+    if(!folders.length){toast("Pick at least one folder","bad");return;}
+    busy(e.target,true,"Undoing…");
+    try{
+      const r=await api("undo",id?{root:S.root,id,folders}:{root:S.root,folders});
+      toast(`Undone — moved ${num(r.restored)} file(s) back`,"good");close();
+      S.scan=await api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth});
+      if(S.page==="dashboard")loadHistory();
+    }catch(err){toast(err.message,"bad");busy(e.target,false);}
+  };
+}
+
+// ---------------------------------------------------------------- Photo categorizer (AI)
+function pagePhotos(m){
+  const p=el("div","page");
+  p.innerHTML=`
+    <h1>Photo Categorizer <span style="font-size:14px;color:var(--mut);font-weight:400">· AI</span></h1>
+    <p class="lead">Sort a photo dump by what's <i>inside</i> each picture — people, groups,
+      blurry shots &amp; duplicates. Runs 100% on your PC.</p>
+    ${S.backend==="adb"?`<div class="card" style="margin-bottom:14px">
+      <div class="callout info">📱 <div>Photo AI needs the pictures on your PC. Copy them off the phone first,
+        then it'll switch to that folder automatically.</div></div>
+      <label class="fld">Copy phone photos into this PC folder</label>
+      <div class="row"><input type="text" id="pullDest" placeholder="e.g. C:\\Users\\me\\Pictures\\FromPhone" value="${esc(S.pullDest||"")}"/>
+        <button class="btn ghost" id="pullBrowse">📂 Browse</button></div>
+      <div class="btn-row"><button class="btn" id="pullBtn">⬇️ Copy photos to PC</button></div>
+      <div id="pullOut"></div>
+    </div>`:""}
+    <div id="opPanel"></div>`;
+  m.appendChild(p);
+  if(S.backend==="adb"){
+    $("#pullDest").oninput=e=>S.pullDest=e.target.value.trim();
+    $("#pullBrowse").onclick=()=>openBrowser(pth=>{S.pullDest=pth;$("#pullDest").value=pth;});
+    $("#pullBtn").onclick=doPullPhotos;
+  }
+  selectPhotoOp(PHOTO_OP,$("#opPanel"));
+}
+async function doPullPhotos(e){
+  if(!S.pullDest){toast("Choose a PC folder first","bad");return;}
+  const btn=e.target;busy(btn,true,"Copying…");
+  const out=$("#pullOut");
+  try{
+    const d=await runApplyJob("pull/start",{backend:S.backend,root:S.root,adb:S.adb,
+      device:S.device,dest:S.pullDest},out);
+    out.innerHTML=`<div class="callout safe" style="margin-top:12px">✅ Copied ${num(d.pulled)} photo(s)/video(s) to the PC. Switching to that folder…</div>`;
+    toast("Photos copied — now sorting locally","good");
+    S.backend="local";S.root=d.dest;
+    S.scan=await api("scan",{backend:"local",root:d.dest,depth:S.depth});
+    pushRecent(d.dest);setTimeout(()=>go("photos"),700);
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+const PHOTO_CATS=[
+  ["blurry","🌀 Blurry / Shaken","Out-of-focus or motion-blurred shots"],
+  ["single","🧍 Single portrait","Photos with exactly one person"],
+  ["couple","💑 Couple","Photos with two people"],
+  ["group","👥 Group photo","Three or more people"],
+  ["scenery","🏞️ Scenery / no people","Decor, venue, objects"],
+  ["screenshot","📱 Screenshots","Screen captures (by name &amp; shape)"],
+  ["document","📄 Documents / scans","Photos of paper, receipts, whiteboards"],
+  ["best","⭐ Best shots","Sharp, well-exposed keepers (a Best-of album)"],
+  ["video","🎬 Videos","Move video files into a Videos folder"],
+  ["duplicates","🔁 Duplicates","Near-identical burst shots (keeps the best)"],
+  ["similar","🪞 Similar shots","Same moment, seconds apart (keeps the best)"],
+];
+async function selectPhotoOp(o,panel){
+  panel.innerHTML=`<div id="photoBody" style="margin-top:8px"><div class="card"><div class="empty"><span class="spin"></span> Checking AI support…</div></div></div>`;
+  let st;try{st=await api("vision/status",{});}catch(err){
+    $("#photoBody").innerHTML=`<div class="callout bad" style="margin-top:8px">${esc(err.message)}</div>`;return;}
+  if(!st.available){renderPhotoInstall(st);return;}
+  renderPhotoOptions(st);
+}
+function renderPhotoInstall(st){
+  const body=$("#photoBody");
+  const pkgs=st.missing.join(" ");
+  if(st.frozen){
+    body.innerHTML=`<div class="callout warn" style="margin-top:8px">🧩 Photo categorization needs image-analysis
+      packages that aren't bundled in this ready-made app.<br>To use it, run phorg from source
+      (<code>python -m phorg ui</code>) and click “Install AI support”.</div>`;
+    return;
+  }
+  body.innerHTML=`
+    <div class="card">
+      <div class="callout info">🧩 This one-time step downloads the local AI image tools
+        (<code>${esc(pkgs)}</code>). Everything still runs offline on your PC.</div>
+      <div class="btn-row">
+        <button class="btn" id="instBtn">⬇️ Install AI support</button>
+      </div>
+      <div class="subhint">Or install manually: <code>pip install ${esc(pkgs)}</code></div>
+      <div id="instOut"></div>
+    </div>`;
+  $("#instBtn").onclick=async e=>{
+    busy(e.target,true,"Installing… (a minute or two)");
+    try{const d=await api("vision/install",{});
+      if(d.missing&&d.missing.length)throw new Error("Still missing: "+d.missing.join(", "));
+      toast("AI support installed","good");
+      const st2=await api("vision/status",{});renderPhotoOptions(st2);
+    }catch(err){$("#instOut").innerHTML=`<div class="callout bad" style="margin-top:12px">${esc(err.message)}</div>`;
+      busy(e.target,false);}
+  };
+}
+function renderPhotoOptions(st){
+  S._visionSt=st;
+  const body=$("#photoBody");
+  const catRows=PHOTO_CATS.map(([k,label,desc])=>{
+    return `<label class="toggle">
+      <input type="checkbox" data-cat="${k}" ${S.photoCats[k]?"checked":""}/>
+      <span class="tk"></span><span>${label}<span class="desc"> — ${desc}</span></span></label>`;
+  }).join("");
+  const peopleDisabled=!st.bride_supported;
+  const presets=loadPresets();const names=Object.keys(presets);
+  body.innerHTML=`
+    <div class="callout info">🔒 Runs entirely on your PC. Images are analysed by content and
+      <b>moved</b> into category folders — never deleted. You'll preview everything before applying.</div>
+    <div class="presetbar">
+      <span style="color:var(--mut);font-size:12.5px">💾 Preset</span>
+      <select id="presetSel" style="flex:1;min-width:130px">
+        <option value="">${names.length?"— choose a preset —":"— none saved yet —"}</option>
+        ${names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("")}
+      </select>
+      <button class="btn ghost sm" id="presetApply">Apply</button>
+      <button class="btn ghost sm" id="presetDel" title="Delete preset">🗑️</button>
+      <button class="btn sm" id="presetSave">Save current…</button>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h4 class="cardh">🎯 Categories to sort into</h4>
+      <div class="opts">${catRows}</div>
+      <label class="toggle" style="margin-top:10px"><input type="checkbox" id="pRecursive" ${S.recursive?"checked":""}/>
+        <span class="tk"></span><span>Include sub-folders<span class="desc"> — scan nested folders too</span></span></label>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h4 class="cardh">🧑‍🤝‍🧑 Recognize specific people</h4>
+      <label class="toggle" ${peopleDisabled?'style="opacity:.5"':''}>
+        <input type="checkbox" data-cat="people" ${S.photoCats.people&&!peopleDisabled?"checked":""} ${peopleDisabled?"disabled":""}/>
+        <span class="tk"></span><span>Sort solo photos of named people<span class="desc"> — bride, groom, or anyone${peopleDisabled?" (needs opencv-contrib)":""}</span></span></label>
+      <div id="peopleBox"></div>
+      <div class="orline">— or, without any samples —</div>
+      <button class="btn ghost" id="autoGroupBtn" ${peopleDisabled?"disabled":""} style="width:100%">🪄 Auto-group everyone by face</button>
+      <div class="subhint">Finds recurring faces automatically and lets you name each person. First use downloads a small (~37 MB) face model.</div>
+    </div>
+    <details class="advbox" style="margin-top:14px"><summary>Fine-tuning (blur &amp; face-match)</summary>
+    <div class="slider">
+      <label><span>🌀 Blur sensitivity</span><span>more marked blurry → <b id="blurVal">${S.blurThreshold}</b></span></label>
+      <input type="range" id="blurRange" min="20" max="250" step="5" value="${S.blurThreshold}"/>
+      <div class="ends"><span>Only very blurry</span><span>Aggressive</span></div>
+    </div>
+    <div class="slider">
+      <label><span>👤 Face-match strictness</span><span id="strictVal">${strictnessLabel(S.personThreshold)}</span></label>
+      <input type="range" id="strictRange" min="45" max="110" step="1" value="${S.personThreshold}"/>
+      <div class="ends"><span>Strict (fewer false matches)</span><span>Loose (catch more)</span></div>
+    </div>
+    </details>
+    <div class="btn-row">
+      <button class="btn" id="analyzeBtn">🔍 Analyze photos</button>
+      <button class="btn ghost" id="testBtn">🧪 Test on 20 photos</button>
+    </div>
+    <div id="photoProgress"></div>
+    <div id="planOut"></div>`;
+  body.querySelectorAll("input[data-cat]").forEach(t=>t.onchange=e=>{
+    S.photoCats[e.target.dataset.cat]=e.target.checked;
+    if(e.target.dataset.cat==="people")renderPeopleBox();});
+  $("#pRecursive").onchange=e=>S.recursive=e.target.checked;
+  $("#blurRange").oninput=e=>{S.blurThreshold=+e.target.value;$("#blurVal").textContent=S.blurThreshold;};
+  $("#strictRange").oninput=e=>{S.personThreshold=+e.target.value;$("#strictVal").textContent=strictnessLabel(S.personThreshold);};
+  $("#analyzeBtn").onclick=e=>startAnalyze(e,false);
+  $("#testBtn").onclick=e=>startAnalyze(e,true);
+  const ag=$("#autoGroupBtn");if(ag)ag.onclick=doAutoGroup;
+  $("#presetSave").onclick=savePresetPrompt;
+  $("#presetApply").onclick=()=>{const n=$("#presetSel").value;if(!n){toast("Pick a preset first","bad");return;}
+    applyConfig(loadPresets()[n]);toast("Preset “"+n+"” applied","good");renderPhotoOptions(S._visionSt);};
+  $("#presetDel").onclick=()=>{const n=$("#presetSel").value;if(!n){toast("Pick a preset to delete","bad");return;}
+    const p=loadPresets();delete p[n];savePresetStore(p);toast("Preset deleted","info");renderPhotoOptions(S._visionSt);};
+  renderPeopleBox();
+}
+// -- presets (saved in the browser) -------------------------------------
+function loadPresets(){try{return JSON.parse(localStorage.getItem("phorg-presets")||"{}");}catch(e){return {};}}
+function savePresetStore(p){try{localStorage.setItem("phorg-presets",JSON.stringify(p));}catch(e){}}
+function currentConfig(){
+  return {photoCats:{...S.photoCats}, people:S.people.map(p=>({...p})),
+    blurThreshold:S.blurThreshold, personThreshold:S.personThreshold,
+    recursive:S.recursive, include_hidden:S.include_hidden, protect:S.protect,
+    granularity:S.granularity, backend:S.backend};
+}
+function applyConfig(c){
+  if(!c)return;
+  if(c.photoCats)S.photoCats={...S.photoCats,...c.photoCats};
+  if(c.people)S.people=c.people.map(p=>({...p}));
+  if(c.blurThreshold!=null)S.blurThreshold=c.blurThreshold;
+  if(c.personThreshold!=null)S.personThreshold=c.personThreshold;
+  if(c.recursive!=null)S.recursive=c.recursive;
+  if(c.include_hidden!=null)S.include_hidden=c.include_hidden;
+  if(c.protect!=null)S.protect=c.protect;
+  if(c.granularity)S.granularity=c.granularity;
+}
+function savePresetPrompt(){
+  const name=(prompt("Name this preset (e.g. “Wedding sort”):")||"").trim();
+  if(!name)return;
+  const p=loadPresets();p[name]=currentConfig();savePresetStore(p);
+  toast("Preset “"+name+"” saved","good");renderPhotoOptions(S._visionSt);
+}
+function strictnessLabel(v){
+  if(v<=60)return "Strict";
+  if(v<=85)return "Balanced";
+  return "Loose";
+}
+function renderPeopleBox(){
+  const box=$("#peopleBox");if(!box)return;
+  if(!S.photoCats.people){box.innerHTML="";return;}
+  if(!S.people.length)S.people.push({name:"",samples:""});
+  const rows=S.people.map((pp,i)=>`
+    <div class="row" style="margin-top:8px">
+      <input type="text" data-pi="${i}" data-pf="name" placeholder="Name (e.g. Groom)"
+        value="${esc(pp.name)}" style="max-width:150px;flex:none"/>
+      <input type="text" data-pi="${i}" data-pf="samples" placeholder="Folder with their sample photos"
+        value="${esc(pp.samples)}"/>
+      <button class="btn ghost sm" data-browse="${i}" title="Browse">📂</button>
+      <button class="btn ghost sm" data-del="${i}" title="Remove">✕</button>
+    </div>`).join("");
+  box.innerHTML=`
+    <div style="color:var(--mut);font-size:12px;margin:2px 0 4px">Add each person and a folder of 2–5 clear,
+      front-facing photos of just them. Solo shots of each person go into a folder named after them.</div>
+    ${rows}
+    <div style="margin-top:10px"><button class="btn ghost sm" id="addPerson">＋ Add person</button></div>`;
+  box.querySelectorAll("input[data-pi]").forEach(inp=>inp.oninput=e=>{
+    const i=+e.target.dataset.pi,f=e.target.dataset.pf;S.people[i][f]=e.target.value;});
+  box.querySelectorAll("[data-browse]").forEach(b=>b.onclick=()=>{
+    const i=+b.dataset.browse;
+    openBrowser(pth=>{S.people[i].samples=pth;renderPeopleBox();},S.root);});
+  box.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{
+    S.people.splice(+b.dataset.del,1);renderPeopleBox();});
+  $("#addPerson").onclick=()=>{S.people.push({name:"",samples:""});renderPeopleBox();};
+}
+async function startAnalyze(e,test){
+  if(!Object.values(S.photoCats).some(Boolean)){toast("Pick at least one category","bad");return;}
+  const people=S.photoCats.people?S.people.filter(p=>p.name.trim()&&p.samples.trim()):[];
+  if(S.photoCats.people&&!people.length){
+    toast("Add at least one person with a sample folder, or turn off people","bad");return;}
+  S.photoTest=!!test;
+  const btn=e.target;busy(btn,true,test?"Testing…":"Starting…");
+  const prog=$("#photoProgress");const out=$("#planOut");out.innerHTML="";
+  try{
+    const body={backend:S.backend,root:S.root,include_hidden:S.include_hidden,protect:S.protect,
+      recursive:S.recursive,blur_threshold:S.blurThreshold,person_threshold:S.personThreshold,
+      dup_distance:8,...S.photoCats,people:people};
+    if(test)body.limit=20;
+    const d=await api("categorize/start",body);
+    S.photoJob=d.jobId;
+    prog.innerHTML=`<div class="preview" style="margin-top:14px"><div class="ph">
+      <div class="chips" id="tally"><span class="chip">${test?"Testing first 20…":"Starting…"}</span></div>
+      <button class="btn ghost sm" id="cancelAnalyze">Stop</button></div>
+      <div style="padding:14px 18px"><div class="track" style="display:block;height:14px;border-radius:8px;background:#0d1424;border:1px solid #23324e;overflow:hidden">
+        <div id="pbar" class="fill" style="display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
+        <div id="pcount" style="color:var(--mut);font-size:12px;margin-top:8px">Preparing…</div></div></div>`;
+    $("#cancelAnalyze").onclick=()=>{if(S.photoJob)api("categorize/cancel",{jobId:S.photoJob});};
+    pollAnalyze(btn);
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+async function pollAnalyze(btn){
+  let d;try{d=await api("categorize/progress",{jobId:S.photoJob});}
+  catch(err){toast(err.message,"bad");busy(btn,false);return;}
+  const total=d.total||0,done=d.done||0;
+  const pct=total?Math.round(done/total*100):0;
+  const bar=$("#pbar");if(bar)bar.style.width=pct+"%";
+  const pc=$("#pcount");if(pc)pc.textContent=total?`Analyzed ${num(done)} of ${num(total)} images (${pct}%)`:"Scanning for images…";
+  const tally=$("#tally");
+  if(tally){const t=d.tally||{};const keys=Object.keys(t);
+    tally.innerHTML=keys.length?keys.map(k=>`<span class="chip">${esc(k.replace(/_/g," "))}: <b>${num(t[k])}</b></span>`).join(""):`<span class="chip">Analyzing…</span>`;}
+  if(d.error){$("#photoProgress").innerHTML=`<div class="callout bad" style="margin-top:14px">${esc(d.error)}</div>`;busy(btn,false);return;}
+  if(!d.finished){setTimeout(()=>pollAnalyze(btn),700);return;}
+  // finished
+  busy(btn,false);
+  const res=d.result;
+  const pe=res&&res.summary&&res.summary.people_error;
+  if(pe)toast(pe,"info",6000);
+  const items=(res&&res.summary&&res.summary.items)||[];
+  const sorted=items.filter(it=>it.category);
+  if(!sorted.length){
+    $("#photoProgress").innerHTML=`<div class="callout safe" style="margin-top:14px">✅ Analysis done —
+      nothing needed sorting${res&&res.cancelled?" (stopped early)":""}.</div>`;return;}
+  const analyzed=(res.summary&&res.summary.analyzed)||0;
+  $("#photoProgress").innerHTML=`<div class="callout safe" style="margin-top:14px">✅ Analyzed
+    ${num(analyzed)} image(s)${S.photoTest?" (test sample)":""}. ${S.photoTest?"":"Review &amp; adjust below, then apply."}</div>`;
+  renderPhotoGrid(items);
+}
+
+// -- thumbnail review grid ----------------------------------------------
+const FIXED_CATS=["Best_Shots","Blurry_Shaken","Duplicates","Similar_Extras","Group_Photos","Couples",
+  "Portraits_Single","Scenery_Others","Screenshots","Documents_Scans","Videos"];
+function personFolders(){
+  return S.people.filter(p=>p.name.trim()&&p.samples.trim())
+    .map(p=>p.name.replace(/[^A-Za-z0-9 _-]/g,"").trim().replace(/ /g,"_")||"Person");
+}
+function catOptions(items){
+  const set=new Set(FIXED_CATS);personFolders().forEach(x=>set.add(x));
+  items.forEach(it=>{if(it.category)set.add(it.category);});
+  return [...set];
+}
+const CAT_ICON={Blurry_Shaken:"🌀",Duplicates:"🔁",Similar_Extras:"🪞",Group_Photos:"👥",Couples:"💑",
+  Portraits_Single:"🧍",Scenery_Others:"🏞️",Screenshots:"📱",Documents_Scans:"📄",Best_Shots:"⭐",Videos:"🎬"};
+function catLabel(c){return c==="__leave__"?"⏸️ Leave in place":((CAT_ICON[c]||"📁")+" "+c.replace(/_/g," "));}
+function renderPhotoGrid(items){
+  S.photoItems=items.map(it=>({...it}));
+  S.photoSel=new Set();
+  const out=$("#planOut");
+  const opts=catOptions(S.photoItems);
+  // group indices by category
+  const groups={};
+  S.photoItems.forEach((it,idx)=>{const k=it.category||"__leave__";(groups[k]=groups[k]||[]).push(idx);});
+  const order=[...opts,"__leave__"].filter(k=>groups[k]&&groups[k].length);
+  const setAllOpts=[`<option value="">— set all to —</option>`,
+    ...opts.map(c=>`<option value="${esc(c)}">${catLabel(c)}</option>`),
+    `<option value="__leave__">⏸️ Leave in place</option>`].join("");
+  const CAP=80;
+  let html=`<div class="bulkbar" id="bulkbar" style="display:none">
+      <b id="selCount">0</b> selected
+      <select id="bulkSel">${setAllOpts}</select>
+      <button class="btn sm" id="bulkApply">Move selected</button>
+      <button class="btn ghost sm" id="bulkClear">Clear</button>
+    </div>
+    <input type="text" id="gridSearch" placeholder="🔎 Filter photos by file name…"
+      style="margin:2px 0 12px;width:100%"/>
+    <div class="thumbwrap">`;
+  order.forEach(cat=>{
+    const idxs=groups[cat];
+    html+=`<div class="grp" data-grp="${esc(cat)}"><div class="grp-h">
+      <input type="checkbox" class="grpcb" data-grpsel="${esc(cat)}" title="Select all in this group"
+        style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex:none"/>
+      <span class="dot"></span>${esc(catLabel(cat))} <span class="cnt">${num(idxs.length)}</span>
+      <select data-setall="${esc(cat)}">${setAllOpts}</select></div>
+      <div class="thumbgrid">`;
+    idxs.slice(0,CAP).forEach(idx=>{html+=thumbHtml(idx,opts);});
+    html+=`</div>`;
+    if(idxs.length>CAP)html+=`<div style="color:var(--mut2);font-size:12px;margin-top:6px">
+      + ${num(idxs.length-CAP)} more in this group (will still be moved)</div>`;
+    html+=`</div>`;
+  });
+  html+=`</div>
+    <div class="callout info" style="margin-top:16px">ℹ️ Photos are <b>moved</b>, never deleted.
+      <b>Click</b> to select, <b>Shift-click</b> for a range, then move them in bulk — or use a group's “set all”
+      or a single dropdown. Double-click a photo to preview it.</div>
+    <div class="btn-row">
+      <button class="btn warn" id="photoApply">⚡ Apply — file ${num(assignCount())} photo(s)</button>
+      <button class="btn ghost" id="photoCancel">Cancel</button>
+    </div><div id="applyOut"></div>`;
+  out.innerHTML=html;
+  wireGrid(opts);
+}
+function wireGrid(opts){
+  const out=$("#planOut");
+  out.querySelectorAll("select[data-idx]").forEach(sel=>sel.onchange=e=>{
+    const i=+e.target.dataset.idx;const v=e.target.value;
+    S.photoItems[i].category=(v==="__leave__")?null:v;
+    refreshApplyBtn();
+  });
+  out.querySelectorAll("select[data-setall]").forEach(sel=>sel.onchange=e=>{
+    const cat=e.target.dataset.setall;const v=e.target.value;if(!v)return;
+    S.photoItems.forEach((it,idx)=>{if((it.category||"__leave__")===cat)
+      it.category=(v==="__leave__")?null:v;});
+    renderPhotoGrid(S.photoItems);
+  });
+  const ba=$("#bulkApply");if(ba)ba.onclick=()=>{
+    const v=$("#bulkSel").value;if(!v){toast("Pick a category first","bad");return;}
+    S.photoSel.forEach(i=>{S.photoItems[i].category=(v==="__leave__")?null:v;});
+    renderPhotoGrid(S.photoItems);
+  };
+  const bc=$("#bulkClear");if(bc)bc.onclick=()=>{S.photoSel.clear();renderPhotoGrid(S.photoItems);};
+  const gs=$("#gridSearch");if(gs)gs.oninput=e=>filterGrid(e.target.value);
+  out.querySelectorAll("input[data-grpsel]").forEach(cb=>cb.onclick=e=>{
+    e.stopPropagation();
+    const cat=e.target.dataset.grpsel,on=e.target.checked;
+    S.photoItems.forEach((it,idx)=>{if((it.category||"__leave__")===cat)setSel(idx,on);});
+    S.selAnchor=null;updateBulkBar();
+  });
+  // click to select (Shift-click selects the range); double-click to preview
+  S.selAnchor=null;
+  out.querySelectorAll(".thumb").forEach(th=>{
+    th.addEventListener("click",e=>{
+      if(e.target.closest("select"))return;      // let the category dropdown work
+      e.preventDefault();
+      const idx=+th.querySelector(".cb").dataset.sel;
+      const list=orderedThumbs();
+      if(e.shiftKey && S.selAnchor!=null){
+        const a=list.findIndex(x=>+x.querySelector(".cb").dataset.sel===S.selAnchor);
+        const b=list.indexOf(th);
+        if(a>=0&&b>=0){for(let k=Math.min(a,b);k<=Math.max(a,b);k++)
+          setSel(+list[k].querySelector(".cb").dataset.sel,true);}
+      }else{
+        setSel(idx,!S.photoSel.has(idx));S.selAnchor=idx;
+      }
+      updateBulkBar();
+    });
+    th.addEventListener("dblclick",e=>{
+      if(e.target.closest("select"))return;
+      openLightbox(S.photoItems,+th.querySelector(".cb").dataset.sel);
+    });
+  });
+  $("#photoCancel").onclick=()=>{out.innerHTML="";};
+  $("#photoApply").onclick=applyPhotoAssignments;
+}
+function orderedThumbs(){
+  return [...document.querySelectorAll("#planOut .thumb")].filter(t=>t.style.display!=="none");
+}
+function setSel(idx,on){
+  if(on)S.photoSel.add(idx);else S.photoSel.delete(idx);
+  const cb=document.querySelector(`#planOut .cb[data-sel="${idx}"]`);
+  if(cb){cb.checked=on;cb.closest(".thumb").classList.toggle("sel",on);}
+}
+// -- lightbox detail view -----------------------------------------------
+const LB={items:[],i:0};
+function openLightbox(items,i){
+  if(!items||!items.length)return;
+  LB.items=items;LB.i=i;
+  const host=$("#modalHost");
+  host.innerHTML=`<div class="lbov" id="lbov">
+    <div class="lbtop"><span class="lbname" id="lbName"></span><button class="x" id="lbClose">×</button></div>
+    <div class="lbmain">
+      <button class="lbnav" id="lbPrev">‹</button>
+      <img id="lbImg" src="" alt=""/>
+      <button class="lbnav" id="lbNext">›</button>
+    </div>
+    <div class="lbmeta" id="lbMeta"></div>
+  </div>`;
+  const close=()=>{host.innerHTML="";document.onkeydown=null;};
+  $("#lbClose").onclick=close;
+  $("#lbov").onclick=e=>{if(e.target.id==="lbov")close();};
+  $("#lbPrev").onclick=()=>lbShow(LB.i-1);
+  $("#lbNext").onclick=()=>lbShow(LB.i+1);
+  document.onkeydown=e=>{if(!$("#lbov"))return;
+    if(e.key==="Escape")close();
+    else if(e.key==="ArrowLeft")lbShow(LB.i-1);
+    else if(e.key==="ArrowRight")lbShow(LB.i+1);};
+  lbShow(i);
+}
+function lbShow(i){
+  const n=LB.items.length;if(n===0)return;i=(i%n+n)%n;LB.i=i;
+  const it=LB.items[i];
+  $("#lbImg").src="/api/thumb?size=1000&path="+encodeURIComponent(it.path);
+  $("#lbName").textContent=`${it.name||""}  (${i+1}/${n})`;
+  $("#lbMeta").innerHTML=lbChips(it);
+  const nav=n>1?"":"none";$("#lbPrev").style.display=nav;$("#lbNext").style.display=nav;
+}
+// -- gallery: preview many photos at once -------------------------------
+function openGallery(title,items,opts){
+  opts=opts||{};
+  if(!items||!items.length)return;
+  let list=items.slice();
+  const removable=typeof opts.onRemove==="function";
+  const host=$("#modalHost");
+  host.innerHTML=`<div class="lbov" id="galov">
+    <div class="lbtop"><span class="lbname" id="galTitle"></span>
+      <button class="x" id="galClose">×</button></div>
+    ${removable?`<div class="galhint">🗑️ Not this person? Click ✕ on any photo to drop it from this group — it won't be filed here.</div>`:""}
+    <div style="flex:1;overflow:auto;padding:2px 18px 18px">
+      <div class="thumbgrid" id="galgrid"></div></div>
+  </div>`;
+  const close=()=>{host.innerHTML="";document.onkeydown=null;};
+  const draw=()=>{
+    $("#galTitle").textContent=`${title} — ${num(list.length)} photos`;
+    $("#galgrid").innerHTML=list.map((it,i)=>`<div class="thumb" style="cursor:zoom-in">
+      ${removable?`<button class="galrm" data-rm="${i}" title="Remove from this group">✕</button>`:""}
+      <img loading="lazy" src="/api/thumb?size=300&path=${encodeURIComponent(it.path)}" data-gi="${i}" alt=""/>
+      <div class="nm" title="${esc(it.name)}">${esc(it.name)}</div></div>`).join("");
+    $("#galgrid").querySelectorAll("img[data-gi]").forEach(img=>img.onclick=e=>
+      openLightbox(list,+e.target.dataset.gi));
+    if(removable)$("#galgrid").querySelectorAll("[data-rm]").forEach(b=>b.onclick=e=>{
+      e.stopPropagation();
+      const removed=list[+e.currentTarget.dataset.rm];
+      const next=opts.onRemove(removed);
+      list=Array.isArray(next)?next:list.filter(x=>x!==removed);
+      if(!list.length){close();return;}
+      draw();
+    });
+  };
+  $("#galClose").onclick=close;
+  $("#galov").onclick=e=>{if(e.target.id==="galov")close();};
+  document.onkeydown=e=>{if(e.key==="Escape"&&$("#galov"))close();};
+  draw();
+}
+function lbChips(it){
+  const c=[];
+  c.push(`<span class="lbchip">${it.category?catLabel(it.category):"⏸️ Leave in place"}</span>`);
+  if(it.w&&it.h)c.push(`<span class="lbchip">📐 <b>${num(it.w)}×${num(it.h)}</b> · ${(it.w*it.h/1e6).toFixed(1)} MP</span>`);
+  if(it.focus!=null)c.push(`<span class="lbchip">🔎 sharpness <b>${num(Math.round(it.focus))}</b>${it.blurry?" · blurry":""}</span>`);
+  if(it.faces!=null)c.push(`<span class="lbchip">🙂 <b>${num(it.faces)}</b> face(s)</span>`);
+  if(it.quality!=null)c.push(`<span class="lbchip">⭐ quality <b>${Math.round(it.quality*100)}%</b></span>`);
+  if(it.video)c.push(`<span class="lbchip">🎬 video</span>`);
+  if(it.person)c.push(`<span class="lbchip">👤 <b>${esc(it.person)}</b></span>`);
+  if(it.dup)c.push(`<span class="lbchip">🔁 duplicate</span>`);
+  if(it.similar)c.push(`<span class="lbchip">🪞 similar shot</span>`);
+  if(it.screenshot)c.push(`<span class="lbchip">📱 screenshot</span>`);
+  if(it.document)c.push(`<span class="lbchip">📄 document</span>`);
+  return c.join("");
+}
+function refreshApplyBtn(){const b=$("#photoApply");if(b)b.innerHTML=`⚡ Apply — file ${num(assignCount())} photo(s)`;}
+function filterGrid(q){
+  q=(q||"").trim().toLowerCase();
+  document.querySelectorAll("#planOut .grp").forEach(g=>{
+    let vis=0;
+    g.querySelectorAll(".thumb").forEach(t=>{
+      const show=!q||(t.dataset.name||"").includes(q);
+      t.style.display=show?"":"none";if(show)vis++;
+    });
+    g.style.display=vis?"":"none";
+  });
+}
+function updateBulkBar(){
+  const bar=$("#bulkbar");if(!bar)return;
+  bar.style.display=S.photoSel.size?"flex":"none";
+  const c=$("#selCount");if(c)c.textContent=num(S.photoSel.size);
+}
+function thumbHtml(idx,opts){
+  const it=S.photoItems[idx];
+  const src="/api/thumb?path="+encodeURIComponent(it.path);
+  return `<div class="thumb" data-name="${esc((it.name||"").toLowerCase())}">
+    <input type="checkbox" class="cb" data-sel="${idx}"/>
+    <img loading="lazy" src="${src}" alt=""/>
+    <div class="nm" title="${esc(it.name)}">${esc(it.name)}</div>
+    <select data-idx="${idx}">${optionForItem(idx,opts)}</select></div>`;
+}
+function optionForItem(idx,opts){
+  const cur=S.photoItems[idx].category;
+  let h=opts.map(c=>`<option value="${esc(c)}" ${cur===c?"selected":""}>${catLabel(c)}</option>`).join("");
+  h+=`<option value="__leave__" ${!cur?"selected":""}>⏸️ Leave in place</option>`;
+  return h;
+}
+function assignCount(){return S.photoItems.filter(it=>it.category).length;}
+async function applyPhotoAssignments(e){
+  const assignments=S.photoItems.filter(it=>it.category)
+    .map(it=>({path:it.path,category:it.category}));
+  if(!assignments.length){toast("Nothing to file — all set to leave in place","bad");return;}
+  const btn=e.target;busy(btn,true,"Filing…");
+  const out=$("#applyOut");$("#photoCancel")&&$("#photoCancel").remove();
+  try{
+    const d=await runApplyJob("categorize/apply/start",{backend:S.backend,root:S.root,assignments},out);
+    renderApplyResult(out,d);btn.remove();
+    toast(d.cancelled?"Stopped":"Photos filed",d.cancelled?"info":"good");
+    api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth})
+      .then(sc=>S.scan=sc).catch(()=>{});
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+
+// -- auto-group people (clustering) -------------------------------------
+async function doAutoGroup(e){
+  const btn=e.target;busy(btn,true,"Checking…");
+  const prog=$("#photoProgress");const out=$("#planOut");out.innerHTML="";
+  try{
+    const st=await api("cluster/status",{});
+    if(!st.available){throw new Error(st.frozen?
+      "Auto-grouping isn't available in this packaged build.":
+      "Your OpenCV build lacks the face modules needed for auto-grouping.");}
+    const d=await api("cluster/start",{backend:S.backend,root:S.root,
+      include_hidden:S.include_hidden,protect:S.protect,recursive:S.recursive,
+      people:S.people.filter(p=>p.name.trim()&&p.samples.trim())});
+    S.clusterJob=d.jobId;
+    prog.innerHTML=`<div class="preview" style="margin-top:14px"><div class="ph">
+      <div class="chips" id="tally"><span class="chip">Starting…</span></div>
+      <button class="btn ghost sm" id="cancelCluster">Stop</button></div>
+      <div style="padding:14px 18px"><div class="track" style="display:block;height:14px;border-radius:8px;background:#0d1424;border:1px solid #23324e;overflow:hidden">
+        <div id="pbar" class="fill" style="display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
+        <div id="pcount" style="color:var(--mut);font-size:12px;margin-top:8px">Preparing…</div></div></div>`;
+    $("#cancelCluster").onclick=()=>{if(S.clusterJob)api("cluster/cancel",{jobId:S.clusterJob});};
+    pollCluster(btn);
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+async function pollCluster(btn){
+  let d;try{d=await api("cluster/progress",{jobId:S.clusterJob});}
+  catch(err){toast(err.message,"bad");busy(btn,false);return;}
+  const bar=$("#pbar"),pc=$("#pcount"),tally=$("#tally");
+  if(d.phase==="downloading"){
+    const mt=d.model_total||0,md=d.model_done||0;const mp=mt?Math.round(md/mt*100):0;
+    if(bar)bar.style.width=mp+"%";
+    if(pc)pc.textContent=`Downloading face model ${mp}% (one-time)…`;
+    if(tally)tally.innerHTML=`<span class="chip">Setting up AI…</span>`;
+  }else{
+    const total=d.total||0,done=d.done||0;const pct=total?Math.round(done/total*100):0;
+    if(bar)bar.style.width=pct+"%";
+    if(pc)pc.textContent=total?`Scanned ${num(done)} of ${num(total)} photos (${pct}%)`:"Scanning…";
+    if(tally)tally.innerHTML=`<span class="chip">👥 ${num(d.clusters||0)} people found so far</span>`;
+  }
+  if(d.error){$("#photoProgress").innerHTML=`<div class="callout bad" style="margin-top:14px">${esc(d.error)}</div>`;busy(btn,false);return;}
+  if(!d.finished){setTimeout(()=>pollCluster(btn),700);return;}
+  busy(btn,false);
+  const res=d.result;const clusters=(res&&res.clusters)||[];
+  if(!clusters.length){$("#photoProgress").innerHTML=`<div class="callout safe" style="margin-top:14px">✅ Done — no recognizable faces found.</div>`;return;}
+  const totalPhotos=clusters.reduce((s,c)=>s+c.count,0);
+  $("#photoProgress").innerHTML=`<div class="callout safe" style="margin-top:14px">✅ Found <b>${num(clusters.length)}</b>
+    recurring ${clusters.length===1?"person":"people"} across ${num(totalPhotos)} photo(s). Name the people you want, then file them.</div>`;
+  renderClusters(clusters);
+}
+function renderClusters(clusters){
+  S.clusters=clusters;S.clusterSel=new Set();
+  clusters.forEach(c=>{if(c.name==null)c.name=c.suggested||"";});
+  const out=$("#planOut");
+  let html=`<div class="clustergrid">`;
+  clusters.forEach((c,i)=>{
+    const src="/api/thumb?size=300&path="+encodeURIComponent(c.rep);
+    html+=`<div class="clustercard">
+      <input type="checkbox" class="ccb" data-clsel="${i}" title="Select to merge"/>
+      <img loading="lazy" src="${src}" data-cl-open="${i}" alt="" title="Click to preview all photos"/>
+      <div class="cc">👤 ${num(c.count)} photo(s)</div>
+      <button class="btn ghost sm" data-cl-open="${i}" style="width:100%;margin-bottom:6px">🔍 Preview all ${num(c.count)}</button>
+      <input type="text" data-cl="${i}" placeholder="Name (blank = skip)" value="${esc(c.name)}"/>
+      ${c.suggested?`<div class="sug">✓ looks like ${esc(c.suggested)}</div>`:""}
+    </div>`;
+  });
+  html+=`</div>
+    <div class="callout info" style="margin-top:16px">ℹ️ Click a face to flip through that person's photos.
+      Tick two or more to <b>merge</b> them. Each photo is filed under its main subject's name; blank = skip.</div>
+    <div class="btn-row">
+      <button class="btn ghost" id="clusterMerge" style="display:none">🔗 Merge selected</button>
+      <button class="btn warn" id="clusterApply">⚡ File named groups into folders</button>
+      <button class="btn ghost" id="clusterCancel">Cancel</button>
+    </div><div id="applyOut"></div>`;
+  out.innerHTML=html;
+  out.querySelectorAll("input[data-cl]").forEach(inp=>inp.oninput=e=>{
+    S.clusters[+e.target.dataset.cl].name=e.target.value;});
+  out.querySelectorAll("input[data-clsel]").forEach(cb=>cb.onchange=e=>{
+    const i=+e.target.dataset.clsel;
+    if(e.target.checked)S.clusterSel.add(i);else S.clusterSel.delete(i);
+    e.target.closest(".clustercard").classList.toggle("sel",e.target.checked);
+    const mb=$("#clusterMerge");if(mb)mb.style.display=S.clusterSel.size>=2?"inline-flex":"none";
+  });
+  out.querySelectorAll("[data-cl-open]").forEach(elm=>elm.onclick=e=>{
+    e.preventDefault();
+    const idx=+e.currentTarget.dataset.clOpen;
+    const c=S.clusters[idx];
+    const asItems=()=>c.members.map(pth=>({path:pth,name:pth.split(/[\\/]/).pop()}));
+    openGallery(c.name||c.suggested||("Person — "+num(c.count)),asItems(),{
+      onRemove:(item)=>{
+        c.members=c.members.filter(p=>p!==item.path);
+        c.count=c.members.length;
+        const card=out.querySelector(`.clustercard [data-cl="${idx}"]`);
+        const cc=card&&card.closest(".clustercard").querySelector(".cc");
+        if(cc)cc.textContent=`👤 ${num(c.count)} photo(s)`;
+        const btn=out.querySelector(`button[data-cl-open="${idx}"]`);
+        if(btn)btn.textContent=`🔍 Preview all ${num(c.count)}`;
+        toast("Removed from group — won't be filed here","info");
+        return asItems();
+      }});
+  });
+  $("#clusterMerge").onclick=mergeClusters;
+  $("#clusterCancel").onclick=()=>{out.innerHTML="";};
+  $("#clusterApply").onclick=applyClusters;
+}
+function mergeClusters(){
+  const sel=[...S.clusterSel].sort((a,b)=>a-b);
+  if(sel.length<2){toast("Select at least two people to merge","bad");return;}
+  const base=S.clusters[sel[0]];
+  const name=sel.map(i=>(S.clusters[i].name||"").trim()).find(x=>x)||"";
+  for(let k=1;k<sel.length;k++)base.members=base.members.concat(S.clusters[sel[k]].members);
+  base.count=base.members.length;base.name=name;
+  const drop=new Set(sel.slice(1));
+  S.clusters=S.clusters.filter((c,i)=>!drop.has(i));
+  toast("Merged into one person","good");
+  renderClusters(S.clusters);
+}
+async function applyClusters(e){
+  const assignments=[];
+  (S.clusters||[]).forEach(c=>{
+    const name=(c.name||"").trim();if(!name)return;
+    const folder=name.replace(/[^A-Za-z0-9 _-]/g,"").trim().replace(/ /g,"_")||"Person";
+    c.members.forEach(pth=>assignments.push({path:pth,category:folder}));
+  });
+  if(!assignments.length){toast("Name at least one group first","bad");return;}
+  const btn=e.target;busy(btn,true,"Filing…");
+  const out=$("#applyOut");$("#clusterCancel")&&$("#clusterCancel").remove();
+  try{
+    const d=await runApplyJob("categorize/apply/start",{backend:S.backend,root:S.root,assignments},out);
+    renderApplyResult(out,d);btn.remove();
+    toast(d.cancelled?"Stopped":"Groups filed",d.cancelled?"info":"good");
+    api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth})
+      .then(sc=>S.scan=sc).catch(()=>{});
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+
+// ---------------------------------------------------------------- Wedding day sorter
+const WEDDING_EVENTS=["Getting Ready","Nishchayam (Engagement)","Muhurtham (Ceremony)",
+  "Thalikettu / Ring Exchange","Mangalyam / Thali","Sadhya (Feast)","Group Photos",
+  "Nalangu","Reception","Sendoff","Mehendi","Candid"];
+function pageWedding(m){
+  const p=el("div","page");
+  p.innerHTML=`
+    <h1>Wedding day sorter <span style="font-size:14px;color:var(--mut);font-weight:400">· by event</span></h1>
+    <p class="lead">Group a wedding photo dump into <b>event folders</b> — Muhurtham, Sadhya, Reception… —
+      using each photo's capture time. A wedding day naturally splits into functions separated by gaps.</p>
+    <div class="card" id="wedCard"></div>`;
+  m.appendChild(p);
+  renderWedding();
+}
+function renderWedding(){
+  const card=$("#wedCard");
+  if(S.backend!=="local"){
+    card.innerHTML=`<div class="callout warn">💍 Wedding sorting works on a local folder. If your photos are on a
+      phone, copy them to your PC first (the Photo AI tab has a one-click copy).</div>`;return;}
+  card.innerHTML=`
+    <div class="callout info">🕒 Photos are grouped by <b>capture time</b> (EXIF, or file time as a fallback).
+      Nothing moves until you name the events and apply — and it's fully undoable.</div>
+    <div class="opts">
+      <label class="toggle"><input type="checkbox" id="wedRec" checked/>
+        <span class="tk"></span><span>Include sub-folders<span class="desc"> — scan the whole tree</span></span></label>
+    </div>
+    <div class="slider" style="margin-top:8px">
+      <label><span>⏱️ New event after a gap of</span><span><b id="wedGapVal">40</b> min</span></label>
+      <input type="range" id="wedGap" min="10" max="180" step="5" value="40"/>
+      <div class="ends"><span>Many small events</span><span>Few big events</span></div>
+    </div>
+    <div class="btn-row"><button class="btn" id="wedDetect">🔍 Detect events</button></div>
+    <div id="wedOut"></div>`;
+  $("#wedGap").oninput=e=>{$("#wedGapVal").textContent=e.target.value;};
+  $("#wedDetect").onclick=detectWeddingEvents;
+}
+async function detectWeddingEvents(e){
+  const btn=e.target;busy(btn,true,"Reading capture times…");
+  const out=$("#wedOut");
+  try{
+    const d=await api("wedding/sessions",{backend:S.backend,root:S.root,
+      recursive:$("#wedRec").checked,gap_minutes:+$("#wedGap").value});
+    if(!d.sessions.length){out.innerHTML=`<div class="callout warn" style="margin-top:14px">No photos found to sort here.</div>`;busy(btn,false);return;}
+    S.wedSessions=d.sessions.map(s=>({...s,name:s.suggested}));
+    renderWeddingSessions(d);
+  }catch(err){toast(err.message,"bad");}finally{busy(btn,false);}
+}
+function fmtTimeRange(a,b){
+  const o={hour:"numeric",minute:"2-digit"};
+  const da=new Date(a*1000),db=new Date(b*1000);
+  const day=da.toLocaleDateString([],{month:"short",day:"numeric"});
+  return `${day} · ${da.toLocaleTimeString([],o)} – ${db.toLocaleTimeString([],o)}`;
+}
+function renderWeddingSessions(d){
+  const out=$("#wedOut");
+  const dl=`<datalist id="wedNames">${WEDDING_EVENTS.map(n=>`<option value="${esc(n)}">`).join("")}</datalist>`;
+  let html=`<div class="callout safe" style="margin-top:14px">✅ Found <b>${num(d.count)}</b> event(s)
+    across ${num(d.photos)} photo(s). Rename any event (or clear it to skip), then file them.</div>${dl}
+    <div class="clustergrid">`;
+  S.wedSessions.forEach((s,i)=>{
+    const src="/api/thumb?size=300&path="+encodeURIComponent(s.rep);
+    html+=`<div class="clustercard">
+      <img loading="lazy" src="${src}" data-wed-open="${i}" alt="" title="Preview all photos"/>
+      <div class="cc">🕒 ${esc(fmtTimeRange(s.start,s.end))}</div>
+      <div class="cc" style="color:var(--txt)">📸 ${num(s.count)} photo(s)</div>
+      <button class="btn ghost sm" data-wed-open="${i}" style="width:100%;margin-bottom:6px">🔍 Preview all ${num(s.count)}</button>
+      <input type="text" list="wedNames" data-wed="${i}" placeholder="Event name (blank = skip)" value="${esc(s.name)}"/>
+    </div>`;
+  });
+  html+=`</div>
+    <div class="callout info" style="margin-top:16px">ℹ️ Each event is filed into a numbered folder (e.g.
+      <code>01_Muhurtham</code>) so they stay in order. Blank names are left where they are.</div>
+    <div class="btn-row">
+      <button class="btn warn" id="wedApply">⚡ File photos into event folders</button>
+    </div><div id="wedApplyOut"></div>`;
+  out.innerHTML=html;
+  out.querySelectorAll("input[data-wed]").forEach(inp=>inp.oninput=e=>{
+    S.wedSessions[+e.target.dataset.wed].name=e.target.value;});
+  out.querySelectorAll("[data-wed-open]").forEach(elm=>elm.onclick=ev=>{
+    ev.preventDefault();const s=S.wedSessions[+ev.currentTarget.dataset.wedOpen];
+    openGallery(s.name||s.suggested||("Event "+num(s.count)),
+      s.members.map(pth=>({path:pth,name:pth.split(/[\\/]/).pop()})));});
+  $("#wedApply").onclick=applyWeddingEvents;
+}
+async function applyWeddingEvents(e){
+  const assignments=[];
+  S.wedSessions.forEach((s,i)=>{
+    const nm=(s.name||"").trim();if(!nm)return;
+    const safe=nm.replace(/[^A-Za-z0-9 ()/_-]/g,"").trim().replace(/\s+/g,"_")||("Event"+(i+1));
+    const folder=String(i+1).padStart(2,"0")+"_"+safe;
+    s.members.forEach(pth=>assignments.push({path:pth,category:folder}));
+  });
+  if(!assignments.length){toast("Name at least one event first","bad");return;}
+  const btn=e.target;busy(btn,true,"Filing…");
+  const out=$("#wedApplyOut");
+  try{
+    const d=await runApplyJob("categorize/apply/start",{backend:S.backend,root:S.root,assignments,_verb:"Filed"},out);
+    renderApplyResult(out,d);btn.remove();
+    toast(d.cancelled?"Stopped":"Events filed","good");
+    api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth}).then(sc=>S.scan=sc).catch(()=>{});
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+
+// ---------------------------------------------------------------- Compress
+function pageCompress(m){
+  const p=el("div","page");
+  p.innerHTML=`
+    <h1>Compress images <span style="font-size:14px;color:var(--mut);font-weight:400">· lossless &amp; smart</span></h1>
+    <p class="lead">Shrink your photos <b>without any quality loss</b> — pixels stay
+      bit-for-bit identical. JPEGs are slimmed by stripping bulky metadata &amp; embedded
+      thumbnails; PNGs are re-packed losslessly.</p>
+    <div class="card" id="cmpCard"><div class="empty"><span class="spin"></span> Checking…</div></div>`;
+  m.appendChild(p);
+  renderCompress();
+}
+async function renderCompress(){
+  const card=$("#cmpCard");
+  if(S.backend!=="local"){
+    card.innerHTML=`<div class="callout warn">🗜️ Compression works on a local folder. If your photos
+      are on a phone, copy them to your PC first (the Photo AI tab has a one-click copy).</div>`;return;}
+  let st;try{st=await api("compress/status",{});}catch(err){card.innerHTML=`<div class="callout bad">${esc(err.message)}</div>`;return;}
+  if(!st.available){
+    card.innerHTML=`<div class="callout warn">🧩 Compression needs the <code>Pillow</code> package.
+      Run phorg from source and click “Install AI support”, or <code>pip install pillow</code>.</div>`;return;}
+  let bk={exists:false};try{bk=await api("compress/backup-status",{backend:S.backend,root:S.root});}catch(e){}
+  card.innerHTML=`
+    <div class="callout safe">✅ <div><b>Lossless by default.</b> Only non-picture bytes are removed —
+      every pixel is preserved exactly. Originals are kept in <code>Originals_Backup/</code> (or you can
+      save copies), so nothing is ever lost.</div></div>
+    <div class="sect-t">Options</div>
+    <div class="opts">
+      <label class="toggle"><input type="checkbox" id="cmpRec" checked/>
+        <span class="tk"></span><span>Include sub-folders<span class="desc"> — compress the whole tree</span></span></label>
+      ${st.heic?`<label class="toggle"><input type="checkbox" id="cmpHeic" checked/>
+        <span class="tk"></span><span>Convert HEIC → JPG<span class="desc"> — iPhone photos, universally viewable</span></span></label>`:""}
+    </div>
+    <label class="fld" style="margin-top:8px">Compression level</label>
+    <select id="cmpLossy">
+      <option value="0">Lossless — zero quality change (recommended)</option>
+      <option value="1">Smaller — re-encode &amp; optionally resize (changes quality)</option>
+    </select>
+    <div id="cmpLossyOpts" style="display:none;margin-top:10px">
+      <label class="fld">Image quality — <b id="cmpQVal">85%</b> <span style="color:var(--mut)">(higher = better looking, bigger file)</span></label>
+      <input type="range" id="cmpQ" min="40" max="100" value="85" style="width:100%"/>
+      <div style="display:flex;justify-content:space-between;color:var(--mut2);font-size:11px;margin-top:2px">
+        <span>40% · smallest</span><span>70%</span><span>100% · best</span></div>
+      <div id="cmpQEst" style="color:var(--mut);font-size:12.5px;margin-top:8px"></div>
+      <div class="callout warn" style="margin-top:8px">⚠️ This re-encodes images — quality changes slightly. Originals are still backed up.</div>
+    </div>
+    <label class="fld" style="margin-top:10px">What to do with the smaller files</label>
+    <select id="cmpMode">
+      <option value="replace">Replace originals (keep originals in Originals_Backup/)</option>
+      <option value="copy">Keep originals, save smaller copies in Compressed_Images/</option>
+    </select>
+    <div class="btn-row">
+      <button class="btn ghost" id="cmpEst">📊 Estimate savings</button>
+      <button class="btn" id="cmpRun">🗜️ Compress images</button>
+      <button class="btn ghost" id="cmpPhash">🔎 Find near-duplicates</button>
+    </div>
+    ${bk.exists?`<div class="callout info" style="margin-top:12px">🗂️ <div>You have an <code>Originals_Backup/</code> with
+      <b>${num(bk.count)}</b> file(s) (${fmtKb(bk.kb)}).
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn ghost sm" id="cmpRestore">↩️ Restore originals</button>
+        <button class="btn ghost sm" id="cmpClear">🗑️ Delete backup (free ${fmtKb(bk.kb)})</button>
+      </div></div></div>`:""}
+    <div id="cmpOut"></div>`;
+  $("#cmpLossy").onchange=e=>{const on=e.target.value==="1";$("#cmpLossyOpts").style.display=on?"block":"none";if(on)liveQualityEstimate();};
+  if($("#cmpQ")){
+    $("#cmpQ").oninput=e=>{$("#cmpQVal").textContent=e.target.value+"%";
+      $("#cmpQEst").innerHTML=`<span style="color:var(--mut2)">move to see the new folder size…</span>`;};
+    $("#cmpQ").onchange=liveQualityEstimate;
+  }
+  $("#cmpEst").onclick=estimateCompress;
+  $("#cmpRun").onclick=runCompress;
+  $("#cmpPhash").onclick=findNearDupes;
+  if($("#cmpRestore"))$("#cmpRestore").onclick=async e=>{
+    if(!confirm("Move every file in Originals_Backup/ back into place, replacing the compressed versions?"))return;
+    busy(e.target,true,"Restoring…");
+    try{const r=await api("compress/restore",{backend:S.backend,root:S.root});
+      toast(`Restored ${num(r.restored)} original(s)`,"good");renderCompress();
+      api("scan",{backend:S.backend,root:S.root,depth:S.depth}).then(sc=>S.scan=sc).catch(()=>{});
+    }catch(err){toast(err.message,"bad");busy(e.target,false);}};
+  if($("#cmpClear"))$("#cmpClear").onclick=async e=>{
+    if(!confirm("Permanently delete the Originals_Backup/ folder? The compressed versions are kept."))return;
+    busy(e.target,true,"Deleting…");
+    try{const r=await api("compress/clear-backup",{backend:S.backend,root:S.root});
+      toast(`Freed ${fmtKb(r.freedKb)}`,"good");renderCompress();
+      api("scan",{backend:S.backend,root:S.root,depth:S.depth}).then(sc=>S.scan=sc).catch(()=>{});
+    }catch(err){toast(err.message,"bad");busy(e.target,false);}};
+}
+function _cmpBody(){
+  return {backend:S.backend,root:S.root,recursive:$("#cmpRec").checked,
+    mode:$("#cmpMode").value,lossy:$("#cmpLossy").value==="1",
+    quality:$("#cmpQ")?+$("#cmpQ").value:85,max_edge:0,
+    heic:$("#cmpHeic")?$("#cmpHeic").checked:false,
+    include_hidden:S.include_hidden,protect:S.protect};
+}
+let _cmpEstToken=0;
+async function liveQualityEstimate(){
+  const box=$("#cmpQEst");if(!box)return;
+  const q=$("#cmpQ")?$("#cmpQ").value:85;
+  box.innerHTML=`<span class="spin"></span> Estimating size at ${q}%…`;
+  const tok=++_cmpEstToken;
+  try{
+    const d=await api("compress/estimate",{..._cmpBody(),sample:8});
+    if(tok!==_cmpEstToken)return;               // a newer slide superseded this
+    const pct=d.beforeKb?Math.round(d.savedKb/d.beforeKb*100):0;
+    const approx=d.sampled?"~":"";
+    box.innerHTML=d.compressed
+      ?`📉 At <b>${q}%</b>: this folder's images would go <b>${fmtKb(d.beforeKb)} → ${approx}${fmtKb(d.beforeKb-d.savedKb)}</b>
+         (save ${approx}${fmtKb(d.savedKb)}, ${pct}% smaller).`
+      :`Already small — little to save at ${q}%.`;
+  }catch(err){if(tok===_cmpEstToken)box.innerHTML=`<span style="color:var(--bad)">${esc(err.message)}</span>`;}
+}
+async function estimateCompress(e){
+  const btn=e.target;busy(btn,true,"Estimating…");
+  try{
+    const d=await api("compress/estimate",{..._cmpBody(),sample:24});
+    const pct=d.beforeKb?Math.round(d.savedKb/d.beforeKb*100):0;
+    const approx=d.sampled?"about ":"";
+    $("#cmpOut").innerHTML=d.compressed
+      ?`<div class="callout info" style="margin-top:12px">📊 Of <b>${num(d.candidates)}</b> image(s),
+         roughly <b>${num(d.compressed)}</b> can shrink — ${approx}<b>${fmtKb(d.savedKb)}</b> saved (~${pct}% smaller,
+         ${fmtKb(d.beforeKb)} → ${fmtKb(d.beforeKb-d.savedKb)}). Press <b>Compress images</b> to apply.</div>`
+      :`<div class="callout safe" style="margin-top:12px">👍 Already optimal — no meaningful savings from ${num(d.candidates)} image(s).</div>`;
+  }catch(err){toast(err.message,"bad");}finally{busy(btn,false);}
+}
+async function runCompress(e){
+  const btn=e.target;busy(btn,true,"Compressing…");
+  const out=$("#cmpOut");
+  const body=_cmpBody();body._verb="Compressed";
+  try{
+    const d=await runApplyJob("compress/start",body,out);
+    renderCompressResult(out,d);btn.remove();
+    toast(d.cancelled?"Stopped":`Saved ${fmtKb(d.savedKb)}`,d.cancelled?"info":"good");
+    api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth}).then(sc=>S.scan=sc).catch(()=>{});
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+async function findNearDupes(e){
+  const btn=e.target;busy(btn,true,"Scanning…");
+  const out=$("#cmpOut");
+  try{
+    const d=await runApplyJob("phash/start",{backend:S.backend,root:S.root,
+      recursive:$("#cmpRec").checked,_verb:"Scanned"},out);
+    if(!d.groups.length){out.innerHTML=`<div class="callout safe" style="margin-top:12px">✅ No visually near-identical images found.</div>`;busy(btn,false);return;}
+    S._dupeGroups=d.groups.map(g=>({...g}));
+    out.innerHTML=`<div class="callout info" style="margin-top:12px">🔎 Found <b>${num(d.count)}</b> set(s) of look-alike images
+      (~${fmtKb(d.wastedKb)} in extras). <button class="btn ghost sm" id="phReview">Review &amp; keep one each →</button></div>`;
+    $("#phReview").onclick=()=>openDupeReviewFrom(d.groups,"Near-duplicate review");
+    busy(btn,false);
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+function renderCompressResult(host,d){
+  if(!d.compressed){
+    host.innerHTML=`<div class="callout info" style="margin-top:14px">👍 Nothing to shrink — your images are already as small as they can be (${num(d.skipped)} checked).</div>`;
+    return;}
+  const pct=d.beforeKb?Math.round(d.savedKb/d.beforeKb*100):0;
+  let box=`<div class="callout safe" style="margin-top:14px">✅ Compressed <b>${num(d.compressed)}</b> image(s)
+    ${d.lossy?"":"losslessly "}— saved <b>${fmtKb(d.savedKb)}</b> (${pct}% smaller: ${fmtKb(d.beforeKb)} → ${fmtKb(d.afterKb)}).
+    ${d.skipped?`<br><span style="color:var(--mut)">${num(d.skipped)} already optimal, left untouched.</span>`:""}</div>`;
+  box+=`<div class="callout info" style="margin-top:10px">${d.mode==="copy"
+    ?`Smaller copies are in <code>Compressed_Images/</code>; your originals are untouched.`
+    :`Originals were moved to <code>Originals_Backup/</code> — restore or delete them from this tab anytime.`}</div>`;
+  if(d.items&&d.items.length){
+    box+=`<div class="card" style="margin-top:12px"><div style="color:var(--mut);font-size:12px;margin-bottom:6px">Examples</div>
+      ${d.items.map(it=>`<div class="histrow"><span class="hl">${esc(it.name)}${it.converted?" → .jpg":""}</span>
+        <span style="color:var(--mut)">${fmtKb(it.from_kb)} → ${fmtKb(it.to_kb)} · −${it.pct}%</span></div>`).join("")}</div>`;
+  }
+  box+=undoBar(d.undo);
+  host.innerHTML=box;wireUndo(host,d.undo);
+}
+
+// ---------------------------------------------------------------- Report
+function pageReport(m){
+  const p=el("div","page");
+  p.innerHTML=`
+    <h1>Storage report</h1>
+    <p class="lead">Generate an interactive, colour-coded HTML report of the whole tree.</p>
+    <div class="card">
+      <label class="fld">Save to</label>
+      <input type="text" id="outIn" placeholder="Leave blank for Desktop" value=""/>
+      <div class="callout info" style="margin-top:14px">The report is a standalone HTML file you can open
+        anytime — it shows folder sizes, file counts and category colour-coding.</div>
+      <div class="btn-row"><button class="btn" id="genBtn">📄 Generate report</button></div>
+      <div id="repOut"></div>
+    </div>`;
+  m.appendChild(p);
+  $("#genBtn").onclick=async e=>{
+    busy(e.target,true,"Generating…");
+    try{
+      const out=$("#outIn").value.trim();
+      const d=await api("report",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,
+        depth:S.depth,out:out?[out]:null});
+      const path=d.written[0];
+      $("#repOut").innerHTML=`<div class="callout safe" style="margin-top:16px">✅ Report written:<br>
+        <b>${esc(path)}</b><br><span style="color:var(--mut)">${d.meta.nL1} top · ${d.meta.nL2} sub · ${d.meta.nL3} sub-sub folders</span></div>
+        <div class="btn-row"><button class="btn sm" id="openRep">🌐 Open report</button></div>`;
+      $("#openRep").onclick=()=>api("open",{path}).catch(err=>toast(err.message,"bad"));
+      toast("Report generated","good");
+    }catch(err){toast(err.message,"bad");}finally{busy(e.target,false);}
+  };
+}
+
+// ---------------------------------------------------------------- Safety
+function pageSafety(m){
+  const p=el("div","page");
+  p.innerHTML=`
+    <h1>Safety</h1>
+    <p class="lead">phorg is built to never lose your data. Here's exactly how.</p>
+    <div class="card">
+      <div class="callout safe">✅ <div><b>Files are only moved, never deleted.</b> Moves are instant and reversible.
+        Only empty folders are ever removed.</div></div>
+      <div class="callout info" style="margin-top:12px">👁️ <div><b>Preview first.</b> Every action shows the exact plan.
+        Nothing changes until you click Apply.</div></div>
+      <div class="callout safe" style="margin-top:12px">🔢 <div><b>Verified counts.</b> After applying, phorg re-counts every file
+        and confirms the total is unchanged.</div></div>
+      <div class="callout warn" style="margin-top:12px">🛡️ <div><b>Protected paths.</b> System &amp; app-critical folders are never
+        touched: <code>Android</code>, <code>MIUI</code>, <code>Ringtones</code>, hidden <code>.*</code> folders,
+        WhatsApp <code>Sent</code>/<code>Private</code>, and any you add.</div></div>
+      <div class="sect-t">Global options</div>
+      <label class="fld">Scan depth</label>
+      <select id="depthSel">
+        ${[2,3,4].map(d=>`<option value="${d}" ${S.depth==d?"selected":""}>${d} levels</option>`).join("")}
+      </select>
+      <div style="margin-top:14px">
+        <label class="toggle"><input type="checkbox" id="hidChk" ${S.include_hidden?"checked":""}/>
+        <span class="tk"></span><span>Include hidden folders <span class="desc"> — off is recommended</span></span></label>
+      </div>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <h3 style="margin:0 0 4px">Accessibility</h3>
+      <div style="color:var(--mut);font-size:11.5px;margin-bottom:8px">Saved on this device.</div>
+      <label class="toggle"><input type="checkbox" id="bigTextChk"/>
+        <span class="tk"></span><span>🔠 Larger text<span class="desc"> — scale up the whole interface</span></span></label>
+      <label class="toggle"><input type="checkbox" id="contrastChk"/>
+        <span class="tk"></span><span>◐ High contrast<span class="desc"> — stronger borders &amp; text</span></span></label>
+      <label class="fld" style="margin-top:12px">Accent colour</label>
+      <div class="accentrow" id="accentRow"></div>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <h3 style="margin:0 0 4px">Presets &amp; rules</h3>
+      <div style="color:var(--mut);font-size:11.5px;margin-bottom:10px">Back up or share your presets and custom rules as a file.</div>
+      <div class="btn-row" style="margin:0">
+        <button class="btn ghost sm" id="exportPresets">⬇️ Export</button>
+        <button class="btn ghost sm" id="importPresets">⬆️ Import</button>
+        <input type="file" id="importFile" accept="application/json,.json" style="display:none"/>
+      </div>
+    </div>`;
+  m.appendChild(p);
+  $("#depthSel").onchange=e=>S.depth=+e.target.value;
+  $("#hidChk").onchange=e=>S.include_hidden=e.target.checked;
+  const bt=$("#bigTextChk"),ct=$("#contrastChk");
+  bt.checked=document.body.classList.contains("bigtext");
+  ct.checked=document.body.classList.contains("contrast");
+  bt.onchange=e=>{document.body.classList.toggle("bigtext",e.target.checked);
+    try{localStorage.setItem("phorg-bigtext",e.target.checked?"1":"");}catch(_){}}; 
+  ct.onchange=e=>{document.body.classList.toggle("contrast",e.target.checked);
+    try{localStorage.setItem("phorg-contrast",e.target.checked?"1":"");}catch(_){}}; 
+  const arow=$("#accentRow");
+  let curAccent="blue";try{curAccent=localStorage.getItem("phorg-accent")||"blue";}catch(e){}
+  arow.innerHTML=Object.entries(ACCENTS).map(([k,v])=>`<button class="swatch ${k===curAccent?'sel':''}" data-accent="${k}"
+    title="${k}" style="background:linear-gradient(135deg,${v[0]},${v[1]})"></button>`).join("");
+  arow.querySelectorAll("[data-accent]").forEach(b=>b.onclick=()=>{
+    const k=b.dataset.accent;applyAccent(k);try{localStorage.setItem("phorg-accent",k);}catch(e){}
+    arow.querySelectorAll(".swatch").forEach(s=>s.classList.toggle("sel",s===b));});
+  $("#exportPresets").onclick=()=>{
+    const data={presets:loadPresets(),rules:loadRules(),_app:"phorg",_v:1};
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");
+    a.href=url;a.download="phorg-presets.json";document.body.appendChild(a);a.click();
+    a.remove();URL.revokeObjectURL(url);toast("Exported presets & rules","good");};
+  $("#importPresets").onclick=()=>$("#importFile").click();
+  $("#importFile").onchange=e=>{
+    const f=e.target.files[0];if(!f)return;const rd=new FileReader();
+    rd.onload=()=>{try{const d=JSON.parse(rd.result);
+      if(d.presets){const cur=loadPresets();savePresetStore({...cur,...d.presets});}
+      if(d.rules)saveRules(d.rules);
+      toast("Imported presets & rules","good");
+    }catch(err){toast("That file isn't a valid phorg export","bad");}};
+    rd.readAsText(f);};
+}
+
+// ---------------------------------------------------------------- theme
+function applyTheme(t){
+  document.body.classList.toggle("light",t==="light");
+  const b=$("#themeBtn");
+  if(b)b.innerHTML=(t==="light"?"☀️ <span>Light theme</span>":"🌙 <span>Dark theme</span>");
+}
+function initTheme(){
+  let t="dark";try{t=localStorage.getItem("phorg-theme")||"dark";}catch(e){}
+  applyTheme(t);
+  try{if(localStorage.getItem("phorg-bigtext"))document.body.classList.add("bigtext");
+    if(localStorage.getItem("phorg-contrast"))document.body.classList.add("contrast");}catch(e){}
+  $("#themeBtn").onclick=()=>{
+    const cur=document.body.classList.contains("light")?"light":"dark";
+    const nx=cur==="light"?"dark":"light";
+    try{localStorage.setItem("phorg-theme",nx);}catch(e){}
+    applyTheme(nx);
+  };
+}
+// ---------------------------------------------------------------- treemap
+const TM_PALETTE=["#4f8cff","#7c5cff","#22c55e","#f59e0b","#ef4444","#06b6d4",
+  "#ec4899","#14b8a6","#a855f7","#f97316","#3b82f6","#64748b"];
+function treemapLayout(items,x,y,w,h,horiz,out){
+  if(!items.length)return;
+  if(items.length===1){out.push({...items[0],x,y,w,h});return;}
+  const total=items.reduce((s,it)=>s+it.value,0)||1;
+  let acc=0,i=0;
+  while(i<items.length-1 && acc+items[i].value<total/2){acc+=items[i].value;i++;}
+  const left=items.slice(0,i+1),right=items.slice(i+1);
+  const lv=left.reduce((s,it)=>s+it.value,0);
+  if(horiz){const lw=w*lv/total;
+    treemapLayout(left,x,y,lw,h,!horiz,out);
+    treemapLayout(right,x+lw,y,w-lw,h,!horiz,out);}
+  else{const lh=h*lv/total;
+    treemapLayout(left,x,y,w,lh,!horiz,out);
+    treemapLayout(right,x,y+lh,w,h-lh,!horiz,out);}
+}
+function renderTreemap(el,tree){
+  el._root=tree;el._stack=[];
+  drawTreemap(el);
+}
+function currentTmNodes(el){
+  let nodes=el._root||[];
+  for(const seg of el._stack){
+    const found=(nodes||[]).find(n=>n.name===seg);
+    nodes=found?(found.children||[]):[];
+  }
+  return nodes;
+}
+function drawTreemap(el){
+  const nodes=currentTmNodes(el);
+  const top=nodes.filter(t=>(+t.kb||0)>0).sort((a,b)=>b.kb-a.kb);
+  const crumb=`<div class="tmcrumb"><span class="tmc" data-tmi="-1">🏠 ${esc(S.root.split(/[\\/]/).pop()||"root")}</span>`+
+    el._stack.map((s,i)=>` › <span class="tmc" data-tmi="${i}">${esc(s)}</span>`).join("")+`</div>`;
+  if(!top.length){el.innerHTML=crumb+`<div class="empty" style="padding:24px">No sizeable sub-folders here.</div>`;
+    wireTmCrumb(el);return;}
+  const shown=top.slice(0,15).map((t,i)=>({name:t.name,value:t.kb,files:t.files,
+    kids:(t.children||[]).length,color:TM_PALETTE[i%TM_PALETTE.length]}));
+  const restKb=top.slice(15).reduce((s,t)=>s+t.kb,0);
+  if(restKb>0)shown.push({name:"…other",value:restKb,files:0,kids:0,color:"#475569"});
+  const rects=[];treemapLayout(shown,0,0,100,100,true,rects);
+  el.innerHTML=crumb+`<div class="tmbox">`+rects.map(r=>{
+    const big=r.w>14&&r.h>12;
+    return `<div class="tcell${r.kids?' drill':''}" data-tmname="${esc(r.name)}"
+      style="left:${r.x}%;top:${r.y}%;width:${r.w}%;height:${r.h}%;background:${r.color}"
+      title="${esc(r.name)} — ${fmtKb(r.value)}${r.files?', '+num(r.files)+' files':''}${r.kids?' · click to zoom in':''}">
+      ${big?`<b>${esc(r.name)}${r.kids?' ›':''}</b><span>${fmtKb(r.value)}</span>`:""}</div>`;
+  }).join("")+`</div>`;
+  wireTmCrumb(el);
+  el.querySelectorAll(".tcell.drill").forEach(c=>c.onclick=()=>{
+    el._stack.push(c.dataset.tmname);drawTreemap(el);});
+}
+function wireTmCrumb(el){
+  el.querySelectorAll("[data-tmi]").forEach(c=>c.onclick=()=>{
+    const i=+c.dataset.tmi;el._stack=i<0?[]:el._stack.slice(0,i+1);drawTreemap(el);});
+}
+// ---------------------------------------------------------------- boot
+initTheme();
+try{const lr=localStorage.getItem("phorg-lastroot");if(lr){S.root=lr;S.backend=localStorage.getItem("phorg-lastbackend")||"local";}}catch(e){}
+go("connect");
+setTimeout(initAccent,0);
+if(S.root&&S.backend==="local")tryAutoConnect();else setTimeout(maybeShowWizard,400);
+async function tryAutoConnect(){
+  try{
+    const d=await api("scan",{backend:"local",root:S.root,depth:S.depth});
+    S.scan=d;S.root=d.root;setConn(true);pushRecent(d.root);
+    go("dashboard");
+  }catch(err){/* folder gone/moved — stay on Connect with it pre-filled */
+    const ri=$("#rootIn");if(ri)ri.value=S.root;}
+}
+// keyboard shortcuts: 1-7 tabs, Ctrl+K palette, Ctrl+Z undo, Ctrl+Y redo
+function refreshAfterHist(){
+  api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth})
+    .then(sc=>{S.scan=sc;if(S.page==="dashboard")loadHistory();}).catch(()=>{});
+}
+function quickUndo(){if(!S.connected||S.backend!=="local")return;
+  api("undo",{root:S.root}).then(r=>{toast(`Undone — ${num(r.restored)} file(s) back`,"good");refreshAfterHist();})
+    .catch(err=>toast(err.message,"bad"));}
+function quickRedo(){if(!S.connected||S.backend!=="local")return;
+  api("redo",{root:S.root}).then(r=>{toast(`Redone — ${num(r.redone)} file(s)`,"good");refreshAfterHist();})
+    .catch(err=>{});}
+// Ctrl+K opens the command palette even from inside inputs
+document.addEventListener("keydown",e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();openPalette();}
+});
+document.addEventListener("keydown",e=>{
+  if($("#modalHost").firstChild)return;                 // a modal is open
+  const tag=(e.target.tagName||"").toLowerCase();
+  if(tag==="input"||tag==="textarea"||tag==="select")return;
+  if(e.ctrlKey||e.metaKey){
+    const k=e.key.toLowerCase();
+    if(k==="z"&&!e.shiftKey){e.preventDefault();quickUndo();}
+    else if(k==="y"||(k==="z"&&e.shiftKey)){e.preventDefault();quickRedo();}
+    return;
+  }
+  // A = select all photos in the review grid
+  if((e.key==="a"||e.key==="A")&&S.page==="photos"&&S.photoItems.length){
+    e.preventDefault();
+    S.photoItems.forEach((_,i)=>S.photoSel.add(i));
+    renderPhotoGrid(S.photoItems);return;
+  }
+  // Enter = run the primary action on the current tab
+  if(e.key==="Enter"){
+    const b=$("#previewBtn")||$("#photoApply")||$("#connectBtn");
+    if(b&&!b.disabled){e.preventDefault();b.click();}
+    return;
+  }
+  const map={"1":"connect","2":"dashboard","3":"organize","4":"photos","5":"wedding","6":"compress","7":"report","8":"safety"};
+  if(map[e.key]){const btn=[...document.querySelectorAll("#nav button")].find(b=>b.dataset.page===map[e.key]);
+    if(btn&&!btn.disabled){e.preventDefault();go(map[e.key]);}}
+});
+// --- drag & drop a folder onto the window to connect (Electron/VS Code browser) ---
+(function(){
+  let dragDepth=0;
+  const ov=()=>$("#dropOverlay");
+  window.addEventListener("dragover",e=>{e.preventDefault();});
+  window.addEventListener("dragenter",e=>{e.preventDefault();dragDepth++;
+    const o=ov();if(o)o.classList.add("on");});
+  window.addEventListener("dragleave",e=>{dragDepth=Math.max(0,dragDepth-1);
+    if(!dragDepth){const o=ov();if(o)o.classList.remove("on");}});
+  window.addEventListener("drop",e=>{
+    e.preventDefault();dragDepth=0;const o=ov();if(o)o.classList.remove("on");
+    const f=(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0])||null;
+    const path=f&&f.path;                      // available in Electron/VS Code browser
+    if(!path){toast("Drop couldn't read the folder path here — use 📂 Browse instead.","info");return;}
+    // if a file was dropped, fall back to its parent folder
+    let root=path;
+    if(f.type||/\.[A-Za-z0-9]{1,6}$/.test(path.split(/[\\/]/).pop()||"")){
+      root=path.replace(/[\\/][^\\/]*$/,"")||path;}
+    S.backend="local";S.root=root;
+    go("connect");
+    const ri=$("#rootIn");if(ri)ri.value=root;
+    doConnect();
+  });
+})();
+
+// ---------------------------------------------------------------- command palette (Ctrl+K)
+function paletteCommands(){
+  const cmds=[
+    {label:"Go to Connect",icon:"🔌",run:()=>go("connect")},
+    {label:"Go to Dashboard",icon:"📊",need:1,run:()=>go("dashboard")},
+    {label:"Go to Organize",icon:"✨",need:1,run:()=>go("organize")},
+    {label:"Go to Photo AI",icon:"🖼️",need:1,run:()=>go("photos")},
+    {label:"Go to Wedding sorter",icon:"💍",need:1,run:()=>go("wedding")},
+    {label:"Go to Compress",icon:"🗜️",need:1,run:()=>go("compress")},
+    {label:"Go to Report",icon:"📄",need:1,run:()=>go("report")},
+    {label:"Go to Safety",icon:"🛡️",run:()=>go("safety")},
+    {label:"Undo last action",icon:"↩️",need:1,run:quickUndo},
+    {label:"Redo",icon:"↪️",need:1,run:quickRedo},
+    {label:"Toggle light / dark theme",icon:"🌓",run:()=>{const c=document.body.classList.contains("light")?"dark":"light";try{localStorage.setItem("phorg-theme",c);}catch(e){}applyTheme(c);}},
+  ];
+  Object.entries(OPS).forEach(([k,o])=>cmds.push({label:"Organize · "+o.title,icon:o.icon,need:1,run:()=>{go("organize");setTimeout(()=>selectOp(k),60);}}));
+  return cmds.filter(c=>!c.need||S.connected);
+}
+function openPalette(){
+  const host=$("#modalHost");
+  const all=paletteCommands();
+  host.innerHTML=`<div class="overlay" id="palov"><div class="modal" style="max-width:520px">
+    <div class="mh"><input type="text" id="palIn" placeholder="Type a command…  (e.g. compress, undo, organize)" style="border:0;background:transparent;font-size:15px"/>
+      <button class="x" id="palX">×</button></div>
+    <div class="mb" id="palList" style="max-height:52vh"></div>
+  </div></div>`;
+  let sel=0,filtered=all;
+  const close=()=>{host.innerHTML="";};
+  const draw=()=>{
+    $("#palList").innerHTML=filtered.length?filtered.map((c,i)=>`<div class="fitem ${i===sel?'psel':''}" data-pi="${i}">
+      <span class="fi">${c.icon}</span><span>${esc(c.label)}</span></div>`).join(""):`<div class="empty">No matching command.</div>`;
+    $("#palList").querySelectorAll("[data-pi]").forEach(el=>el.onclick=()=>{const c=filtered[+el.dataset.pi];close();c.run();});
+  };
+  const filter=q=>{q=q.trim().toLowerCase();filtered=q?all.filter(c=>c.label.toLowerCase().includes(q)):all;sel=0;draw();};
+  $("#palX").onclick=close;
+  host.querySelector(".overlay").onclick=e=>{if(e.target===$("#palov"))close();};
+  const inp=$("#palIn");
+  inp.oninput=e=>filter(e.target.value);
+  inp.onkeydown=e=>{
+    if(e.key==="ArrowDown"){e.preventDefault();sel=Math.min(filtered.length-1,sel+1);draw();}
+    else if(e.key==="ArrowUp"){e.preventDefault();sel=Math.max(0,sel-1);draw();}
+    else if(e.key==="Enter"){e.preventDefault();const c=filtered[sel];if(c){close();c.run();}}
+    else if(e.key==="Escape"){close();}
+  };
+  draw();inp.focus();
+}
+
+// ---------------------------------------------------------------- accent colour
+const ACCENTS={blue:["#4f8cff","#7c5cff"],teal:["#14b8a6","#0ea5e9"],
+  green:["#22c55e","#16a34a"],purple:["#a855f7","#7c3aed"],rose:["#f43f5e","#ec4899"],amber:["#f59e0b","#f97316"]};
+function applyAccent(name){
+  const a=ACCENTS[name]||ACCENTS.blue;
+  document.documentElement.style.setProperty("--accent",a[0]);
+  document.documentElement.style.setProperty("--accent2",a[1]);
+}
+function initAccent(){
+  let a="blue";try{a=localStorage.getItem("phorg-accent")||"blue";}catch(e){}
+  applyAccent(a);
+}
+
+// ---------------------------------------------------------------- onboarding wizard
+function maybeShowWizard(){
+  let seen=1;try{seen=localStorage.getItem("phorg-wizard");}catch(e){}
+  if(seen)return;
+  const steps=[
+    {icon:"🗂️",title:"Welcome to phorg",body:"A safe, local organizer for messy folders & phone photos. Nothing leaves your PC, everything previews first, and every change can be undone."},
+    {icon:"🔌",title:"1 · Pick a folder",body:"Choose a local folder (or drag one onto the window). You can also connect an Android phone over USB."},
+    {icon:"✨",title:"2 · Preview, then apply",body:"Every action shows an exact plan first. Files are only ever moved — never deleted — and the file count is re-verified afterwards."},
+    {icon:"⌨️",title:"3 · Handy shortcuts",body:"Press <b>Ctrl&nbsp;+&nbsp;K</b> any time for the command palette, <b>1–7</b> to switch tabs, and <b>Ctrl&nbsp;+&nbsp;Z</b> to undo."},
+  ];
+  let i=0;const host=$("#modalHost");
+  const draw=()=>{const s=steps[i];
+    host.innerHTML=`<div class="overlay"><div class="modal" style="max-width:460px;text-align:center">
+      <div style="padding:26px 26px 8px"><div style="font-size:52px">${s.icon}</div>
+        <h2 style="margin:10px 0 6px">${s.title}</h2>
+        <p style="color:var(--mut);font-size:14px;line-height:1.6">${s.body}</p></div>
+      <div class="mf" style="justify-content:space-between">
+        <span style="color:var(--mut2);font-size:12px">${i+1} / ${steps.length}</span>
+        <div class="row">
+          <button class="btn ghost sm" id="wzSkip">Skip</button>
+          <button class="btn sm" id="wzNext">${i<steps.length-1?"Next →":"Get started"}</button>
+        </div></div>
+    </div></div>`;
+    const done=()=>{try{localStorage.setItem("phorg-wizard","1");}catch(e){}host.innerHTML="";};
+    $("#wzSkip").onclick=done;
+    $("#wzNext").onclick=()=>{if(i<steps.length-1){i++;draw();}else done();};
+  };
+  draw();
+}
+</script>
+</body>
+</html>

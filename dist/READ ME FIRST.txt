@@ -1,0 +1,49 @@
+========================================================
+  phorg — Storage Organizer
+========================================================
+
+WHAT IT DOES
+  Cleans up and organizes messy folders on your PC (and
+  Android phones over USB), safely. Highlights:
+    - Organize by type / size / date / GPS location
+    - Junk sweep, fix broken extensions, remove empties
+    - Find duplicate files (byte-identical AND look-alike)
+    - Bulk rename with templates, and "Recommended cleanup"
+    - Photo AI: sort a photo dump by what's IN each picture
+      (portraits, couples, groups, blurry, best shots,
+      screenshots, documents) and by a named person's face
+    - Wedding sorter: group a wedding-day photo dump into
+      event folders (Muhurtham, Sadhya, Reception...) by time
+    - Compress images LOSSLESSLY to reclaim space
+    - Undo anything (even one folder at a time)
+
+HOW TO RUN
+  1. Double-click  phorg.exe
+  2. A small black window opens and your web browser opens
+     automatically with the app.
+  3. Use the app:
+        - Connect  -> pick a folder (or an Android phone)
+        - Organize -> choose an action, PREVIEW, then Apply
+        - Photo AI / Wedding / Compress -> in the sidebar
+        - Tip: press Ctrl+K anytime for a command palette
+  4. To quit: close the black window.
+
+IS IT SAFE?
+  Yes. It ONLY MOVES files — it never deletes them. Every
+  action shows a full preview first, and you can untick any
+  folders you'd rather leave alone. Nothing changes until you
+  click "Apply". After applying, it re-counts your files to
+  prove none were lost, and you can Undo (all, or just one
+  folder). System folders are protected. Photo analysis runs
+  100% on your PC — nothing is ever uploaded.
+
+NOTES
+  - Windows may show a "Windows protected your PC" warning the
+    first time (because the app isn't code-signed). Click
+    "More info" -> "Run anyway".
+  - No installation and no Python needed. It's a single file
+    (~90 MB, because it bundles the offline photo-AI tools).
+  - Everything runs locally on your computer. Nothing is
+    uploaded anywhere.
+
+Enjoy a tidier drive!

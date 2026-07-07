@@ -1,0 +1,5 @@
+# phorg uses the Python standard library only — no third-party packages required.
+# Requires Python 3.8+
+#
+# For ADB mode you also need Android platform-tools (adb) installed separately:
+#   https://developer.android.com/tools/releases/platform-tools

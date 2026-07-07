@@ -1,0 +1,12 @@
+# Optional packages for the AI photo categorizer (Organize → Categorize Photos).
+# The core app does NOT need these — install only if you want content-based
+# image sorting. Everything still runs locally; no image leaves your PC.
+#
+# Install with:
+#   pip install -r requirements-vision.txt
+#
+numpy
+opencv-contrib-python
+Pillow
+# Optional: enables HEIC/HEIF (iPhone) photo support in the Compress tab.
+pillow-heif
