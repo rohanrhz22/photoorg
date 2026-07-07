@@ -74,6 +74,11 @@ What you get:
   natural gaps between ceremonies, pre-fills **Kerala wedding function names**,
   and lets you rename each event before filing into numbered folders
   (`01_Muhurtham`, `02_Sadhya`, …). Fully previewed and undoable.
+- **FaceFind** — a guest picks a **selfie** (file or camera) and the app scans the
+  whole event folder to find **every photo they appear in**, then saves those into
+  a personal `FaceFind_<name>/` album (copies — originals untouched) you can zip
+  and share via WhatsApp/email. A **Match strictness** slider trades off more
+  results vs. only-sure matches. All face matching runs locally.
 - **Compress** — shrink images **losslessly** (no quality loss at all): JPEGs
   are slimmed by stripping bulky metadata & embedded thumbnails while the picture
   data stays byte-for-byte identical, and PNGs are re-packed losslessly. You can

@@ -1067,6 +1067,110 @@ def api_cluster_cancel(p):
 
 
 # ==========================================================================
+# FaceFind — find every photo a guest appears in, from one selfie
+# ==========================================================================
+def api_facefind_selfie(p):
+    """Save an uploaded selfie (data URL) to a temp file; return its path."""
+    data = p.get("data") or ""
+    if "," in data:
+        data = data.split(",", 1)[1]
+    import base64
+    import tempfile
+    try:
+        raw = base64.b64decode(data)
+    except Exception:
+        raise ValueError("That selfie image couldn't be read.")
+    if not raw or len(raw) > 25 * 1024 * 1024:
+        raise ValueError("Selfie is missing or too large.")
+    d = os.path.join(tempfile.gettempdir(), "phorg_facefind")
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, uuid.uuid4().hex + ".png")
+    with open(path, "wb") as f:
+        f.write(raw)
+    _register_root(d)      # allow the thumbnail endpoint to preview it
+    return {"path": path}
+
+
+def api_facefind_start(p):
+    if (p.get("backend") or "local").lower() != "local":
+        raise ValueError("FaceFind works on local folders only.")
+    from . import vision
+    missing = vision.check_deps()
+    if missing:
+        raise ValueError("Missing packages: " + ", ".join(missing))
+    if not vision.cluster_api_available():
+        raise ValueError("Your OpenCV build lacks the face modules needed "
+                         "(needs opencv-contrib-python).")
+    selfie = p.get("selfie")
+    if not selfie or not os.path.isfile(selfie):
+        raise ValueError("Please add a clear selfie photo first.")
+    be = _build_backend(p)
+    saf = _build_safety(p)
+    _register_root(be.root)
+    recursive = bool(p.get("recursive", True))
+    skip_top = {"Compressed_Images", "Originals_Backup"}
+    native = []
+    for fp in be.iter_files(be.root):
+        name = posixpath.basename(fp)
+        rel = be.relpath(posixpath.dirname(fp)).replace("\\", "/")
+        segs = [s for s in rel.split("/") if s and s != "."]
+        if segs and (segs[0] in skip_top or segs[0].startswith("FaceFind_")
+                     or saf.is_protected_dir("/".join(segs))):
+            continue
+        if not recursive and segs:
+            continue
+        if saf.is_protected_file(name) or not vision.is_image(name):
+            continue
+        native.append(be.native(fp))
+
+    threshold = float(p.get("threshold") or 0.40)
+    job_id = uuid.uuid4().hex
+    job = {"done": 0, "total": len(native), "phase": "starting", "clusters": 0,
+           "finished": False, "error": None, "result": None, "cancel": False,
+           "model_done": 0, "model_total": 0, "model_name": ""}
+    with _JOBS_LOCK:
+        _JOBS[job_id] = job
+        for k in list(_JOBS.keys())[:-20]:
+            _JOBS.pop(k, None)
+
+    def run():
+        try:
+            if not vision.models_present():
+                job["phase"] = "downloading"
+
+                def mprog(name, got, total):
+                    job["model_name"] = name
+                    job["model_done"] = got
+                    job["model_total"] = total
+                vision.download_models(progress=mprog)
+            job["phase"] = "matching"
+
+            def prog(done, total, n):
+                job["done"] = done
+                job["total"] = total
+                job["clusters"] = n
+
+            def cancelled():
+                return job["cancel"]
+
+            res = vision.facefind(native, selfie, threshold=threshold,
+                                  progress=prog, cancel=cancelled)
+            res["scanned"] = len(native)
+            res["cancelled"] = job["cancel"]
+            res["root"] = be.root
+            job["result"] = res
+            job["phase"] = "done"
+        except Exception as e:  # pragma: no cover - defensive
+            job["error"] = f"{type(e).__name__}: {e}"
+            job["phase"] = "error"
+        finally:
+            job["finished"] = True
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"jobId": job_id}
+
+
+# ==========================================================================
 # Rename live-preview sample, duplicate groups, search
 # ==========================================================================
 def api_rename_sample(p):
@@ -1844,6 +1948,8 @@ ROUTES = {
     "/api/cluster/start": api_cluster_start,
     "/api/cluster/progress": api_cluster_progress,
     "/api/cluster/cancel": api_cluster_cancel,
+    "/api/facefind/selfie": api_facefind_selfie,
+    "/api/facefind/start": api_facefind_start,
 }
 
 

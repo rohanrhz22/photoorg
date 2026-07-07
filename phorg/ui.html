@@ -243,6 +243,12 @@ details.advbox[open]>summary::before{content:"▾ "}
  .swatch{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0}
  .swatch.sel{border-color:var(--txt);box-shadow:0 0 0 2px var(--accent)}
  .fitem.psel{background:var(--card2);outline:1px solid var(--accent)}
+ /* FaceFind selfie */
+ .ffselfie{display:flex;gap:14px;align-items:center;margin-top:6px}
+ .ffprev{width:88px;height:88px;border-radius:14px;border:2px dashed var(--line);flex:none;
+  display:flex;align-items:center;justify-content:center;font-size:34px;overflow:hidden;background:var(--bg1)}
+ .ffprev.drag{border-color:var(--accent);background:var(--card2)}
+ .ffprev img{width:100%;height:100%;object-fit:cover}
  /* history */
  .histrow{display:flex;align-items:center;gap:10px;padding:9px 2px;border-top:1px solid #1c2740;font-size:13px}
  .rclist{display:flex;flex-direction:column;gap:2px;margin-top:8px}
@@ -308,6 +314,7 @@ body.light .btn.ghost{background:#e3ecfb}
       <button data-page="organize" data-need="conn" disabled><span class="ic">✨</span> Organize</button>
       <button data-page="photos" data-need="conn" disabled><span class="ic">🖼️</span> Photo AI</button>
       <button data-page="wedding" data-need="conn" disabled><span class="ic">💍</span> Wedding</button>
+      <button data-page="facefind" data-need="conn" disabled><span class="ic">🙋</span> FaceFind</button>
       <button data-page="compress" data-need="conn" disabled><span class="ic">🗜️</span> Compress</button>
       <button data-page="report" data-need="conn" disabled><span class="ic">📄</span> Report</button>
       <button data-page="safety"><span class="ic">🛡️</span> Safety</button>
@@ -422,7 +429,7 @@ function go(page){
   document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
   const m=$("#main");m.innerHTML="";
   ({connect:pageConnect,dashboard:pageDashboard,organize:pageOrganize,
-    photos:pagePhotos,wedding:pageWedding,compress:pageCompress,report:pageReport,safety:pageSafety}[page]||pageConnect)(m);
+    photos:pagePhotos,wedding:pageWedding,facefind:pageFaceFind,compress:pageCompress,report:pageReport,safety:pageSafety}[page]||pageConnect)(m);
 }
 $("#nav").addEventListener("click",e=>{const b=e.target.closest("button");
   if(!b||b.disabled)return;go(b.dataset.page);});
@@ -2095,6 +2102,198 @@ async function applyWeddingEvents(e){
   }catch(err){toast(err.message,"bad");busy(btn,false);}
 }
 
+// ---------------------------------------------------------------- FaceFind (find a guest's photos from a selfie)
+function pageFaceFind(m){
+  const p=el("div","page");
+  p.innerHTML=`
+    <h1>FaceFind <span style="font-size:14px;color:var(--mut);font-weight:400">· find your photos</span></h1>
+    <p class="lead">Point it at a big event folder, add a <b>selfie</b>, and it finds every photo that
+      person appears in — then saves them into a personal album you can share.</p>
+    <div class="card" id="ffCard"></div>`;
+  m.appendChild(p);
+  renderFaceFind();
+}
+async function renderFaceFind(){
+  const card=$("#ffCard");
+  if(S.backend!=="local"){
+    card.innerHTML=`<div class="callout warn">🙋 FaceFind works on a local folder. Copy the event photos to your PC first.</div>`;return;}
+  let st;try{st=await api("cluster/status",{});}catch(err){card.innerHTML=`<div class="callout bad">${esc(err.message)}</div>`;return;}
+  if(!st.available){
+    card.innerHTML=`<div class="callout warn">🧩 FaceFind needs the face-recognition tools. Open <b>Photo AI</b> once
+      and click “Install AI support”, or run <code>pip install -r requirements-vision.txt</code>.</div>`;return;}
+  S.ffSelfie=S.ffSelfie||"";
+  card.innerHTML=`
+    <div class="callout info">🔒 Runs 100% on your PC. Faces are matched locally; nothing is uploaded.
+      Matched photos are <b>copied</b> into an album — your originals are never moved.</div>
+    <div class="card" style="margin-top:14px">
+      <h4 class="cardh">1 · Who are we finding?</h4>
+      <label class="fld">Guest name</label>
+      <input type="text" id="ffName" placeholder="e.g. Anjali" value="${esc(S.ffName||"")}"/>
+      <label class="fld" style="margin-top:12px">A clear selfie of them</label>
+      <div class="ffselfie">
+        <div class="ffprev" id="ffPrev">${S.ffSelfie?`<img src="/api/thumb?size=200&path=${encodeURIComponent(S.ffSelfie)}"/>`:"🙂"}</div>
+        <div style="flex:1">
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn ghost sm" id="ffPick">📁 Choose photo</button>
+            <button class="btn ghost sm" id="ffCam">📷 Use camera</button>
+          </div>
+          <div class="subhint">One clear, front-facing face works best. Or drag a photo onto this box.</div>
+          <input type="file" id="ffFile" accept="image/*" style="display:none"/>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h4 class="cardh">2 · Options</h4>
+      <div class="opts">
+        <label class="toggle"><input type="checkbox" id="ffRec" checked/>
+          <span class="tk"></span><span>Include sub-folders<span class="desc"> — scan the whole event tree</span></span></label>
+      </div>
+      <div class="slider" style="margin-top:8px">
+        <label><span>🎯 Match strictness</span><span id="ffStrictVal">Balanced</span></label>
+        <input type="range" id="ffStrict" min="30" max="52" step="1" value="40"/>
+        <div class="ends"><span>Looser — more photos</span><span>Stricter — only sure matches</span></div>
+      </div>
+    </div>
+    <div class="btn-row"><button class="btn" id="ffFind">🔎 Find their photos</button></div>
+    <div id="ffProgress"></div><div id="ffOut"></div>`;
+  $("#ffName").oninput=e=>S.ffName=e.target.value;
+  $("#ffStrict").oninput=e=>{$("#ffStrictVal").textContent=ffStrictLabel(+e.target.value);};
+  $("#ffStrictVal").textContent=ffStrictLabel(40);
+  $("#ffPick").onclick=()=>$("#ffFile").click();
+  $("#ffFile").onchange=e=>{const f=e.target.files[0];if(f)useSelfieFile(f);};
+  $("#ffCam").onclick=openSelfieCamera;
+  $("#ffFind").onclick=runFaceFind;
+  const prev=$("#ffPrev");
+  prev.ondragover=e=>{e.preventDefault();e.stopPropagation();prev.classList.add("drag");};
+  prev.ondragleave=()=>prev.classList.remove("drag");
+  prev.ondrop=e=>{e.preventDefault();e.stopPropagation();prev.classList.remove("drag");
+    const f=e.dataTransfer.files&&e.dataTransfer.files[0];if(f)useSelfieFile(f);};
+}
+function ffStrictLabel(v){return v<=36?"Looser":v>=46?"Strict":"Balanced";}
+async function useSelfieFile(f){
+  if(f.path){setSelfie(f.path);return;}
+  const rd=new FileReader();
+  rd.onload=async()=>{
+    try{const d=await api("facefind/selfie",{data:rd.result});setSelfie(d.path);}
+    catch(err){toast(err.message,"bad");}
+  };
+  rd.readAsDataURL(f);
+}
+function setSelfie(path){
+  S.ffSelfie=path;
+  const prev=$("#ffPrev");if(prev)prev.innerHTML=`<img src="/api/thumb?size=200&path=${encodeURIComponent(path)}&t=${Date.now()}"/>`;
+  toast("Selfie added","good");
+}
+async function openSelfieCamera(){
+  const host=$("#modalHost");
+  host.innerHTML=`<div class="overlay"><div class="modal" style="max-width:460px">
+    <div class="mh"><h3>📷 Take a selfie</h3><button class="x" id="camX">×</button></div>
+    <div class="mb" style="padding:16px 18px;text-align:center">
+      <video id="camV" autoplay playsinline style="width:100%;border-radius:12px;background:#000"></video>
+      <canvas id="camC" style="display:none"></canvas>
+    </div>
+    <div class="mf"><span></span><div class="row">
+      <button class="btn ghost sm" id="camCancel">Cancel</button>
+      <button class="btn sm" id="camSnap">📸 Capture</button></div></div>
+  </div></div>`;
+  let stream;
+  const close=()=>{if(stream)stream.getTracks().forEach(t=>t.stop());host.innerHTML="";};
+  $("#camX").onclick=close;$("#camCancel").onclick=close;
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"}});$("#camV").srcObject=stream;}
+  catch(err){toast("Couldn't open the camera — use “Choose photo” instead.","bad");close();return;}
+  $("#camSnap").onclick=async()=>{
+    const v=$("#camV"),c=$("#camC");c.width=v.videoWidth;c.height=v.videoHeight;
+    c.getContext("2d").drawImage(v,0,0);
+    const data=c.toDataURL("image/png");close();
+    try{const d=await api("facefind/selfie",{data});setSelfie(d.path);}
+    catch(err){toast(err.message,"bad");}
+  };
+}
+async function runFaceFind(e){
+  if(!S.ffSelfie){toast("Add a selfie first","bad");return;}
+  const btn=e.target;busy(btn,true,"Scanning faces…");
+  const prog=$("#ffProgress");$("#ffOut").innerHTML="";
+  try{
+    const d=await api("facefind/start",{backend:S.backend,root:S.root,selfie:S.ffSelfie,
+      recursive:$("#ffRec").checked,threshold:(+$("#ffStrict").value)/100});
+    S.ffJob=d.jobId;
+    prog.innerHTML=`<div class="preview" style="margin-top:14px"><div class="ph">
+      <div class="chips" id="ffTally"><span class="chip">Starting…</span></div>
+      <button class="btn ghost sm" id="ffCancel">Stop</button></div>
+      <div style="padding:14px 18px"><div class="track" style="display:block;height:14px;border-radius:8px;background:#0d1424;border:1px solid #23324e;overflow:hidden">
+        <div id="ffBar" class="fill" style="display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
+        <div id="ffCount" style="color:var(--mut);font-size:12px;margin-top:8px">Preparing…</div></div></div>`;
+    $("#ffCancel").onclick=()=>{if(S.ffJob)api("cluster/cancel",{jobId:S.ffJob});};
+    pollFaceFind(btn);
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+async function pollFaceFind(btn){
+  let d;try{d=await api("cluster/progress",{jobId:S.ffJob});}
+  catch(err){toast(err.message,"bad");busy(btn,false);return;}
+  const bar=$("#ffBar"),pc=$("#ffCount"),tally=$("#ffTally");
+  if(d.phase==="downloading"){
+    const mt=d.model_total||0,md=d.model_done||0,mp=mt?Math.round(md/mt*100):0;
+    if(bar)bar.style.width=mp+"%";if(pc)pc.textContent=`Downloading face model ${mp}% (one-time)…`;
+    if(tally)tally.innerHTML=`<span class="chip">Setting up AI…</span>`;
+  }else{
+    const total=d.total||0,done=d.done||0,pct=total?Math.round(done/total*100):0;
+    if(bar)bar.style.width=pct+"%";
+    if(pc)pc.textContent=total?`Checked ${num(done)} of ${num(total)} photos (${pct}%)`:"Scanning…";
+    if(tally)tally.innerHTML=`<span class="chip">🙂 ${num(d.clusters||0)} match(es) so far</span>`;
+  }
+  if(d.error){$("#ffProgress").innerHTML=`<div class="callout bad" style="margin-top:14px">${esc(d.error)}</div>`;busy(btn,false);return;}
+  if(!d.finished){setTimeout(()=>pollFaceFind(btn),700);return;}
+  busy(btn,false);$("#ffProgress").innerHTML="";
+  const res=d.result||{};
+  if(res.error==="no_face_in_selfie"){$("#ffOut").innerHTML=`<div class="callout warn" style="margin-top:14px">😕 No face found in the selfie. Try a clearer, front-facing photo.</div>`;return;}
+  renderFaceFindResults(res);
+}
+function renderFaceFindResults(res){
+  const out=$("#ffOut");
+  const matches=(res.matches||[]).slice();
+  if(!matches.length){out.innerHTML=`<div class="callout info" style="margin-top:14px">No photos matched ${esc(S.ffName||"this person")}. Try a looser strictness or a clearer selfie.</div>`;return;}
+  S.ffMatches=matches;
+  out.innerHTML=`<div class="callout safe" style="margin-top:14px">✅ Found <b>${num(matches.length)}</b> photo(s) with
+    ${esc(S.ffName||"this person")} (of ${num(res.scanned||0)} scanned). Untick any that aren't them, then save the album.</div>
+    <div class="thumbgrid" id="ffGrid"></div>
+    <div class="btn-row">
+      <button class="btn warn" id="ffSave">💾 Save album (${num(matches.length)} copies)</button>
+    </div><div id="ffSaveOut"></div>`;
+  drawFaceFindGrid();
+  $("#ffSave").onclick=saveFaceFindAlbum;
+}
+function drawFaceFindGrid(){
+  const grid=$("#ffGrid");if(!grid)return;
+  grid.innerHTML=S.ffMatches.map((mm,i)=>`<div class="thumb ${mm.drop?'':'sel'}" data-ffi="${i}" style="cursor:pointer" title="${esc(mm.path)} · ${Math.round(mm.score*100)}% match">
+    <img loading="lazy" src="/api/thumb?size=300&path=${encodeURIComponent(mm.path)}" alt=""/>
+    <div class="nm">${mm.drop?"— skipped —":Math.round(mm.score*100)+"% match"}</div></div>`).join("");
+  grid.querySelectorAll("[data-ffi]").forEach(t=>t.onclick=()=>{
+    const i=+t.dataset.ffi;S.ffMatches[i].drop=!S.ffMatches[i].drop;drawFaceFindGrid();
+    const keep=S.ffMatches.filter(x=>!x.drop).length;
+    const b=$("#ffSave");if(b){b.innerHTML=`💾 Save album (${num(keep)} copies)`;b.disabled=!keep;}});
+}
+async function saveFaceFindAlbum(e){
+  const keep=S.ffMatches.filter(m=>!m.drop);
+  if(!keep.length){toast("Nothing selected","bad");return;}
+  const nm=(S.ffName||"Guest").trim();
+  const safe=nm.replace(/[^A-Za-z0-9 _-]/g,"").trim().replace(/\s+/g,"_")||"Guest";
+  const folder="FaceFind_"+safe;
+  const assignments=keep.map(m=>({path:m.path,category:folder}));
+  const btn=e.target;busy(btn,true,"Saving album…");
+  const out=$("#ffSaveOut");
+  try{
+    const d=await runApplyJob("categorize/apply/start",
+      {backend:S.backend,root:S.root,assignments,copy:true,_verb:"Copied"},out);
+    const album=(S.root.replace(/[\\/]+$/,""))+"\\"+folder;
+    out.innerHTML=`<div class="callout safe" style="margin-top:12px">✅ Saved <b>${num(d.copied||d.applied)}</b> photo(s) into
+      <code>${esc(folder)}</code> (originals untouched). Share that folder with ${esc(nm)} — zip it, or send via WhatsApp/email.
+      <div class="btn-row" style="margin-top:8px"><button class="btn ghost sm" id="ffOpen">📂 Open album folder</button></div></div>`;
+    $("#ffOpen").onclick=()=>api("open",{path:album}).catch(()=>toast("Couldn't open folder","bad"));
+    toast("Album saved","good");
+    api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth}).then(sc=>S.scan=sc).catch(()=>{});
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+
 // ---------------------------------------------------------------- Compress
 function pageCompress(m){
   const p=el("div","page");
@@ -2500,7 +2699,7 @@ document.addEventListener("keydown",e=>{
     if(b&&!b.disabled){e.preventDefault();b.click();}
     return;
   }
-  const map={"1":"connect","2":"dashboard","3":"organize","4":"photos","5":"wedding","6":"compress","7":"report","8":"safety"};
+  const map={"1":"connect","2":"dashboard","3":"organize","4":"photos","5":"wedding","6":"facefind","7":"compress","8":"report","9":"safety"};
   if(map[e.key]){const btn=[...document.querySelectorAll("#nav button")].find(b=>b.dataset.page===map[e.key]);
     if(btn&&!btn.disabled){e.preventDefault();go(map[e.key]);}}
 });
@@ -2537,6 +2736,7 @@ function paletteCommands(){
     {label:"Go to Organize",icon:"✨",need:1,run:()=>go("organize")},
     {label:"Go to Photo AI",icon:"🖼️",need:1,run:()=>go("photos")},
     {label:"Go to Wedding sorter",icon:"💍",need:1,run:()=>go("wedding")},
+    {label:"Go to FaceFind",icon:"🙋",need:1,run:()=>go("facefind")},
     {label:"Go to Compress",icon:"🗜️",need:1,run:()=>go("compress")},
     {label:"Go to Report",icon:"📄",need:1,run:()=>go("report")},
     {label:"Go to Safety",icon:"🛡️",run:()=>go("safety")},

@@ -501,6 +501,74 @@ class FaceEmbedder:
         n = float(np.linalg.norm(v))
         return (v / n) if n > 0 else None
 
+    def embed_all(self, path, max_faces=12):
+        """Return unit-norm embeddings for *all* detected faces (largest first).
+
+        Needed so a guest who is only a small face in a group shot is still
+        matched — ``embed`` only looks at the single largest face.
+        """
+        import numpy as np
+        cv2 = self.cv2
+        img = self._read(path)
+        if img is None:
+            return []
+        h, w = img.shape[:2]
+        if max(h, w) > 1600:
+            sc = 1600.0 / max(h, w)
+            img = cv2.resize(img, (int(w * sc), int(h * sc)))
+            h, w = img.shape[:2]
+        try:
+            self.det.setInputSize((w, h))
+            _, faces = self.det.detect(img)
+        except Exception:
+            return []
+        if faces is None or len(faces) == 0:
+            return []
+        faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)[:max_faces]
+        out = []
+        for f in faces:
+            try:
+                aligned = self.rec.alignCrop(img, f)
+                feat = self.rec.feature(aligned)
+            except Exception:
+                continue
+            v = np.asarray(feat, dtype="float32").flatten()
+            n = float(np.linalg.norm(v))
+            if n > 0:
+                out.append(v / n)
+        return out
+
+
+def facefind(native_paths, selfie_path, threshold=0.40,
+             progress=None, cancel=None):
+    """Find every photo in *native_paths* containing the face in *selfie_path*.
+
+    Returns {"matches": [{"path", "score"}], "count"} or {"error": ...}.
+    """
+    import numpy as np
+    emb = FaceEmbedder()
+    ref = emb.embed(selfie_path)
+    if ref is None:
+        return {"error": "no_face_in_selfie", "matches": [], "count": 0}
+    matches = []
+    total = len(native_paths)
+    done = 0
+    for p in native_paths:
+        if cancel and cancel():
+            break
+        done += 1
+        best = -1.0
+        for v in emb.embed_all(p):
+            s = float(np.dot(v, ref))
+            if s > best:
+                best = s
+        if progress:
+            progress(done, total, len(matches))
+        if best >= threshold:
+            matches.append({"path": p, "score": round(best, 3)})
+    matches.sort(key=lambda m: -m["score"])
+    return {"matches": matches, "count": len(matches)}
+
 
 def cluster_faces(native_paths, threshold=0.363, person_refs=None,
                   match_threshold=0.40, progress=None, cancel=None):
