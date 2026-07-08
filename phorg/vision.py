@@ -54,9 +54,13 @@ def is_image(name):
 
 
 def perceptual_groups(native_paths, max_distance=8, progress=None, cancel=None):
-    """Group visually near-identical images (resized / re-saved copies) across a
-    whole tree using a perceptual dHash + Hamming distance.  Returns a list of
-    member-path lists (only groups of 2+)."""
+    """Group visually near-identical images (resized / re-saved / lightly
+    edited copies) across a whole tree.  Each image is reduced to two
+    perceptual fingerprints — a DCT ``pHash`` (robust to JPEG re-compression
+    and brightness/contrast changes) and a gradient ``dHash`` (robust to
+    structure).  Two photos are treated as near-duplicates only when *both*
+    fingerprints agree, which catches more genuine copies while rejecting
+    coincidental look-alikes.  Returns a list of member-path lists (2+ only)."""
     cat = Categorizer({})
     hashes = []
     total = len(native_paths)
@@ -66,7 +70,7 @@ def perceptual_groups(native_paths, max_distance=8, progress=None, cancel=None):
         try:
             gray, _w, _h = cat._load_gray(p)
             if gray is not None:
-                hashes.append((p, cat._dhash(gray)))
+                hashes.append((p, cat._phash(gray), cat._dhash(gray)))
         except Exception:
             pass
         if progress and (i % 5 == 0 or i == total - 1):
@@ -80,10 +84,16 @@ def perceptual_groups(native_paths, max_distance=8, progress=None, cancel=None):
             x = parent[x]
         return x
 
+    # pHash drives matching (better recall on re-compressed / edited copies);
+    # dHash acts as a corroborating check, with a looser bound, to suppress
+    # false positives from photos that merely share a similar tonal layout.
+    dhash_limit = max_distance + (max_distance // 2) + 2
     for i in range(n):
-        hi = hashes[i][1]
+        _p, pi, di = hashes[i]
         for j in range(i + 1, n):
-            if bin(hi ^ hashes[j][1]).count("1") <= max_distance:
+            _q, pj, dj = hashes[j]
+            if (bin(pi ^ pj).count("1") <= max_distance
+                    and bin(di ^ dj).count("1") <= dhash_limit):
                 parent[find(i)] = find(j)
     groups = {}
     for i in range(n):
@@ -355,6 +365,23 @@ class Categorizer:
         for row in range(8):
             for col in range(8):
                 bits = (bits << 1) | int(small[row, col + 1] > small[row, col])
+        return bits
+
+    def _phash(self, gray):
+        """DCT-based perceptual hash (64-bit).
+
+        More robust than the gradient dHash to JPEG re-compression, resizing
+        and brightness/contrast changes, so a resaved, resized or lightly
+        edited copy of the same shot still hashes close to the original.
+        """
+        cv2, np = self.cv2, self.np
+        small = cv2.resize(gray, (32, 32), interpolation=cv2.INTER_AREA)
+        dct = cv2.dct(np.float32(small))
+        low = dct[:8, :8]
+        med = float(np.median(low))
+        bits = 0
+        for v in low.flatten():
+            bits = (bits << 1) | int(v > med)
         return bits
 
     # -- screenshot / document heuristics ----------------------------------

@@ -155,9 +155,27 @@ class LocalBackend:
                     if os.path.exists(dst):
                         if merge_identical and _same_file(self.native(op.a), dst):
                             # identical copy already at destination — don't
-                            # duplicate it with a "_1" suffix; leave source be
+                            # duplicate it with a "_1" suffix.  In move mode
+                            # remove the redundant source so the folder actually
+                            # empties (flatten/by-type otherwise leaves it
+                            # behind); recorded as a reversible "dedupe" so undo
+                            # can restore it from the surviving copy.
                             self.merged_skips += 1
-                            log(f"  = identical already there, skipped: {op.b}")
+                            if copy_mode:
+                                log(f"  = identical already there, "
+                                    f"skipped: {op.b}")
+                            else:
+                                try:
+                                    os.remove(self.native(op.a))
+                                    if journal is not None:
+                                        journal.append({"op": "dedupe",
+                                                        "src": op.a,
+                                                        "dst": op.b})
+                                    log(f"  = identical already there, removed "
+                                        f"redundant source: {op.a}")
+                                except OSError as e:
+                                    log(f"  ! could not remove redundant "
+                                        f"{op.a}: {e}")
                             if progress and (seen % 25 == 0 or seen == total):
                                 progress(seen, total)
                             continue

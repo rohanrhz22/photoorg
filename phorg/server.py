@@ -75,6 +75,91 @@ def _under_allowed(path):
     return False
 
 
+# --------------------------------------------------------------------------
+# Guest sharing ("FaceFind portal") — let people on the same Wi-Fi open a
+# link, submit a selfie, and get their own photos. Off by default.
+# --------------------------------------------------------------------------
+_SHARE = {"enabled": False, "root": None, "event": "", "token": None,
+          "guests": [], "online": False, "public_url": None,
+          "public_host": None}
+_SHARE_LOCK = threading.Lock()
+_SERVER_PORT = 8765
+
+# Endpoints a non-local (guest) visitor is allowed to call.  Everything else
+# (scan/plan/apply/undo/...) stays host-only even while sharing is on.
+_GUEST_ROUTES = {
+    "/api/health", "/api/share/status", "/api/share/find/start",
+    "/api/facefind/selfie", "/api/cluster/progress", "/api/cluster/cancel",
+}
+
+
+def _lan_ips():
+    primary = None
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        primary = s.getsockname()[0]
+        s.close()
+        if primary and primary.startswith("127."):
+            primary = None
+    except Exception:
+        primary = None
+    others = []
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None,
+                                       socket.AF_INET):
+            ip = info[4][0]
+            if ip and not ip.startswith("127.") and ip != primary \
+                    and ip not in others:
+                others.append(ip)
+    except Exception:
+        pass
+
+    def rank(ip):
+        if ip.startswith("192.168."):
+            return 0
+        if ip.startswith("10."):
+            return 1
+        return 3          # 172.x is often a virtual WSL/Hyper-V adapter
+    others.sort(key=rank)
+    # the default-route interface (what guests on the same Wi-Fi actually use)
+    return ([primary] if primary else []) + others
+
+
+def _is_private_host(host):
+    import ipaddress
+    try:
+        ip = ipaddress.ip_address(host)
+        return ip.is_private or ip.is_link_local
+    except ValueError:
+        return False
+
+
+def _share_urls(token):
+    urls = [f"http://{ip}:{_SERVER_PORT}/?g={token}" for ip in _lan_ips()]
+    with _SHARE_LOCK:
+        pub = _SHARE.get("public_url") if _SHARE.get("online") else None
+    if pub:
+        urls.insert(0, f"{pub}/?g={token}")
+    return urls
+
+
+def _guest_can_access(fp, is_local):
+    """Whether a request may read *fp*: host can read any allowed root; a guest
+    may only read files under the shared event folder."""
+    if is_local:
+        return _under_allowed(fp)
+    with _SHARE_LOCK:
+        root = _SHARE["root"] if _SHARE["enabled"] else None
+    if not root:
+        return False
+    try:
+        return os.path.commonpath([os.path.abspath(fp), root]) == root
+    except ValueError:
+        return False
+
+
+
 def _history_file(root):
     return os.path.join(os.path.abspath(root), ".phorg", "history.json")
 
@@ -97,7 +182,8 @@ def _save_history(be, journal, label="operation"):
     entry = {"id": uuid.uuid4().hex, "ts": int(time.time()), "label": label,
              "journal": journal,
              "moves": sum(1 for j in journal
-                          if j.get("op") in ("move", "copy", "compress"))}
+                          if j.get("op") in ("move", "copy", "compress",
+                                             "dedupe"))}
     with _HISTORY_LOCK:
         lst = list(_HISTORY.get(ap) or [])
         lst.append(entry)
@@ -385,7 +471,7 @@ def api_apply(p):
 def _entry_dst_folder(root, j):
     """Top-level destination folder a journal entry landed a file in."""
     op = j.get("op")
-    if op in ("move", "copy"):
+    if op in ("move", "copy", "dedupe"):
         pth = j.get("dst")
     elif op == "compress":
         pth = j.get("written")
@@ -410,7 +496,7 @@ def api_history_folders(p):
     from collections import defaultdict
     counts = defaultdict(int)
     for j in entry.get("journal", []):
-        if j.get("op") in ("move", "copy", "compress"):
+        if j.get("op") in ("move", "copy", "compress", "dedupe"):
             counts[_entry_dst_folder(root, j)] += 1
     folders = sorted(({"folder": k, "count": v} for k, v in counts.items()),
                      key=lambda x: (-x["count"], x["folder"]))
@@ -470,6 +556,19 @@ def api_undo(p):
             except OSError as e:
                 log.append(f"{dst}: {e}")
             return 0
+        if op == "dedupe":
+            # the source was removed because a byte-identical copy already sat
+            # at dst — restore it by copying that surviving copy back.
+            src = j["src"].replace("/", os.sep)
+            dst = j["dst"].replace("/", os.sep)
+            try:
+                if os.path.isfile(dst) and not os.path.exists(src):
+                    os.makedirs(os.path.dirname(src), exist_ok=True)
+                    shutil.copy2(dst, src)
+                    return 1
+            except OSError as e:
+                log.append(f"{src}: {e}")
+            return 0
         # move
         src = j["src"].replace("/", os.sep)
         dst = j["dst"].replace("/", os.sep)
@@ -486,7 +585,7 @@ def api_undo(p):
     undone = []
     for j in reversed(journal):
         op = j.get("op")
-        if op in ("move", "copy", "compress"):
+        if op in ("move", "copy", "compress", "dedupe"):
             if sel_set is not None and _entry_dst_folder(root, j) not in sel_set:
                 remaining.append(j)
                 continue
@@ -516,12 +615,13 @@ def api_undo(p):
                 pass
 
     ap = os.path.abspath(root)
-    partial_left = any(j.get("op") in ("move", "copy", "compress")
+    partial_left = any(j.get("op") in ("move", "copy", "compress", "dedupe")
                        for j in remaining)
     if sel_set is not None and partial_left:
         entry["journal"] = remaining
         entry["moves"] = sum(1 for j in remaining
-                             if j.get("op") in ("move", "copy", "compress"))
+                             if j.get("op") in ("move", "copy", "compress",
+                                                "dedupe"))
         lst[idx] = entry
         redo_entry = {"id": uuid.uuid4().hex, "ts": entry["ts"],
                       "label": entry["label"], "journal": undone,
@@ -578,6 +678,17 @@ def api_redo(p):
                 if os.path.exists(src) and not os.path.exists(dst):
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     shutil.move(src, dst)
+                    redone += 1
+            except Exception as e:
+                log.append(f"{src}: {e}")
+        elif j.get("op") == "dedupe":
+            # re-apply the dedupe: drop the redundant source again, but only
+            # while the identical copy at dst still exists.
+            src = j["src"].replace("/", os.sep)
+            dst = j["dst"].replace("/", os.sep)
+            try:
+                if os.path.isfile(src) and os.path.isfile(dst):
+                    os.remove(src)
                     redone += 1
             except Exception as e:
                 log.append(f"{src}: {e}")
@@ -1091,23 +1202,13 @@ def api_facefind_selfie(p):
     return {"path": path}
 
 
-def api_facefind_start(p):
-    if (p.get("backend") or "local").lower() != "local":
-        raise ValueError("FaceFind works on local folders only.")
+def _start_facefind_job(root, selfie, threshold, recursive=True):
+    """Start a background FaceFind job over *root*; returns {'jobId'}."""
     from . import vision
-    missing = vision.check_deps()
-    if missing:
-        raise ValueError("Missing packages: " + ", ".join(missing))
-    if not vision.cluster_api_available():
-        raise ValueError("Your OpenCV build lacks the face modules needed "
-                         "(needs opencv-contrib-python).")
-    selfie = p.get("selfie")
-    if not selfie or not os.path.isfile(selfie):
-        raise ValueError("Please add a clear selfie photo first.")
-    be = _build_backend(p)
-    saf = _build_safety(p)
+    from .backends import LocalBackend
+    be = LocalBackend(root)
+    saf = _build_safety({})
     _register_root(be.root)
-    recursive = bool(p.get("recursive", True))
     skip_top = {"Compressed_Images", "Originals_Backup"}
     native = []
     for fp in be.iter_files(be.root):
@@ -1123,7 +1224,6 @@ def api_facefind_start(p):
             continue
         native.append(be.native(fp))
 
-    threshold = float(p.get("threshold") or 0.40)
     job_id = uuid.uuid4().hex
     job = {"done": 0, "total": len(native), "phase": "starting", "clusters": 0,
            "finished": False, "error": None, "result": None, "cancel": False,
@@ -1168,6 +1268,128 @@ def api_facefind_start(p):
 
     threading.Thread(target=run, daemon=True).start()
     return {"jobId": job_id}
+
+
+def api_facefind_start(p):
+    if (p.get("backend") or "local").lower() != "local":
+        raise ValueError("FaceFind works on local folders only.")
+    from . import vision
+    missing = vision.check_deps()
+    if missing:
+        raise ValueError("Missing packages: " + ", ".join(missing))
+    if not vision.cluster_api_available():
+        raise ValueError("Your OpenCV build lacks the face modules needed "
+                         "(needs opencv-contrib-python).")
+    selfie = p.get("selfie")
+    if not selfie or not os.path.isfile(selfie):
+        raise ValueError("Please add a clear selfie photo first.")
+    be = _build_backend(p)
+    return _start_facefind_job(be.root, selfie, float(p.get("threshold") or 0.40),
+                               bool(p.get("recursive", True)))
+
+
+# ==========================================================================
+# Guest sharing endpoints
+# ==========================================================================
+def api_share_enable(p):
+    root = p.get("root")
+    if not root or not os.path.isdir(root):
+        raise ValueError("Choose the event folder to share first.")
+    from . import vision
+    if vision.check_deps() or not vision.cluster_api_available():
+        raise ValueError("Face matching needs the AI tools installed "
+                         "(open Photo AI once and install AI support).")
+    _register_root(root)
+    online = bool(p.get("online"))
+    public_url = public_host = None
+    if online:
+        from . import tunnel
+        info = tunnel.start(_SERVER_PORT)     # raises on failure
+        public_url = info["url"]
+        public_host = info["host"]
+    token = uuid.uuid4().hex[:10]
+    with _SHARE_LOCK:
+        _SHARE.update({"enabled": True, "root": os.path.abspath(root),
+                       "event": (p.get("event") or "Our Event").strip()[:80],
+                       "token": token, "guests": [], "online": online,
+                       "public_url": public_url, "public_host": public_host})
+        event = _SHARE["event"]
+    ips = _lan_ips()
+    return {"ok": True, "token": token, "event": event, "port": _SERVER_PORT,
+            "ips": ips, "urls": _share_urls(token), "online": online,
+            "public_url": public_url}
+
+
+def api_share_disable(_p):
+    with _SHARE_LOCK:
+        was_online = _SHARE.get("online")
+        _SHARE.update({"enabled": False, "root": None, "event": "",
+                       "token": None, "guests": [], "online": False,
+                       "public_url": None, "public_host": None})
+    if was_online:
+        try:
+            from . import tunnel
+            tunnel.stop()
+        except Exception:
+            pass
+    return {"ok": True, "enabled": False}
+
+
+def api_share_status(p):
+    token = p.get("token")
+    with _SHARE_LOCK:
+        enabled = _SHARE["enabled"]
+        event = _SHARE["event"]
+        cur = _SHARE["token"]
+        online = _SHARE.get("online")
+        public_url = _SHARE.get("public_url")
+    if not enabled:
+        return {"enabled": False}
+    if token is not None:                     # a guest checking their link
+        ok = (token == cur)
+        return {"enabled": ok, "event": event if ok else ""}
+    ips = _lan_ips()                          # host asking for the link
+    return {"enabled": True, "event": event, "token": cur,
+            "port": _SERVER_PORT, "ips": ips, "urls": _share_urls(cur),
+            "online": bool(online), "public_url": public_url}
+
+
+def api_share_find_start(p):
+    token = p.get("token")
+    with _SHARE_LOCK:
+        if not _SHARE["enabled"] or token != _SHARE["token"]:
+            raise ValueError("This photo link is no longer active.")
+        root = _SHARE["root"]
+    selfie = p.get("selfie")
+    if not selfie or not os.path.isfile(selfie):
+        raise ValueError("Please add a clear selfie first.")
+    r = _start_facefind_job(root, selfie, float(p.get("threshold") or 0.40),
+                            True)
+    name = (p.get("name") or "").strip()[:60] or "Guest"
+    with _SHARE_LOCK:
+        _SHARE.setdefault("guests", []).append(
+            {"name": name, "ts": int(time.time()), "job": r["jobId"]})
+        _SHARE["guests"] = _SHARE["guests"][-200:]
+    return r
+
+
+def api_share_guests(_p):
+    """Host-only: who has searched, and how many photos each found."""
+    with _SHARE_LOCK:
+        guests = list(_SHARE.get("guests") or [])
+    out = []
+    for g in guests:
+        cnt = None
+        done = False
+        with _JOBS_LOCK:
+            job = _JOBS.get(g.get("job"))
+        if job and job.get("finished"):
+            done = True
+            cnt = (job.get("result") or {}).get("count")
+        out.append({"name": g["name"], "ts": g["ts"],
+                    "count": cnt, "done": done})
+    out.reverse()
+    return {"guests": out, "count": len(out)}
 
 
 # ==========================================================================
@@ -1950,6 +2172,11 @@ ROUTES = {
     "/api/cluster/cancel": api_cluster_cancel,
     "/api/facefind/selfie": api_facefind_selfie,
     "/api/facefind/start": api_facefind_start,
+    "/api/share/enable": api_share_enable,
+    "/api/share/disable": api_share_disable,
+    "/api/share/status": api_share_status,
+    "/api/share/find/start": api_share_find_start,
+    "/api/share/guests": api_share_guests,
 }
 
 
@@ -1962,9 +2189,24 @@ class Handler(BaseHTTPRequestHandler):
     # Only accept requests addressed to the local loopback host.  This blocks
     # DNS-rebinding attacks where a malicious website resolves its domain to
     # 127.0.0.1 and tries to drive this file-moving API from the browser.
-    def _host_ok(self):
+    # When guest-sharing is ON, LAN (private-IP) visitors are also allowed —
+    # but only for the small guest whitelist (see do_POST / do_GET).
+    def _is_local_req(self):
         host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
         return host in {"127.0.0.1", "localhost", "::1"}
+
+    def _host_ok(self):
+        if self._is_local_req():
+            return True
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
+        with _SHARE_LOCK:
+            shared = _SHARE["enabled"]
+            pub_host = _SHARE.get("public_host") if _SHARE.get("online") else None
+        if not shared:
+            return False
+        if pub_host and host == pub_host:      # our own online tunnel
+            return True
+        return _is_private_host(host)
 
     def log_message(self, *_):  # keep the console clean
         pass
@@ -1993,11 +2235,24 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 self._send(500, b"UI file missing", "text/plain")
             return
+        if path == "/qrcode.min.js":
+            try:
+                with open(_resource("qrcode.min.js"), "rb") as f:
+                    self._send(200, f.read(), "application/javascript; charset=utf-8")
+            except OSError:
+                self._send(404, b"", "text/plain")
+            return
         if path == "/api/health":
             self._send(200, api_health({}))
             return
         if path == "/api/thumb":
             self._serve_thumb()
+            return
+        if path == "/api/download":
+            self._serve_download()
+            return
+        if path == "/api/download/zip":
+            self._serve_zip()
             return
         self._send(404, {"error": "Not found"})
 
@@ -2009,7 +2264,8 @@ class Handler(BaseHTTPRequestHandler):
             size = max(64, min(1400, int((qs.get("size") or ["200"])[0])))
         except ValueError:
             size = 200
-        if not fp or not _under_allowed(fp) or not os.path.isfile(fp):
+        if not fp or not _guest_can_access(fp, self._is_local_req()) \
+                or not os.path.isfile(fp):
             self._send(404, {"error": "Not found"})
             return
         ext = fp.rsplit(".", 1)[-1].lower() if "." in fp else ""
@@ -2039,11 +2295,80 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             self._send(404, {"error": "Cannot render"})
 
+    def _serve_download(self):
+        from urllib.parse import urlparse, parse_qs, unquote
+        qs = parse_qs(urlparse(self.path).query)
+        fp = unquote((qs.get("path") or [""])[0])
+        if not fp or not _guest_can_access(fp, self._is_local_req()) \
+                or not os.path.isfile(fp):
+            self._send(404, {"error": "Not found"})
+            return
+        try:
+            with open(fp, "rb") as f:
+                data = f.read()
+            name = os.path.basename(fp).replace('"', "")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Disposition",
+                             f'attachment; filename="{name}"')
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except OSError:
+            self._send(404, {"error": "Cannot read"})
+
+    def _serve_zip(self):
+        """Zip up all matches from a finished FaceFind job (Download all)."""
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        job = (qs.get("job") or [""])[0]
+        token = (qs.get("token") or [""])[0]
+        local = self._is_local_req()
+        if not local:
+            with _SHARE_LOCK:
+                ok = _SHARE["enabled"] and token == _SHARE["token"]
+            if not ok:
+                self._send(403, {"error": "link inactive"})
+                return
+        with _SHARE_LOCK:
+            event = _SHARE["event"] or "photos"
+        with _JOBS_LOCK:
+            j = _JOBS.get(job)
+        matches = ((j or {}).get("result") or {}).get("matches") or []
+        import io
+        import zipfile
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+            seen = set()
+            for m in matches:
+                fp = m.get("path")
+                if fp and _guest_can_access(fp, local) and os.path.isfile(fp):
+                    arc = os.path.basename(fp)
+                    if arc in seen:
+                        arc = f"{len(seen)}_{arc}"
+                    seen.add(arc)
+                    try:
+                        z.write(fp, arc)
+                    except OSError:
+                        pass
+        data = buf.getvalue()
+        safe = "".join(c for c in event if c.isalnum() or c in " _-").strip() or "photos"
+        self.send_response(200)
+        self.send_header("Content-Type", "application/zip")
+        self.send_header("Content-Disposition",
+                         f'attachment; filename="{safe}.zip"')
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_POST(self):
         if not self._host_ok():
             self._send(403, {"error": "Forbidden"})
             return
         path = self.path.split("?", 1)[0]
+        if not self._is_local_req() and path not in _GUEST_ROUTES:
+            self._send(403, {"error": "Not available"})
+            return
         fn = ROUTES.get(path)
         if not fn:
             self._send(404, {"error": "Not found"})
@@ -2077,9 +2402,15 @@ def _find_free_port(host, start, tries=20):
 
 
 def serve(host="127.0.0.1", port=8765, open_browser=True):
-    port = _find_free_port(host, port)
-    httpd = ThreadingHTTPServer((host, port), Handler)
-    url = f"http://{host}:{port}/"
+    global _SERVER_PORT
+    # Bind on all interfaces so the guest-sharing portal can be reached from
+    # phones on the same Wi-Fi.  Access stays loopback-only until the host
+    # explicitly turns sharing on (see Handler._host_ok).
+    bind_host = "0.0.0.0"
+    port = _find_free_port(bind_host, port)
+    _SERVER_PORT = port
+    httpd = ThreadingHTTPServer((bind_host, port), Handler)
+    url = f"http://127.0.0.1:{port}/"
     print("\n  phorg UI is running.")
     print(f"  Open in your browser:  {url}")
     print("  Keep this window open while you use the app.")
@@ -2091,4 +2422,9 @@ def serve(host="127.0.0.1", port=8765, open_browser=True):
     except KeyboardInterrupt:
         print("\n  Stopping phorg UI ...")
     finally:
+        try:
+            from . import tunnel
+            tunnel.stop()
+        except Exception:
+            pass
         httpd.server_close()
