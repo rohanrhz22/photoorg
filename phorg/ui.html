@@ -27,7 +27,8 @@ button{font:inherit;cursor:pointer}
 
 /* layout */
 .app{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
-.side{border-right:1px solid var(--line);padding:20px 16px;position:sticky;top:0;height:100vh;
+body.guest .app{grid-template-columns:1fr}
+body.guest .side{display:none}.side{border-right:1px solid var(--line);padding:20px 16px;position:sticky;top:0;height:100vh;
   display:flex;flex-direction:column;gap:6px;background:rgba(10,14,24,.55);backdrop-filter:blur(6px)}
 .brand{display:flex;align-items:center;gap:11px;margin:2px 6px 20px}
 .logo{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:20px;
@@ -333,15 +334,19 @@ body.light .btn.ghost{background:#e3ecfb}
 <div id="dropOverlay"><div class="dropinner">📂<div>Drop a folder to connect</div></div></div>
 <div id="toasts"></div>
 
+<script src="/qrcode.min.js"></script>
 <script>
 // ---------------------------------------------------------------- state
 const S = {
   connected:false, backend:"local", root:"", adb:"", device:"",
   depth:3, recursive:false, sort:false, include_hidden:false, protect:"",
+  toTrash:false,
   scan:null, lastPlan:null, activeOp:null, page:"connect",
   photoCats:{blurry:true,single:true,couple:true,group:true,scenery:true,people:false,
-    duplicates:true,similar:false,screenshot:true,document:true,best:false,video:true},
+    duplicates:true,similar:false,screenshot:true,document:true,best:false,video:true,
+    animals:false,food:false,nature:false,plants:false,vehicles:false},
   people:[{name:"Bride",samples:""},{name:"Groom",samples:""}], photoJob:null,
+  peopleGroups:[], groupsOn:false, socialGroups:[],
   granularity:"month", useExif:true,
   blurThreshold:50, personThreshold:78, photoItems:[], photoTest:false,
   photoSel:new Set(), clusterJob:null, clusters:[], clusterSel:new Set(),
@@ -393,7 +398,16 @@ const esc = s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;
 function fmtKb(kb){kb=+kb||0;if(kb>=1048576)return (kb/1048576).toFixed(2)+" GB";
   if(kb>=1024)return (kb/1024).toFixed(1)+" MB";return kb+" KB";}
 function num(n){return (+n||0).toLocaleString();}
-
+// Render a scannable QR code into `host`. Works fully offline (vendored lib).
+function renderQR(host,text,cell=5,margin=2){
+  if(!host)return;
+  if(typeof qrcode==="undefined"){host.innerHTML=`<div class="subhint">QR unavailable — use the link above.</div>`;return;}
+  try{
+    const q=qrcode(0,"M");q.addData(text);q.make();
+    host.innerHTML=`<div style="display:inline-block;background:#fff;padding:10px;border-radius:12px">${q.createImgTag(cell,margin)}</div>`;
+    const img=host.querySelector("img");if(img){img.style.display="block";img.alt="QR code";}
+  }catch(e){host.innerHTML=`<div class="subhint">Couldn't build QR — use the link above.</div>`;}
+}
 async function api(path,body){
   const r = await fetch("/api/"+path,{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify(body||{})});
@@ -423,6 +437,7 @@ function setConn(on){
   $("#connState").textContent=on?(S.backend==="adb"?"Phone connected":"Folder ready"):"Not connected";
   $("#connRoot").textContent=on?S.root:"Choose a source to begin";
   document.querySelectorAll('[data-need="conn"]').forEach(b=>b.disabled=!on);
+  if(typeof applyTabPrefs==="function")applyTabPrefs();
 }
 function go(page){
   S.page=page;
@@ -785,18 +800,21 @@ function pageOrganize(m){
   $("#rulesBtn").onclick=openRulesEditor;
   $("#recipesBtn").onclick=openRecipes;
   const grid=$("#opGrid");
+  const opp=loadOpPrefs();
   Object.entries(OPS).forEach(([key,o])=>{
+    if(opp[key]===false)return;
     const c=el("div","op");
+    c.dataset.op=key;
     c.innerHTML=`<div class="oic" style="background:${o.color}22;color:${o.color}">${o.icon}</div>
       <h3>${o.title}</h3><p>${o.desc}</p><div class="go">Configure →</div>`;
     c.onclick=()=>selectOp(key);grid.appendChild(c);
   });
-  if(S.activeOp&&OPS[S.activeOp])selectOp(S.activeOp);
+  if(S.activeOp&&OPS[S.activeOp]&&opp[S.activeOp]!==false)selectOp(S.activeOp);
 }
 function selectOp(key){
   S.activeOp=key;S.lastPlan=null;
-  document.querySelectorAll(".op").forEach((c,i)=>
-    c.classList.toggle("selected",Object.keys(OPS)[i]===key));
+  document.querySelectorAll(".op").forEach(c=>
+    c.classList.toggle("selected",c.dataset.op===key));
   const o=OPS[key];const panel=$("#opPanel");
   if(o.custom){selectPhotoOp(o,panel);return;}
   const opts=o.opt||[];
@@ -807,6 +825,8 @@ function selectOp(key){
       <span class="desc"> — skips Android, MIUI, hidden &amp; app-data folders (recommended)</span></span></label>
     ${opts.includes("recursive")?toggleHtml("recursive","Include sub-folders","Recurse into nested folders"):""}
     ${opts.includes("sort")?toggleHtml("sort","Sort into type folders","Also file corrected items by type"):""}
+    ${key==="junk"?`<label class="toggle" title="Send junk straight to the Recycle Bin instead of a review folder — you can still restore it from the Recycle Bin"><input type="checkbox" id="trashChk" ${S.toTrash?"checked":""}/>
+      <span class="tk"></span><span>🗑️ Send to Recycle Bin<span class="desc"> — instead of a review folder (recoverable from the Recycle Bin)</span></span></label>`:""}
     ${key!=="empties"?`<label class="toggle" title="Leave originals untouched and place sorted copies instead"><input type="checkbox" id="copyChk" ${S.copyMode?"checked":""}/>
       <span class="tk"></span><span>📋 Copy instead of move<span class="desc"> — keep originals, place sorted copies</span></span></label>`:""}
     ${o.choices?`<label class="toggle"><input type="checkbox" id="exifChk" ${S.useExif?"checked":""}/>
@@ -842,12 +862,12 @@ function selectOp(key){
       ${renameHtml}
       <label class="fld">Extra protected folders (comma-separated)</label>
       <input type="text" id="protectIn" placeholder="e.g. Backups, Work" value="${esc(S.protect)}"/>
-      <div class="row" style="margin-top:12px;gap:8px;align-items:center">
+      ${presetsVisible()?`<div class="row" style="margin-top:12px;gap:8px;align-items:center">
         <span style="color:var(--mut);font-size:12.5px">💾 Presets</span>
         <select id="orgPresetSel" style="flex:1">${orgPresetOptions()}</select>
         <button class="btn ghost sm" id="orgPresetApply">Apply</button>
         <button class="btn sm" id="orgPresetSave">Save…</button>
-      </div>
+      </div>`:""}
       <div class="btn-row">
         <button class="btn" id="previewBtn">👁️ Preview plan</button>
         ${o.dupe?`<button class="btn ghost" id="dupeReviewBtn">🖼️ Review duplicates visually</button>`:""}
@@ -873,12 +893,13 @@ function selectOp(key){
     loadRenameSamples();
   }
   if($("#copyChk"))$("#copyChk").onchange=e=>S.copyMode=e.target.checked;
+  if($("#trashChk"))$("#trashChk").onchange=e=>S.toTrash=e.target.checked;
   $("#protectIn").oninput=e=>S.protect=e.target.value;
-  $("#orgPresetSave").onclick=()=>{
+  if($("#orgPresetSave"))$("#orgPresetSave").onclick=()=>{
     const name=(prompt("Name this preset (e.g. “Deep clean”):")||"").trim();if(!name)return;
     const p=loadPresets();p[name]=currentConfig();savePresetStore(p);
     toast("Preset “"+name+"” saved","good");selectOp(S.activeOp);};
-  $("#orgPresetApply").onclick=()=>{
+  if($("#orgPresetApply"))$("#orgPresetApply").onclick=()=>{
     const name=$("#orgPresetSel").value;if(!name){toast("Pick a preset first","bad");return;}
     applyConfig(loadPresets()[name]);toast("Preset applied","good");selectOp(S.activeOp);};
   $("#previewBtn").onclick=doPreview;
@@ -930,7 +951,7 @@ async function doPreview(e){
       command:OPS[S.activeOp].cmd,recursive:S.recursive,sort:S.sort,
       granularity:S.granularity,use_exif:S.useExif,copy:S.copyMode,
       template:S.renameTemplate,start:S.renameStart,pad:S.renamePad,only_ext:S.renameExt,
-      rules:loadRules(),
+      rules:loadRules(),to_trash:S.toTrash,
       include_hidden:S.include_hidden,protect:S.protect});
     S.lastPlan=d;renderPlan(d);
   }catch(err){toast(err.message,"bad");}finally{busy(btn,false);}
@@ -1172,6 +1193,9 @@ function renderPlan(d){
       <span class="arw">→</span><span class="dst" title="${esc(o.b)}">${esc(o.b.replace(S.root,"").replace(/^[\\/]+/,""))}</span></div>`;
     if(o.kind==="mkdir")return `<div class="oprow"><span class="tag mkdir">MKDIR</span>
       <span class="dst">${esc(o.a.replace(S.root,"").replace(/^[\\/]+/,""))}</span></div>`;
+    if(o.kind==="trash")return `<div class="oprow"><span class="tag rmdir">TRASH</span>
+      <span class="pth" title="${esc(o.a)}">${esc(base(o.a))}</span>
+      <span class="arw">→</span><span class="dst">🗑️ Recycle Bin</span></div>`;
     return `<div class="oprow"><span class="tag rmdir">RMDIR</span>
       <span class="pth" title="${esc(o.a)}">${esc(o.a.replace(S.root,"").replace(/^[\\/]+/,""))}</span></div>`;
   }).join("");
@@ -1190,6 +1214,7 @@ function renderPlan(d){
       <div class="ph">
         <div class="chips">
           ${c.moves?`<span class="chip">📦 <b>${num(c.moves)}</b> moves</span>`:""}
+          ${c.trash?`<span class="chip">🗑️ <b>${num(c.trash)}</b> to Recycle Bin</span>`:""}
           ${c.mkdirs?`<span class="chip">📁 <b>${num(c.mkdirs)}</b> new folders</span>`:""}
           ${c.rmdirs?`<span class="chip">🗑️ <b>${num(c.rmdirs)}</b> removals</span>`:""}
         </div>
@@ -1377,18 +1402,43 @@ async function doPullPhotos(e){
   }catch(err){toast(err.message,"bad");busy(btn,false);}
 }
 const PHOTO_CATS=[
-  ["blurry","🌀 Blurry / Shaken","Out-of-focus or motion-blurred shots"],
-  ["single","🧍 Single portrait","Photos with exactly one person"],
-  ["couple","💑 Couple","Photos with two people"],
-  ["group","👥 Group photo","Three or more people"],
-  ["scenery","🏞️ Scenery / no people","Decor, venue, objects"],
-  ["screenshot","📱 Screenshots","Screen captures (by name &amp; shape)"],
-  ["document","📄 Documents / scans","Photos of paper, receipts, whiteboards"],
-  ["best","⭐ Best shots","Sharp, well-exposed keepers (a Best-of album)"],
-  ["video","🎬 Videos","Move video files into a Videos folder"],
-  ["duplicates","🔁 Duplicates","Near-identical burst shots (keeps the best)"],
-  ["similar","🪞 Similar shots","Same moment, seconds apart (keeps the best)"],
+  ["blurry","🌀 Blurry / Shaken","Out-of-focus or motion-blurred shots","wedding"],
+  ["single","🧍 Single portrait","Photos with exactly one person","wedding"],
+  ["couple","💑 Couple","Photos with two people","wedding"],
+  ["group","👥 Group photo","Three or more people","wedding"],
+  ["best","⭐ Best shots","Sharp, well-exposed keepers (a Best-of album)","wedding"],
+  ["duplicates","🔁 Duplicates","Near-identical burst shots (keeps the best)","wedding"],
+  ["similar","🪞 Similar shots","Same moment, seconds apart (keeps the best)","wedding"],
+  ["scenery","🏞️ Scenery / no people","Decor, venue, objects","wedding"],
+  ["animals","🐾 Animals (AI)","Pets &amp; wildlife — needs a one-time model download","other"],
+  ["food","🍽️ Food (AI)","Meals, dishes &amp; produce","other"],
+  ["nature","🏔️ Nature &amp; scenery (AI)","Landscapes — mountains, sea, sky","other"],
+  ["plants","🌸 Plants &amp; flowers (AI)","Flowers, foliage &amp; fungi","other"],
+  ["vehicles","🚗 Vehicles (AI)","Cars, bikes, boats, planes","other"],
+  ["screenshot","📱 Screenshots","Screen captures (by name &amp; shape)","other"],
+  ["document","📄 Documents / scans","Photos of paper, receipts, whiteboards","other"],
+  ["video","🎬 Videos","Move video files into a Videos folder","other"],
 ];
+function photoCatRows(group){
+  return PHOTO_CATS.filter(c=>c[3]===group).map(([k,label,desc])=>
+    `<label class="toggle">
+      <input type="checkbox" data-cat="${k}" ${S.photoCats[k]?"checked":""}/>
+      <span class="tk"></span><span>${label}<span class="desc"> — ${desc}</span></span></label>`).join("");
+}
+function catGroupKeys(group){return PHOTO_CATS.filter(c=>c[3]===group).map(c=>c[0]);}
+function allCatsChecked(group){return catGroupKeys(group).every(k=>S.photoCats[k]);}
+function refreshGroupBtns(){
+  ["wedding","other"].forEach(g=>{
+    const sw=document.querySelector(`input[data-selgroup="${g}"]`);
+    if(sw)sw.checked=allCatsChecked(g);
+  });
+}
+function bindCatToggles(scope){
+  (scope||document).querySelectorAll("input[data-cat]").forEach(t=>t.onchange=e=>{
+    S.photoCats[e.target.dataset.cat]=e.target.checked;
+    if(e.target.dataset.cat==="people")renderPeopleBox();
+    refreshGroupBtns();});
+}
 async function selectPhotoOp(o,panel){
   panel.innerHTML=`<div id="photoBody" style="margin-top:8px"><div class="card"><div class="empty"><span class="spin"></span> Checking AI support…</div></div></div>`;
   let st;try{st=await api("vision/status",{});}catch(err){
@@ -1428,30 +1478,29 @@ function renderPhotoInstall(st){
 function renderPhotoOptions(st){
   S._visionSt=st;
   const body=$("#photoBody");
-  const catRows=PHOTO_CATS.map(([k,label,desc])=>{
-    return `<label class="toggle">
-      <input type="checkbox" data-cat="${k}" ${S.photoCats[k]?"checked":""}/>
-      <span class="tk"></span><span>${label}<span class="desc"> — ${desc}</span></span></label>`;
-  }).join("");
   const peopleDisabled=!st.bride_supported;
-  const presets=loadPresets();const names=Object.keys(presets);
   body.innerHTML=`
     <div class="callout info">🔒 Runs entirely on your PC. Images are analysed by content and
       <b>moved</b> into category folders — never deleted. You'll preview everything before applying.</div>
-    <div class="presetbar">
-      <span style="color:var(--mut);font-size:12.5px">💾 Preset</span>
-      <select id="presetSel" style="flex:1;min-width:130px">
-        <option value="">${names.length?"— choose a preset —":"— none saved yet —"}</option>
-        ${names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("")}
-      </select>
-      <button class="btn ghost sm" id="presetApply">Apply</button>
-      <button class="btn ghost sm" id="presetDel" title="Delete preset">🗑️</button>
-      <button class="btn sm" id="presetSave">Save current…</button>
-    </div>
     <div class="card" style="margin-top:14px">
       <h4 class="cardh">🎯 Categories to sort into</h4>
-      <div class="opts">${catRows}</div>
-      <label class="toggle" style="margin-top:10px"><input type="checkbox" id="pRecursive" ${S.recursive?"checked":""}/>
+      <div style="display:flex;align-items:center;gap:10px;margin:8px 0 6px">
+        <label class="toggle" style="margin:0;width:auto" title="Turn all Wedding categories on/off">
+          <input type="checkbox" data-selgroup="wedding" ${allCatsChecked("wedding")?"checked":""}/>
+          <span class="tk"></span></label>
+        <span class="grouplbl" style="color:var(--mut);font-size:11.5px;font-weight:600;letter-spacing:.04em">💍 WEDDING</span>
+        <button class="btn ghost sm" data-collapse="wedding" style="padding:2px 9px;font-size:13px;line-height:1;color:var(--txt);border:1px solid var(--bd);border-radius:6px" title="Show / hide">▾</button>
+      </div>
+      <div class="opts" id="catOptsWedding">${photoCatRows("wedding")}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin:14px 0 6px;border-top:1px solid var(--bd);padding-top:12px">
+        <label class="toggle" style="margin:0;width:auto" title="Turn all Other categories on/off">
+          <input type="checkbox" data-selgroup="other" ${allCatsChecked("other")?"checked":""}/>
+          <span class="tk"></span></label>
+        <span class="grouplbl" style="color:var(--mut);font-size:11.5px;font-weight:600;letter-spacing:.04em">🗂️ OTHER</span>
+        <button class="btn ghost sm" data-collapse="other" style="padding:2px 9px;font-size:13px;line-height:1;color:var(--txt);border:1px solid var(--bd);border-radius:6px" title="Show / hide">▾</button>
+      </div>
+      <div class="opts" id="catOptsOther">${photoCatRows("other")}</div>
+      <label class="toggle" style="margin-top:12px"><input type="checkbox" id="pRecursive" ${S.recursive?"checked":""}/>
         <span class="tk"></span><span>Include sub-folders<span class="desc"> — scan nested folders too</span></span></label>
     </div>
     <div class="card" style="margin-top:14px">
@@ -1463,6 +1512,17 @@ function renderPhotoOptions(st){
       <div class="orline">— or, without any samples —</div>
       <button class="btn ghost" id="autoGroupBtn" ${peopleDisabled?"disabled":""} style="width:100%">🪄 Auto-group everyone by face</button>
       <div class="subhint">Finds recurring faces automatically and lets you name each person. First use downloads a small (~37 MB) face model.</div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h4 class="cardh">👨‍👩‍👧‍👦 People groups</h4>
+      <label class="toggle" ${peopleDisabled?'style="opacity:.5"':''}>
+        <input type="checkbox" id="groupsChk" ${S.groupsOn&&!peopleDisabled?"checked":""} ${peopleDisabled?"disabled":""}/>
+        <span class="tk"></span><span>Sort photos into groups like Family, School, College, Home<span class="desc"> — any member's face files the photo into that group${peopleDisabled?" (needs opencv-contrib)":""}</span></span></label>
+      <div id="groupsBox"></div>
+      <div class="orline">— or discover automatically —</div>
+      <button class="btn ghost" id="socialBtn" ${peopleDisabled?"disabled":""} style="width:100%">🔎 Auto-discover social groups</button>
+      <div class="subhint">Finds circles of people who appear together (family, friend groups, a class…) so you just name each once. Runs on your PC; first use downloads a small (~37 MB) face model.</div>
+      <div id="socialOut"></div>
     </div>
     <details class="advbox" style="margin-top:14px"><summary>Fine-tuning (blur &amp; face-match)</summary>
     <div class="slider">
@@ -1484,25 +1544,37 @@ function renderPhotoOptions(st){
     <div id="planOut"></div>`;
   body.querySelectorAll("input[data-cat]").forEach(t=>t.onchange=e=>{
     S.photoCats[e.target.dataset.cat]=e.target.checked;
-    if(e.target.dataset.cat==="people")renderPeopleBox();});
+    if(e.target.dataset.cat==="people")renderPeopleBox();
+    refreshGroupBtns();});
+  body.querySelectorAll("input[data-selgroup]").forEach(sw=>sw.onchange=e=>{
+    const g=e.target.dataset.selgroup, on=e.target.checked;
+    catGroupKeys(g).forEach(k=>S.photoCats[k]=on);
+    const cont=$(g==="wedding"?"#catOptsWedding":"#catOptsOther");
+    cont.innerHTML=photoCatRows(g);bindCatToggles(cont);});
+  body.querySelectorAll("[data-collapse]").forEach(btn=>btn.onclick=()=>{
+    const g=btn.dataset.collapse;
+    const cont=$(g==="wedding"?"#catOptsWedding":"#catOptsOther");
+    const hidden=cont.style.display==="none";
+    cont.style.display=hidden?"":"none";
+    btn.textContent=hidden?"▾":"▴";});
   $("#pRecursive").onchange=e=>S.recursive=e.target.checked;
   $("#blurRange").oninput=e=>{S.blurThreshold=+e.target.value;$("#blurVal").textContent=S.blurThreshold;};
   $("#strictRange").oninput=e=>{S.personThreshold=+e.target.value;$("#strictVal").textContent=strictnessLabel(S.personThreshold);};
   $("#analyzeBtn").onclick=e=>startAnalyze(e,false);
   $("#testBtn").onclick=e=>startAnalyze(e,true);
   const ag=$("#autoGroupBtn");if(ag)ag.onclick=doAutoGroup;
-  $("#presetSave").onclick=savePresetPrompt;
-  $("#presetApply").onclick=()=>{const n=$("#presetSel").value;if(!n){toast("Pick a preset first","bad");return;}
-    applyConfig(loadPresets()[n]);toast("Preset “"+n+"” applied","good");renderPhotoOptions(S._visionSt);};
-  $("#presetDel").onclick=()=>{const n=$("#presetSel").value;if(!n){toast("Pick a preset to delete","bad");return;}
-    const p=loadPresets();delete p[n];savePresetStore(p);toast("Preset deleted","info");renderPhotoOptions(S._visionSt);};
   renderPeopleBox();
+  const gchk=$("#groupsChk");
+  if(gchk)gchk.onchange=e=>{S.groupsOn=e.target.checked;renderGroupsBox();};
+  renderGroupsBox();
+  const sb=$("#socialBtn");if(sb)sb.onclick=discoverSocialGroups;
 }
 // -- presets (saved in the browser) -------------------------------------
 function loadPresets(){try{return JSON.parse(localStorage.getItem("phorg-presets")||"{}");}catch(e){return {};}}
 function savePresetStore(p){try{localStorage.setItem("phorg-presets",JSON.stringify(p));}catch(e){}}
 function currentConfig(){
   return {photoCats:{...S.photoCats}, people:S.people.map(p=>({...p})),
+    groupsOn:S.groupsOn, peopleGroups:S.peopleGroups.map(g=>({...g})),
     blurThreshold:S.blurThreshold, personThreshold:S.personThreshold,
     recursive:S.recursive, include_hidden:S.include_hidden, protect:S.protect,
     granularity:S.granularity, backend:S.backend};
@@ -1511,18 +1583,14 @@ function applyConfig(c){
   if(!c)return;
   if(c.photoCats)S.photoCats={...S.photoCats,...c.photoCats};
   if(c.people)S.people=c.people.map(p=>({...p}));
+  if(c.peopleGroups)S.peopleGroups=c.peopleGroups.map(g=>({...g}));
+  if(c.groupsOn!=null)S.groupsOn=c.groupsOn;
   if(c.blurThreshold!=null)S.blurThreshold=c.blurThreshold;
   if(c.personThreshold!=null)S.personThreshold=c.personThreshold;
   if(c.recursive!=null)S.recursive=c.recursive;
   if(c.include_hidden!=null)S.include_hidden=c.include_hidden;
   if(c.protect!=null)S.protect=c.protect;
   if(c.granularity)S.granularity=c.granularity;
-}
-function savePresetPrompt(){
-  const name=(prompt("Name this preset (e.g. “Wedding sort”):")||"").trim();
-  if(!name)return;
-  const p=loadPresets();p[name]=currentConfig();savePresetStore(p);
-  toast("Preset “"+name+"” saved","good");renderPhotoOptions(S._visionSt);
 }
 function strictnessLabel(v){
   if(v<=60)return "Strict";
@@ -1556,18 +1624,103 @@ function renderPeopleBox(){
     S.people.splice(+b.dataset.del,1);renderPeopleBox();});
   $("#addPerson").onclick=()=>{S.people.push({name:"",samples:""});renderPeopleBox();};
 }
+function renderGroupsBox(){
+  const box=$("#groupsBox");if(!box)return;
+  if(!S.groupsOn){box.innerHTML="";return;}
+  if(!S.peopleGroups.length)S.peopleGroups.push({name:"Family",samples:""});
+  const rows=S.peopleGroups.map((g,i)=>`
+    <div class="row" style="margin-top:8px">
+      <input type="text" data-gi="${i}" data-gf="name" placeholder="Group (e.g. Family)"
+        value="${esc(g.name)}" style="max-width:150px;flex:none"/>
+      <input type="text" data-gi="${i}" data-gf="samples" placeholder="Folder with face photos of this group's members"
+        value="${esc(g.samples)}"/>
+      <button class="btn ghost sm" data-gbrowse="${i}" title="Browse">📂</button>
+      <button class="btn ghost sm" data-gdel="${i}" title="Remove">✕</button>
+    </div>`).join("");
+  box.innerHTML=`
+    <div style="color:var(--mut);font-size:12px;margin:2px 0 4px">For each group, pick a folder holding clear
+      photos of its members (one or many people). Every photo containing any of them — solo or in a crowd —
+      is filed into a folder named after the group.</div>
+    ${rows}
+    <div style="margin-top:10px"><button class="btn ghost sm" id="addGroup">＋ Add group</button></div>`;
+  box.querySelectorAll("input[data-gi]").forEach(inp=>inp.oninput=e=>{
+    const i=+e.target.dataset.gi,f=e.target.dataset.gf;S.peopleGroups[i][f]=e.target.value;});
+  box.querySelectorAll("[data-gbrowse]").forEach(b=>b.onclick=()=>{
+    const i=+b.dataset.gbrowse;
+    openBrowser(pth=>{S.peopleGroups[i].samples=pth;renderGroupsBox();},S.root);});
+  box.querySelectorAll("[data-gdel]").forEach(b=>b.onclick=()=>{
+    S.peopleGroups.splice(+b.dataset.gdel,1);renderGroupsBox();});
+  $("#addGroup").onclick=()=>{S.peopleGroups.push({name:"",samples:""});renderGroupsBox();};
+}
+async function discoverSocialGroups(e){
+  const btn=e.target;busy(btn,true,"Discovering…");
+  const out=$("#socialOut");out.innerHTML="";
+  try{
+    const d=await runApplyJob("social/start",{backend:S.backend,root:S.root,recursive:S.recursive,_verb:"Analysed"},out);
+    if(!d||!d.groups.length){out.innerHTML=`<div class="callout warn" style="margin-top:12px">No social groups found — need several photos that share recognizable faces.</div>`;busy(btn,false);return;}
+    S.socialGroups=d.groups.map(g=>({...g,name:""}));
+    renderSocialGroups(d);
+  }catch(err){toast(err.message,"bad");}finally{busy(btn,false);}
+}
+function renderSocialGroups(d){
+  const out=$("#socialOut");
+  let html=`<div class="callout safe" style="margin-top:12px">✅ Found <b>${num(d.count)}</b> social group(s) across ${num(d.photos)} photo(s).
+    Name each circle — e.g. Family, College, School (blank = skip) — then file.</div>
+    <div class="clustergrid">`;
+  S.socialGroups.forEach((g,i)=>{
+    const src="/api/thumb?size=300&path="+encodeURIComponent(g.rep);
+    html+=`<div class="clustercard">
+      <img loading="lazy" src="${src}" data-sg-open="${i}" alt="" title="Preview all photos"/>
+      <div class="cc">👥 ${num(g.count)} photo(s) · ${num(g.people)} people</div>
+      <button class="btn ghost sm" data-sg-open="${i}" style="width:100%;margin-bottom:6px">🔍 Preview all ${num(g.count)}</button>
+      <input type="text" data-sg="${i}" placeholder="Name (e.g. Family) — blank = skip" value="${esc(g.name)}"/>
+    </div>`;
+  });
+  html+=`</div>
+    <div class="callout info" style="margin-top:14px">ℹ️ Groups are found by who appears <b>together</b>, not by relationship —
+      so name each circle yourself. Click a face to flip through all its photos.</div>
+    <div class="btn-row"><button class="btn warn" id="socialApply">⚡ File groups into folders</button></div>
+    <div id="socialApplyOut"></div>`;
+  out.innerHTML=html;
+  out.querySelectorAll("input[data-sg]").forEach(inp=>inp.oninput=e=>{
+    S.socialGroups[+e.target.dataset.sg].name=e.target.value;});
+  out.querySelectorAll("[data-sg-open]").forEach(elm=>elm.onclick=ev=>{
+    ev.preventDefault();const g=S.socialGroups[+ev.currentTarget.dataset.sgOpen];
+    openGallery(g.name||("Group — "+num(g.count)+" photos"),
+      g.members.map(pth=>({path:pth,name:pth.split(/[\\/]/).pop()})));});
+  $("#socialApply").onclick=applySocialGroups;
+}
+async function applySocialGroups(e){
+  const assignments=[];
+  S.socialGroups.forEach(g=>{
+    const nm=(g.name||"").trim();if(!nm)return;
+    const safe=nm.replace(/[^A-Za-z0-9 ()/_-]/g,"").trim().replace(/\s+/g,"_")||"Group";
+    g.members.forEach(pth=>assignments.push({path:pth,category:safe}));});
+  if(!assignments.length){toast("Name at least one group first","bad");return;}
+  const btn=e.target;busy(btn,true,"Filing…");
+  const out=$("#socialApplyOut");
+  try{
+    const d=await runApplyJob("categorize/apply/start",{backend:S.backend,root:S.root,assignments,_verb:"Filed"},out);
+    renderApplyResult(out,d);btn.remove();
+    toast(d.cancelled?"Stopped":"Groups filed","good");
+    api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth}).then(sc=>S.scan=sc).catch(()=>{});
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
 async function startAnalyze(e,test){
-  if(!Object.values(S.photoCats).some(Boolean)){toast("Pick at least one category","bad");return;}
+  if(!Object.values(S.photoCats).some(Boolean)&&!(S.groupsOn&&S.peopleGroups.some(g=>g.name.trim()&&g.samples.trim()))){toast("Pick at least one category or add a people group","bad");return;}
   const people=S.photoCats.people?S.people.filter(p=>p.name.trim()&&p.samples.trim()):[];
   if(S.photoCats.people&&!people.length){
     toast("Add at least one person with a sample folder, or turn off people","bad");return;}
+  const groups=S.groupsOn?S.peopleGroups.filter(g=>g.name.trim()&&g.samples.trim()):[];
+  if(S.groupsOn&&!groups.length){
+    toast("Add at least one group with a sample folder, or turn off people groups","bad");return;}
   S.photoTest=!!test;
   const btn=e.target;busy(btn,true,test?"Testing…":"Starting…");
   const prog=$("#photoProgress");const out=$("#planOut");out.innerHTML="";
   try{
     const body={backend:S.backend,root:S.root,include_hidden:S.include_hidden,protect:S.protect,
       recursive:S.recursive,blur_threshold:S.blurThreshold,person_threshold:S.personThreshold,
-      dup_distance:8,...S.photoCats,people:people};
+      dup_distance:8,...S.photoCats,people:people,people_groups:groups};
     if(test)body.limit=20;
     const d=await api("categorize/start",body);
     S.photoJob=d.jobId;
@@ -2024,6 +2177,8 @@ function renderWedding(){
     <div class="opts">
       <label class="toggle"><input type="checkbox" id="wedRec" checked/>
         <span class="tk"></span><span>Include sub-folders<span class="desc"> — scan the whole tree</span></span></label>
+      <label class="toggle" title="Analyse faces to detect the couple, label group/portrait events, split by venue (GPS) and pick the sharpest cover"><input type="checkbox" id="wedAI"/>
+        <span class="tk"></span><span>🤖 Smart sorting (AI)<span class="desc"> — detect the couple, label events by content, split by venue &amp; pick the best cover</span></span></label>
     </div>
     <div class="slider" style="margin-top:8px">
       <label><span>⏱️ New event after a gap of</span><span><b id="wedGapVal">40</b> min</span></label>
@@ -2036,12 +2191,20 @@ function renderWedding(){
   $("#wedDetect").onclick=detectWeddingEvents;
 }
 async function detectWeddingEvents(e){
-  const btn=e.target;busy(btn,true,"Reading capture times…");
+  const btn=e.target;const ai=$("#wedAI")&&$("#wedAI").checked;
   const out=$("#wedOut");
   try{
-    const d=await api("wedding/sessions",{backend:S.backend,root:S.root,
-      recursive:$("#wedRec").checked,gap_minutes:+$("#wedGap").value});
-    if(!d.sessions.length){out.innerHTML=`<div class="callout warn" style="margin-top:14px">No photos found to sort here.</div>`;busy(btn,false);return;}
+    let d;
+    if(ai){
+      busy(btn,true,"Analysing faces…");
+      d=await runApplyJob("wedding/ai/start",{backend:S.backend,root:S.root,
+        recursive:$("#wedRec").checked,gap_minutes:+$("#wedGap").value,_verb:"Analysed"},out);
+    }else{
+      busy(btn,true,"Reading capture times…");
+      d=await api("wedding/sessions",{backend:S.backend,root:S.root,
+        recursive:$("#wedRec").checked,gap_minutes:+$("#wedGap").value});
+    }
+    if(!d||!d.sessions.length){out.innerHTML=`<div class="callout warn" style="margin-top:14px">No photos found to sort here.</div>`;busy(btn,false);return;}
     S.wedSessions=d.sessions.map(s=>({...s,name:s.suggested}));
     renderWeddingSessions(d);
   }catch(err){toast(err.message,"bad");}finally{busy(btn,false);}
@@ -2060,10 +2223,12 @@ function renderWeddingSessions(d){
     <div class="clustergrid">`;
   S.wedSessions.forEach((s,i)=>{
     const src="/api/thumb?size=300&path="+encodeURIComponent(s.rep);
+    const aiBadge=(s.faces!==undefined)?`<div class="cc" style="color:var(--mut)">👥 ${num(s.faces)} face(s)/photo${s.couplePct?` · 💑 ${s.couplePct}% with couple`:""}</div>`:"";
     html+=`<div class="clustercard">
       <img loading="lazy" src="${src}" data-wed-open="${i}" alt="" title="Preview all photos"/>
       <div class="cc">🕒 ${esc(fmtTimeRange(s.start,s.end))}</div>
       <div class="cc" style="color:var(--txt)">📸 ${num(s.count)} photo(s)</div>
+      ${aiBadge}
       <button class="btn ghost sm" data-wed-open="${i}" style="width:100%;margin-bottom:6px">🔍 Preview all ${num(s.count)}</button>
       <input type="text" list="wedNames" data-wed="${i}" placeholder="Event name (blank = skip)" value="${esc(s.name)}"/>
     </div>`;
@@ -2125,6 +2290,10 @@ async function renderFaceFind(){
   card.innerHTML=`
     <div class="callout info">🔒 Runs 100% on your PC. Faces are matched locally; nothing is uploaded.
       Matched photos are <b>copied</b> into an album — your originals are never moved.</div>
+    <div class="card" id="shareCard" style="margin-top:14px">
+      <h4 class="cardh">🔗 Guest self-service portal <span style="color:var(--mut);font-weight:400;font-size:12px">— let guests find their own photos</span></h4>
+      <div id="shareBox"><div class="empty" style="padding:14px"><span class="spin"></span></div></div>
+    </div>
     <div class="card" style="margin-top:14px">
       <h4 class="cardh">1 · Who are we finding?</h4>
       <label class="fld">Guest name</label>
@@ -2168,7 +2337,206 @@ async function renderFaceFind(){
   prev.ondragleave=()=>prev.classList.remove("drag");
   prev.ondrop=e=>{e.preventDefault();e.stopPropagation();prev.classList.remove("drag");
     const f=e.dataTransfer.files&&e.dataTransfer.files[0];if(f)useSelfieFile(f);};
+  refreshShareBox();
 }
+// ---- host: guest portal sharing ----
+async function refreshShareBox(){
+  const box=$("#shareBox");if(!box)return;
+  let st;try{st=await api("share/status",{});}catch(e){box.innerHTML="";return;}
+  if(st.enabled){
+    const links=(st.urls||[]);const primary=links[0];const others=links.slice(1);
+    const online=!!st.online;
+    box.innerHTML=`<div class="callout safe">🟢 Sharing <b>“${esc(st.event)}”</b> is live.
+      ${online?`This is an <b>internet link</b> — guests can open it from anywhere, no shared Wi-Fi needed.`
+        :`Send the link to your guests (they must be on the <b>same Wi-Fi</b>).`} They add a selfie and download their photos.</div>
+      ${primary?`<label class="fld">${online?"🌐 Your internet share link":"Your share link"}</label>
+        <div class="row"><input type="text" readonly value="${esc(primary)}" style="flex:1;font-size:13px"/>
+          <button class="btn sm" data-copy="${esc(primary)}">📋 Copy</button></div>`
+        :`<div class="callout warn" style="margin-top:8px">No network address found. Connect to the internet/Wi-Fi and re-enable.</div>`}
+      ${primary?`<div id="shareQr" style="text-align:center;margin:12px 0 4px"></div>
+        <div class="subhint" style="text-align:center;margin-top:2px">📷 Point a phone camera at this to open the link — no typing.</div>`:""}
+      ${others.length?`<details class="advbox" style="margin-top:8px"><summary>Other network addresses (try if the first doesn't open)</summary>
+        ${others.map(u=>`<div class="row" style="margin-top:8px"><input type="text" readonly value="${esc(u)}" style="flex:1;font-size:12.5px"/>
+          <button class="btn ghost sm" data-copy="${esc(u)}">📋 Copy</button></div>`).join("")}</details>`:""}
+      ${online?"":`<details class="advbox" style="margin-top:8px"><summary>📶 Wi-Fi join QR (so guests can hop onto your network first)</summary>
+        <div class="subhint" style="margin-top:6px">Enter your Wi-Fi name &amp; password. Guests scan the code below to join the same network, then scan the link above.</div>
+        <div class="row" style="margin-top:8px"><input type="text" id="wifiSsid" placeholder="Wi-Fi name (SSID)" style="flex:1"/>
+          <input type="text" id="wifiPass" placeholder="Wi-Fi password" style="flex:1"/></div>
+        <div class="row" style="margin-top:8px;align-items:center;gap:10px">
+          <label class="toggle" style="margin:0"><input type="checkbox" id="wifiHidden"/><span class="tk"></span><span>Hidden network</span></label>
+          <button class="btn ghost sm" id="wifiGen">Make Wi-Fi QR</button></div>
+        <div id="wifiQr" style="text-align:center;margin-top:10px"></div></details>`}
+      <div class="subhint">Paste it into WhatsApp/email too. Sharing stops when you close the app or click below.</div>
+      <div class="sect-t" style="margin-top:12px">👥 Guests who’ve searched <span id="guestCount" style="color:var(--mut)"></span></div>
+      <div id="guestList"><div class="subhint">No one yet — share the link to get started.</div></div>
+      <div class="btn-row"><button class="btn warn" id="shareStop">⏹️ Stop sharing</button></div>`;
+    box.querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>{
+      navigator.clipboard.writeText(b.dataset.copy).then(()=>toast("Link copied","good")).catch(()=>toast("Select the link and copy manually","bad"));});
+    if(primary)renderQR($("#shareQr"),primary,5);
+    const wifiGen=$("#wifiGen");
+    if(wifiGen)wifiGen.onclick=()=>{
+      const s=($("#wifiSsid").value||"").trim();
+      if(!s){toast("Enter your Wi-Fi name first","bad");return;}
+      const p=$("#wifiPass").value||"";const h=$("#wifiHidden").checked;
+      const enc=v=>String(v).replace(/([\\;,:"])/g,"\\$1");
+      const payload=`WIFI:T:${p?"WPA":"nopass"};S:${enc(s)};${p?"P:"+enc(p)+";":""}${h?"H:true;":""};`;
+      renderQR($("#wifiQr"),payload,5);
+    };
+    $("#shareStop").onclick=async e=>{busy(e.target,true,"Stopping…");
+      try{await api("share/disable",{});toast("Sharing stopped","good");}catch(err){toast(err.message,"bad");}
+      refreshShareBox();};
+    pollGuests();
+  }else{
+    box.innerHTML=`<div class="subhint">Turn on a portal for <b>this folder</b>. Guests on the same Wi-Fi open the link,
+      add a selfie, and download the photos they appear in — including group photos. Your files are never moved.</div>
+      <label class="fld" style="margin-top:10px">Event name (shown to guests)</label>
+      <input type="text" id="shareEvent" placeholder="e.g. Priya &amp; Arjun's Wedding" value="${esc(S.shareEvent||"")}"/>
+      <label class="toggle" style="margin-top:12px" title="Creates a secure public link via Cloudflare so guests can open it from anywhere — no shared Wi-Fi needed.">
+        <input type="checkbox" id="shareOnline" ${S.shareOnline?"checked":""}/>
+        <span class="tk"></span><span>🌐 Share over the internet<span class="desc"> — guests don't need to be on your Wi-Fi (secure HTTPS link)</span></span></label>
+      <div class="subhint" id="onlineHint" style="display:${S.shareOnline?"block":"none"}">First time may take a moment while a small helper downloads. The link only works while the app is open, and only people with the link can use it.</div>
+      <div class="btn-row"><button class="btn" id="shareGo">🔗 Enable guest portal</button></div>`;
+    $("#shareEvent").oninput=e=>S.shareEvent=e.target.value;
+    $("#shareOnline").onchange=e=>{S.shareOnline=e.target.checked;$("#onlineHint").style.display=e.target.checked?"block":"none";};
+    $("#shareGo").onclick=async e=>{
+      const online=$("#shareOnline").checked;
+      busy(e.target,true,online?"Creating online link…":"Starting…");
+      try{await api("share/enable",{root:S.root,event:S.shareEvent||"Our Event",online});
+        toast(online?"Online guest portal is live":"Guest portal is live","good");}
+      catch(err){toast(err.message,"bad");}
+      refreshShareBox();
+    };
+  }
+}
+async function pollGuests(){
+  const list=$("#guestList");if(!list)return;   // stop if box replaced
+  let d;try{d=await api("share/guests",{});}catch(e){return;}
+  const cn=$("#guestCount");if(cn)cn.textContent=d.count?`(${num(d.count)})`:"";
+  if(d.guests&&d.guests.length){
+    list.innerHTML=d.guests.map(g=>`<div class="histrow">
+      <span class="hl">🙂 <b>${esc(g.name)}</b> <span class="ht">· ${esc(new Date(g.ts*1000).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))}</span></span>
+      <span style="color:var(--mut)">${g.done?(g.count!=null?num(g.count)+" photo(s)":"—"):"<span class='spin'></span> searching"}</span></div>`).join("");
+  }else{list.innerHTML=`<div class="subhint">No one yet — share the link to get started.</div>`;}
+  if($("#guestList"))setTimeout(pollGuests,4000);
+}
+// ---- guest portal (opened via ?g=<token> on a phone) ----
+async function initGuestPortal(token){
+  const main=$("#main");
+  let st;try{st=await api("share/status",{token});}catch(e){st={enabled:false};}
+  if(!st.enabled){
+    main.innerHTML=`<div class="page" style="max-width:560px;margin:24px auto"><div class="card">
+      <div class="callout warn">🔗 This photo link isn't active right now. Please ask the host to turn sharing on.</div></div></div>`;
+    return;}
+  S.guestToken=token;S.guestEvent=st.event||"the event";
+  renderGuestPortal();
+}
+function renderGuestPortal(){
+  const main=$("#main");
+  main.innerHTML=`<div class="page" style="max-width:620px;margin:18px auto">
+    <h1>📸 ${esc(S.guestEvent)}</h1>
+    <p class="lead">Find every photo you're in. Add a selfie — it's matched privately on the host's PC and
+      never uploaded to the internet.</p>
+    <div class="card">
+      <label class="fld">Your name (optional)</label>
+      <input type="text" id="gName" placeholder="e.g. Anjali"/>
+      <label class="fld" style="margin-top:12px">Your selfie</label>
+      <div class="ffselfie">
+        <div class="ffprev" id="gPrev">🙂</div>
+        <div style="flex:1"><div class="btn-row" style="margin-top:0">
+          <button class="btn ghost sm" id="gPick">📁 Choose photo</button>
+          <button class="btn ghost sm" id="gCam">📷 Use camera</button></div>
+          <input type="file" id="gFile" accept="image/*" style="display:none"/>
+          <div class="subhint">A clear, front-facing selfie works best.</div></div>
+      </div>
+      <div class="btn-row"><button class="btn" id="gFind">🔎 Find my photos</button></div>
+    </div>
+    <div id="gProgress"></div><div id="gOut"></div>`;
+  $("#gPick").onclick=()=>$("#gFile").click();
+  $("#gFile").onchange=e=>{const f=e.target.files[0];if(f)guestSelfie(f);};
+  $("#gCam").onclick=guestCamera;
+  $("#gFind").onclick=guestFind;
+}
+async function guestSelfie(f){
+  try{$("#gPrev").innerHTML=`<img src="${URL.createObjectURL(f)}"/>`;}catch(e){}
+  const rd=new FileReader();
+  rd.onload=async()=>{try{const d=await api("facefind/selfie",{data:rd.result});S.guestSelfie=d.path;toast("Selfie added","good");}
+    catch(err){toast(err.message,"bad");}};
+  rd.readAsDataURL(f);
+}
+// -- open the phone's native camera (fallback when live camera is blocked) ---
+function openNativeCamera(cb){
+  const inp=document.createElement("input");
+  inp.type="file";
+  inp.accept="image/*";
+  inp.capture="user";                       // property form
+  inp.setAttribute("capture","user");       // attribute form (Android needs this)
+  inp.style.position="fixed";inp.style.left="-9999px";
+  document.body.appendChild(inp);           // must be in the DOM for capture
+  inp.onchange=e=>{const f=e.target.files&&e.target.files[0];
+    try{document.body.removeChild(inp);}catch(_){}
+    if(f)cb(f);};
+  inp.click();
+}
+async function guestCamera(){
+  // getUserMedia (live preview) only works over HTTPS or localhost. On a phone
+  // opening the plain-HTTP LAN link it's blocked, so fall back to the native
+  // camera via a capture file input (works everywhere on mobile).
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){
+    openNativeCamera(guestSelfie);return;
+  }
+  const host=$("#modalHost");
+  host.innerHTML=`<div class="overlay"><div class="modal" style="max-width:420px">
+    <div class="mh"><h3>📷 Take a selfie</h3><button class="x" id="gcamX">×</button></div>
+    <div class="mb" style="padding:14px;text-align:center"><video id="gcamV" autoplay playsinline style="width:100%;border-radius:12px;background:#000"></video><canvas id="gcamC" style="display:none"></canvas></div>
+    <div class="mf"><span></span><div class="row"><button class="btn ghost sm" id="gcamCancel">Cancel</button><button class="btn sm" id="gcamSnap">📸 Capture</button></div></div>
+  </div></div>`;
+  let stream;const close=()=>{if(stream)stream.getTracks().forEach(t=>t.stop());host.innerHTML="";};
+  $("#gcamX").onclick=close;$("#gcamCancel").onclick=close;
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"}});$("#gcamV").srcObject=stream;}
+  catch(err){toast("Couldn't open the camera — use “Choose photo”.","bad");close();return;}
+  $("#gcamSnap").onclick=async()=>{
+    const v=$("#gcamV"),c=$("#gcamC");c.width=v.videoWidth;c.height=v.videoHeight;c.getContext("2d").drawImage(v,0,0);
+    const data=c.toDataURL("image/png");$("#gPrev").innerHTML=`<img src="${data}"/>`;close();
+    try{const d=await api("facefind/selfie",{data});S.guestSelfie=d.path;toast("Selfie added","good");}catch(err){toast(err.message,"bad");}
+  };
+}
+async function guestFind(e){
+  if(!S.guestSelfie){toast("Add a selfie first","bad");return;}
+  const btn=e.target;busy(btn,true,"Finding…");
+  const prog=$("#gProgress");$("#gOut").innerHTML="";
+  try{
+    const d=await api("share/find/start",{token:S.guestToken,selfie:S.guestSelfie,
+      name:($("#gName")?$("#gName").value:""),threshold:0.40});
+    S.gJob=d.jobId;
+    prog.innerHTML=`<div class="preview" style="margin-top:14px"><div class="ph"><div class="chips" id="gTally"><span class="chip">Starting…</span></div></div>
+      <div style="padding:14px 18px"><div class="track" style="display:block;height:14px;border-radius:8px;background:#0d1424;border:1px solid #23324e;overflow:hidden">
+        <div id="gBar" class="fill" style="display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
+        <div id="gCount" style="color:var(--mut);font-size:12px;margin-top:8px">Preparing…</div></div></div>`;
+    guestPoll(btn);
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+async function guestPoll(btn){
+  let d;try{d=await api("cluster/progress",{jobId:S.gJob});}catch(err){toast(err.message,"bad");busy(btn,false);return;}
+  const bar=$("#gBar"),pc=$("#gCount"),tally=$("#gTally");
+  if(d.phase==="downloading"){const mt=d.model_total||0,md=d.model_done||0,mp=mt?Math.round(md/mt*100):0;
+    if(bar)bar.style.width=mp+"%";if(pc)pc.textContent=`Getting ready ${mp}%…`;}
+  else{const total=d.total||0,done=d.done||0,pct=total?Math.round(done/total*100):0;
+    if(bar)bar.style.width=pct+"%";if(pc)pc.textContent=total?`Checked ${num(done)} of ${num(total)} (${pct}%)`:"Scanning…";
+    if(tally)tally.innerHTML=`<span class="chip">🙂 ${num(d.clusters||0)} so far</span>`;}
+  if(d.error){$("#gProgress").innerHTML=`<div class="callout bad" style="margin-top:14px">${esc(d.error)}</div>`;busy(btn,false);return;}
+  if(!d.finished){setTimeout(()=>guestPoll(btn),700);return;}
+  busy(btn,false);$("#gProgress").innerHTML="";
+  const res=d.result||{};
+  if(res.error==="no_face_in_selfie"){$("#gOut").innerHTML=`<div class="callout warn" style="margin-top:14px">😕 No face found in your selfie. Try a clearer, front-facing photo.</div>`;return;}
+  const m=(res.matches||[]);
+  if(!m.length){$("#gOut").innerHTML=`<div class="callout info" style="margin-top:14px">No photos found yet. Try a clearer selfie.</div>`;return;}
+  $("#gOut").innerHTML=`<div class="callout safe" style="margin-top:14px">✅ Found <b>${num(m.length)}</b> photo(s) you're in — tap any to download, or grab them all.</div>
+    <div class="btn-row"><a class="btn" href="/api/download/zip?job=${encodeURIComponent(S.gJob)}&token=${encodeURIComponent(S.guestToken)}" download>⬇️ Download all (${num(m.length)})</a></div>
+    <div class="thumbgrid">${m.map(x=>`<a class="thumb" href="/api/download?path=${encodeURIComponent(x.path)}" download>
+      <img loading="lazy" src="/api/thumb?size=400&path=${encodeURIComponent(x.path)}" alt=""/>
+      <div class="nm">⬇️ download</div></a>`).join("")}</div>`;
+}
+
 function ffStrictLabel(v){return v<=36?"Looser":v>=46?"Strict":"Balanced";}
 async function useSelfieFile(f){
   if(f.path){setSelfie(f.path);return;}
@@ -2185,6 +2553,9 @@ function setSelfie(path){
   toast("Selfie added","good");
 }
 async function openSelfieCamera(){
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){
+    openNativeCamera(useSelfieFile);return;
+  }
   const host=$("#modalHost");
   host.innerHTML=`<div class="overlay"><div class="modal" style="max-width:460px">
     <div class="mh"><h3>📷 Take a selfie</h3><button class="x" id="camX">×</button></div>
@@ -2521,6 +2892,16 @@ function pageSafety(m){
       </div>
     </div>
     <div class="card" style="margin-top:18px">
+      <h3 style="margin:0 0 4px">Features &amp; tabs</h3>
+      <div style="color:var(--mut);font-size:11.5px;margin-bottom:8px">Show only what you need — turn extras on when you want them. Connect, Dashboard &amp; Safety are always shown.</div>
+      <div id="tabPrefs"></div>
+      <div style="color:var(--mut);font-size:11.5px;margin:14px 0 8px;border-top:1px solid var(--bd);padding-top:12px">Organize actions — pick which cards appear inside the Organize tab.</div>
+      <div id="opPrefs"></div>
+      <div style="color:var(--mut);font-size:11.5px;margin:14px 0 8px;border-top:1px solid var(--bd);padding-top:12px">Extras inside each Organize action.</div>
+      <label class="toggle"><input type="checkbox" id="presetToggle" ${presetsVisible()?"checked":""}/>
+        <span class="tk"></span><span>💾 Show Presets row<span class="desc"> — the save/apply presets bar in each action</span></span></label>
+    </div>
+    <div class="card" style="margin-top:18px">
       <h3 style="margin:0 0 4px">Accessibility</h3>
       <div style="color:var(--mut);font-size:11.5px;margin-bottom:8px">Saved on this device.</div>
       <label class="toggle"><input type="checkbox" id="bigTextChk"/>
@@ -2542,6 +2923,30 @@ function pageSafety(m){
   m.appendChild(p);
   $("#depthSel").onchange=e=>S.depth=+e.target.value;
   $("#hidChk").onchange=e=>S.include_hidden=e.target.checked;
+  // features / tabs
+  const tp=$("#tabPrefs");
+  if(tp){
+    const prefs=loadTabPrefs();
+    tp.innerHTML=TAB_DEFS.filter(t=>!t.core).map(t=>`<label class="toggle">
+      <input type="checkbox" data-tab="${t.id}" ${prefs[t.id]?"checked":""}/>
+      <span class="tk"></span><span>${t.label}<span class="desc"> — ${t.desc}</span></span></label>`).join("");
+    tp.querySelectorAll("[data-tab]").forEach(cb=>cb.onchange=e=>{
+      const pr=loadTabPrefs();pr[e.target.dataset.tab]=e.target.checked;saveTabPrefs(pr);applyTabPrefs();});
+  }
+  // organize actions
+  const op=$("#opPrefs");
+  if(op){
+    const oprefs=loadOpPrefs();
+    op.innerHTML=Object.entries(OPS).map(([k,o])=>`<label class="toggle">
+      <input type="checkbox" data-op="${k}" ${oprefs[k]?"checked":""}/>
+      <span class="tk"></span><span>${o.icon} ${o.title}<span class="desc"> — ${o.desc}</span></span></label>`).join("");
+    op.querySelectorAll("[data-op]").forEach(cb=>cb.onchange=e=>{
+      const pr=loadOpPrefs();pr[e.target.dataset.op]=e.target.checked;saveOpPrefs(pr);
+      if(S.page==="organize")go("organize");});
+  }
+  const pst=$("#presetToggle");
+  if(pst)pst.onchange=e=>{setPresetsVisible(e.target.checked);
+    if(S.page==="organize"&&S.activeOp)selectOp(S.activeOp);};
   const bt=$("#bigTextChk"),ct=$("#contrastChk");
   bt.checked=document.body.classList.contains("bigtext");
   ct.checked=document.body.classList.contains("contrast");
@@ -2650,10 +3055,17 @@ function wireTmCrumb(el){
 }
 // ---------------------------------------------------------------- boot
 initTheme();
-try{const lr=localStorage.getItem("phorg-lastroot");if(lr){S.root=lr;S.backend=localStorage.getItem("phorg-lastbackend")||"local";}}catch(e){}
-go("connect");
 setTimeout(initAccent,0);
-if(S.root&&S.backend==="local")tryAutoConnect();else setTimeout(maybeShowWizard,400);
+const _guestToken=new URLSearchParams(location.search).get("g");
+if(_guestToken){
+  document.body.classList.add("guest");
+  setTimeout(()=>initGuestPortal(_guestToken),40);
+}else{
+  try{const lr=localStorage.getItem("phorg-lastroot");if(lr){S.root=lr;S.backend=localStorage.getItem("phorg-lastbackend")||"local";}}catch(e){}
+  go("connect");
+  setTimeout(applyTabPrefs,0);
+  if(S.root&&S.backend==="local")tryAutoConnect();else setTimeout(maybeShowWizard,400);
+}
 async function tryAutoConnect(){
   try{
     const d=await api("scan",{backend:"local",root:S.root,depth:S.depth});
@@ -2701,7 +3113,7 @@ document.addEventListener("keydown",e=>{
   }
   const map={"1":"connect","2":"dashboard","3":"organize","4":"photos","5":"wedding","6":"facefind","7":"compress","8":"report","9":"safety"};
   if(map[e.key]){const btn=[...document.querySelectorAll("#nav button")].find(b=>b.dataset.page===map[e.key]);
-    if(btn&&!btn.disabled){e.preventDefault();go(map[e.key]);}}
+    if(btn&&!btn.disabled&&getComputedStyle(btn).display!=="none"){e.preventDefault();go(map[e.key]);}}
 });
 // --- drag & drop a folder onto the window to connect (Electron/VS Code browser) ---
 (function(){
@@ -2733,19 +3145,19 @@ function paletteCommands(){
   const cmds=[
     {label:"Go to Connect",icon:"🔌",run:()=>go("connect")},
     {label:"Go to Dashboard",icon:"📊",need:1,run:()=>go("dashboard")},
-    {label:"Go to Organize",icon:"✨",need:1,run:()=>go("organize")},
-    {label:"Go to Photo AI",icon:"🖼️",need:1,run:()=>go("photos")},
-    {label:"Go to Wedding sorter",icon:"💍",need:1,run:()=>go("wedding")},
-    {label:"Go to FaceFind",icon:"🙋",need:1,run:()=>go("facefind")},
-    {label:"Go to Compress",icon:"🗜️",need:1,run:()=>go("compress")},
-    {label:"Go to Report",icon:"📄",need:1,run:()=>go("report")},
+    {label:"Go to Organize",icon:"✨",need:1,tab:"organize",run:()=>go("organize")},
+    {label:"Go to Photo AI",icon:"🖼️",need:1,tab:"photos",run:()=>go("photos")},
+    {label:"Go to Wedding sorter",icon:"💍",need:1,tab:"wedding",run:()=>go("wedding")},
+    {label:"Go to FaceFind",icon:"🙋",need:1,tab:"facefind",run:()=>go("facefind")},
+    {label:"Go to Compress",icon:"🗜️",need:1,tab:"compress",run:()=>go("compress")},
+    {label:"Go to Report",icon:"📄",need:1,tab:"report",run:()=>go("report")},
     {label:"Go to Safety",icon:"🛡️",run:()=>go("safety")},
     {label:"Undo last action",icon:"↩️",need:1,run:quickUndo},
     {label:"Redo",icon:"↪️",need:1,run:quickRedo},
     {label:"Toggle light / dark theme",icon:"🌓",run:()=>{const c=document.body.classList.contains("light")?"dark":"light";try{localStorage.setItem("phorg-theme",c);}catch(e){}applyTheme(c);}},
   ];
-  Object.entries(OPS).forEach(([k,o])=>cmds.push({label:"Organize · "+o.title,icon:o.icon,need:1,run:()=>{go("organize");setTimeout(()=>selectOp(k),60);}}));
-  return cmds.filter(c=>!c.need||S.connected);
+  Object.entries(OPS).forEach(([k,o])=>cmds.push({label:"Organize · "+o.title,icon:o.icon,need:1,tab:"organize",op:k,run:()=>{go("organize");setTimeout(()=>selectOp(k),60);}}));
+  return cmds.filter(c=>(!c.need||S.connected)&&(!c.tab||tabVisible(c.tab))&&(!c.op||opVisible(c.op)));
 }
 function openPalette(){
   const host=$("#modalHost");
@@ -2788,6 +3200,55 @@ function initAccent(){
   let a="blue";try{a=localStorage.getItem("phorg-accent")||"blue";}catch(e){}
   applyAccent(a);
 }
+
+// ---------------------------------------------------------------- optional tabs
+// Core tabs (Connect, Dashboard, Organize, Safety) are always shown. These are
+// the extras — off by default so the app stays simple; turn on what you need.
+const TAB_DEFS=[
+  {id:"organize",label:"✨ Organize",desc:"sort, rename, dedupe, clean up",def:true,core:true},
+  {id:"report",label:"📄 Report",desc:"interactive storage report",def:true},
+  {id:"compress",label:"🗜️ Compress",desc:"shrink images losslessly",def:false},
+  {id:"photos",label:"🖼️ Photo AI",desc:"sort photos by content & people",def:false},
+  {id:"wedding",label:"💍 Wedding",desc:"sort a wedding dump by event",def:false},
+  {id:"facefind",label:"🙋 FaceFind",desc:"find a person's photos from a selfie",def:false},
+];
+function loadTabPrefs(){
+  let saved={};try{saved=JSON.parse(localStorage.getItem("phorg-tabs")||"{}");}catch(e){}
+  const p={};TAB_DEFS.forEach(t=>{p[t.id]=(t.id in saved)?!!saved[t.id]:t.def;});
+  return p;
+}
+function saveTabPrefs(p){try{localStorage.setItem("phorg-tabs",JSON.stringify(p));}catch(e){}}
+function applyTabPrefs(){
+  const p=loadTabPrefs();
+  TAB_DEFS.forEach(t=>{
+    if(t.core)return;                       // never hide core tabs
+    const btn=document.querySelector(`#nav button[data-page="${t.id}"]`);
+    if(btn)btn.style.display=p[t.id]?"":"none";
+  });
+  // if the current page just got hidden, bounce to a safe tab
+  const cur=TAB_DEFS.find(t=>t.id===S.page&&!t.core);
+  if(cur&&!p[cur.id])go(S.connected?"dashboard":"connect");
+}
+function tabVisible(page){
+  const btn=document.querySelector(`#nav button[data-page="${page}"]`);
+  return btn?getComputedStyle(btn).display!=="none":true;
+}
+
+// Organize actions shown inside the Organize tab. Only the everyday ones are on
+// by default; the rest can be switched on from Safety → Features & tabs.
+const OP_DEFAULTS={cleanup:true,type:true,date:true,dedupe:true,empties:true,
+  junk:true,"similar-names":false,size:false,rename:false,"fix-ext":false,
+  flatten:false,location:false};
+function loadOpPrefs(){
+  let saved={};try{saved=JSON.parse(localStorage.getItem("phorg-ops")||"{}");}catch(e){}
+  const p={};Object.keys(OPS).forEach(k=>{p[k]=(k in saved)?!!saved[k]:(OP_DEFAULTS[k]!==false);});
+  return p;
+}
+function saveOpPrefs(p){try{localStorage.setItem("phorg-ops",JSON.stringify(p));}catch(e){}}
+function opVisible(key){return loadOpPrefs()[key]!==false;}
+// Presets row inside each Organize action — shown by default, hideable from Safety.
+function presetsVisible(){try{return localStorage.getItem("phorg-hide-presets")!=="1";}catch(e){return true;}}
+function setPresetsVisible(v){try{localStorage.setItem("phorg-hide-presets",v?"":"1");}catch(e){}}
 
 // ---------------------------------------------------------------- onboarding wizard
 function maybeShowWizard(){

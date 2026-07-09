@@ -322,7 +322,7 @@ def api_scan(p):
 _PLANNERS = {
     "junk":      lambda be, saf, p: organizer.plan_junk(
                      be, be.root, saf, recursive=bool(p.get("recursive")),
-                     extra_exts=_rules_junk(p)),
+                     extra_exts=_rules_junk(p), to_trash=bool(p.get("to_trash"))),
     "type":      lambda be, saf, p: organizer.plan_by_type(
                      be, be.root, saf, recursive=bool(p.get("recursive")),
                      ext_overrides=_rules_ext(p)),
@@ -412,6 +412,7 @@ def api_plan(p):
         "moves": sum(1 for o in ops if o.kind == "move"),
         "mkdirs": sum(1 for o in ops if o.kind == "mkdir"),
         "rmdirs": sum(1 for o in ops if o.kind == "rmdir"),
+        "trash": sum(1 for o in ops if o.kind == "trash"),
     }
     plan_id = uuid.uuid4().hex
     with _PLANS_LOCK:
@@ -449,10 +450,11 @@ def api_apply(p):
 
     moves = sum(1 for j in journal if j.get("op") == "move")
     copies = sum(1 for j in journal if j.get("op") == "copy")
+    trashed = sum(1 for j in journal if j.get("op") == "trash")
     if copy_mode:
         verified = (after == before + copies)
     else:
-        verified = None if label == "empties" else (before == after)
+        verified = None if label == "empties" else (before == after + trashed)
 
     with _PLANS_LOCK:
         _PLANS.pop(plan_id, None)
@@ -463,6 +465,7 @@ def api_apply(p):
             "verified": verified, "log": log_lines,
             "merged": getattr(be, "merged_skips", 0),
             "copied": copies, "copyMode": copy_mode,
+            "trashed": trashed,
             "movedSummary": _moved_summary(be, journal),
             "undo": {"available": bool(moves or copies) and be.name == "local",
                      "count": moves or copies, "root": be.root}}
@@ -806,7 +809,8 @@ def api_vision_install(_p):
 
 def _vision_options(p):
     cats = ("blurry", "single", "couple", "group", "scenery", "duplicates",
-            "similar", "screenshot", "document", "best", "video")
+            "similar", "screenshot", "document", "best", "video",
+            "animals", "food", "nature", "plants", "vehicles")
     enabled = {c: bool(p.get(c)) for c in cats}
     people = []
     for person in (p.get("people") or []):
@@ -818,12 +822,21 @@ def _vision_options(p):
     if p.get("bride") and p.get("bride_samples"):
         people.append({"name": "Bride", "samples": p.get("bride_samples")})
     enabled["people"] = bool(people)
+    groups = []
+    for g in (p.get("people_groups") or []):
+        name = (g.get("name") or "").strip()
+        samples = g.get("samples")
+        if name and samples:
+            groups.append({"name": name, "samples": samples})
+    scene_cats = ("animals", "food", "nature", "plants", "vehicles")
     return {
         "enabled": enabled,
+        "scene": any(enabled[c] for c in scene_cats),
         "recursive": bool(p.get("recursive")),
         "blur_threshold": float(p.get("blur_threshold") or 50.0),
         "dup_distance": int(p.get("dup_distance") or 8),
         "people": people,
+        "people_groups": groups,
         "person_threshold": float(p.get("person_threshold") or 78.0),
         "limit": int(p["limit"]) if p.get("limit") else None,
         "similar_distance": int(p.get("similar_distance") or 16),
@@ -843,7 +856,7 @@ def api_categorize_start(p):
     be = _build_backend(p)
     saf = _build_safety(p)
     options = _vision_options(p)
-    if not any(options["enabled"].values()):
+    if not any(options["enabled"].values()) and not options.get("people_groups"):
         raise ValueError("Select at least one category to sort into.")
     _register_root(be.root)
 
@@ -857,6 +870,35 @@ def api_categorize_start(p):
 
     def run():
         try:
+            # content classifier needs its model — fetch on first use
+            if options.get("scene") and not vision.classifier_present():
+                job["phase"] = "downloading"
+
+                def mprog(name, got, total):
+                    job["model_name"] = name
+                    job["model_done"] = got
+                    job["model_total"] = total
+                try:
+                    vision.download_classifier(progress=mprog)
+                except Exception as e:
+                    raise ValueError(
+                        "Could not download the content classifier model: "
+                        f"{e}")
+
+            # people-groups need the face models (YuNet + SFace)
+            if options.get("people_groups") and not vision.models_present():
+                job["phase"] = "downloading"
+
+                def fprog(name, got, total):
+                    job["model_name"] = name
+                    job["model_done"] = got
+                    job["model_total"] = total
+                try:
+                    vision.download_models(progress=fprog)
+                except Exception as e:
+                    raise ValueError(
+                        f"Could not download the face models: {e}")
+
             def prog(done, total, tally):
                 job["done"] = done
                 job["total"] = total
@@ -1514,6 +1556,158 @@ def api_wedding_sessions(p):
             "root": be.root}
 
 
+def api_wedding_ai_start(p):
+    """AI wedding sorting (background job): couple detection + face-count
+    labels + venue-aware session splits + sharpest-cover picking.  Auto-fetches
+    the small face models on first use, mirroring the FaceFind flow."""
+    if (p.get("backend") or "local").lower() != "local":
+        raise ValueError("Wedding sorting works on local folders only.")
+    from . import vision
+    missing = vision.check_deps()
+    if missing:
+        raise ValueError("This needs the image-analysis packages (install AI "
+                         "support / pip install -r requirements-vision.txt).")
+    if not vision.cluster_api_available():
+        raise ValueError("Your OpenCV build lacks the face modules needed for "
+                         "AI wedding sorting (needs opencv-contrib-python).")
+    be = _build_backend(p)
+    saf = _build_safety(p)
+    recursive = bool(p.get("recursive", True))
+    gap_min = max(2, int(p.get("gap_minutes") or 40))
+    skip_top = {"Compressed_Images", "Originals_Backup"}
+    items = []
+    for fp in be.iter_files(be.root):
+        name = posixpath.basename(fp)
+        rel = be.relpath(posixpath.dirname(fp)).replace("\\", "/")
+        segs = [s for s in rel.split("/") if s and s != "."]
+        if segs and (segs[0] in skip_top or saf.is_protected_dir("/".join(segs))):
+            continue
+        if not recursive and segs:
+            continue
+        if saf.is_protected_file(name) or not vision.is_image(name):
+            continue
+        native = be.native(fp)
+        dt = organizer._exif_datetime(native)
+        ts = dt.timestamp() if dt else float(be.mtime(fp) or 0)
+        gps = vision.exif_gps(native)
+        la, lo = (gps if gps else (None, None))
+        items.append((ts, la, lo, native))
+    items.sort(key=lambda x: x[0])
+
+    NAMES = ["Getting Ready", "Nishchayam (Engagement)", "Muhurtham (Ceremony)",
+             "Thalikettu / Ring Exchange", "Sadhya (Feast)", "Group Photos",
+             "Nalangu", "Reception", "Sendoff"]
+
+    job_id = uuid.uuid4().hex
+    job = {"done": 0, "total": len(items), "phase": "starting",
+           "finished": False, "error": None, "result": None, "cancel": False,
+           "model_done": 0, "model_total": 0, "model_name": ""}
+    with _JOBS_LOCK:
+        _JOBS[job_id] = job
+        for k in list(_JOBS.keys())[:-20]:
+            _JOBS.pop(k, None)
+
+    def run():
+        try:
+            if not vision.models_present():
+                job["phase"] = "downloading"
+
+                def mprog(name, got, total):
+                    job["model_name"] = name
+                    job["model_done"] = got
+                    job["model_total"] = total
+                vision.download_models(progress=mprog)
+            job["phase"] = "analyzing"
+
+            def prog(done, total):
+                job["done"] = done
+                job["total"] = total
+
+            def cancelled():
+                return job["cancel"]
+
+            res = vision.wedding_ai(items, gap_min * 60, names=NAMES,
+                                    progress=prog, cancel=cancelled)
+            res["root"] = be.root
+            res["count"] = len(res.get("sessions", []))
+            res["cancelled"] = job["cancel"]
+            job["result"] = res
+            job["phase"] = "done"
+        except Exception as e:  # pragma: no cover - defensive
+            job["error"] = f"{type(e).__name__}: {e}"
+            job["phase"] = "error"
+        finally:
+            job["finished"] = True
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"jobId": job_id}
+
+
+def api_social_start(p):
+    """Auto-discover social groups (background job): cluster faces, then split
+    people into communities by who appears together.  Auto-downloads the small
+    face models on first use."""
+    if (p.get("backend") or "local").lower() != "local":
+        raise ValueError("Social grouping works on local folders only.")
+    from . import vision
+    missing = vision.check_deps()
+    if missing:
+        raise ValueError("This needs the image-analysis packages (install AI "
+                         "support / pip install -r requirements-vision.txt).")
+    if not vision.cluster_api_available():
+        raise ValueError("Your OpenCV build lacks the face modules needed "
+                         "(needs opencv-contrib-python).")
+    be = _build_backend(p)
+    saf = _build_safety(p)
+    recursive = bool(p.get("recursive", True))
+    files = organizer.list_image_files(be, be.root, saf, recursive)
+    native = [be.native(f) for f in files]
+
+    job_id = uuid.uuid4().hex
+    job = {"done": 0, "total": len(native), "phase": "starting",
+           "finished": False, "error": None, "result": None, "cancel": False,
+           "model_done": 0, "model_total": 0, "model_name": ""}
+    with _JOBS_LOCK:
+        _JOBS[job_id] = job
+        for k in list(_JOBS.keys())[:-20]:
+            _JOBS.pop(k, None)
+
+    def run():
+        try:
+            if not vision.models_present():
+                job["phase"] = "downloading"
+
+                def mprog(name, got, total):
+                    job["model_name"] = name
+                    job["model_done"] = got
+                    job["model_total"] = total
+                vision.download_models(progress=mprog)
+            job["phase"] = "analyzing"
+
+            def prog(done, total):
+                job["done"] = done
+                job["total"] = total
+
+            def cancelled():
+                return job["cancel"]
+
+            res = vision.social_groups(native, progress=prog, cancel=cancelled)
+            res["root"] = be.root
+            res["count"] = len(res.get("groups", []))
+            res["cancelled"] = job["cancel"]
+            job["result"] = res
+            job["phase"] = "done"
+        except Exception as e:  # pragma: no cover - defensive
+            job["error"] = f"{type(e).__name__}: {e}"
+            job["phase"] = "error"
+        finally:
+            job["finished"] = True
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"jobId": job_id}
+
+
+
 def api_pull_start(p):
     """Copy image/video files off an Android phone into a PC folder so the
     local Photo-AI can sort them (AI needs the pixels on the PC)."""
@@ -1791,7 +1985,8 @@ def api_phash_start(p):
             continue
         if not recursive and segs:
             continue
-        if saf.is_protected_file(name) or not vision.is_image(name):
+        if saf.is_protected_file(name) or not (vision.is_image(name)
+                                                or vision.is_video(name)):
             continue
         files.append(be.native(fp))
 
@@ -1812,8 +2007,9 @@ def api_phash_start(p):
             def cancelled():
                 return job["cancel"]
 
-            groups = vision.perceptual_groups(files, max_distance=dist,
-                                              progress=prog, cancel=cancelled)
+            groups, meta = vision.perceptual_groups(
+                files, max_distance=dist, progress=prog, cancel=cancelled,
+                cache_dir=os.path.join(be.native(be.root), ".phorg"))
             out = []
             for m in groups:
                 sizes = []
@@ -1822,7 +2018,13 @@ def api_phash_start(p):
                         sizes.append(os.path.getsize(pth))
                     except OSError:
                         sizes.append(0)
-                keep = m[sizes.index(max(sizes))] if sizes else m[0]
+                # keep the *best* copy: sharpest, then highest resolution,
+                # then largest file (a resave is usually the poorest of these).
+                def _quality(pth, i):
+                    mm = meta.get(pth) or {}
+                    return (mm.get("focus", 0.0), mm.get("pixels", 0), sizes[i])
+                keep = max(range(len(m)), key=lambda i: _quality(m[i], i))
+                keep = m[keep] if m else None
                 extra = sum(sorted(sizes)[:-1])
                 out.append({"members": m, "keep": keep,
                             "kb": (max(sizes) if sizes else 0) // 1024,
@@ -2146,6 +2348,8 @@ ROUTES = {
     "/api/dupe/groups": api_dupe_groups,
     "/api/pull/start": api_pull_start,
     "/api/wedding/sessions": api_wedding_sessions,
+    "/api/wedding/ai/start": api_wedding_ai_start,
+    "/api/social/start": api_social_start,
     "/api/compress/status": api_compress_status,
     "/api/compress/start": api_compress_start,
     "/api/compress/estimate": api_compress_estimate,

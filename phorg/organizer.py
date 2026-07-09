@@ -49,23 +49,28 @@ def _iter_candidate_files(backend, root, safety, recursive):
 # Junk sweep
 # ---------------------------------------------------------------------------
 def plan_junk(backend, root, safety, review_folder="Junk_Files_Review",
-              recursive=False, extra_exts=None):
+              recursive=False, extra_exts=None, to_trash=False):
     ops = []
     dest = backend.join(root, review_folder)
     counts = defaultdict(int)
     seen_dest = False
+    # sending straight to the Recycle Bin only makes sense on the local machine
+    use_trash = bool(to_trash) and getattr(backend, "name", None) == "local"
     for fp, name, size in _iter_candidate_files(backend, root, safety, recursive):
         # never sweep files already inside the review folder
         if _rel_segments(backend, fp)[:1] == [review_folder]:
             continue
         junk, why = classify.is_junk(name, size, extra_exts=extra_exts)
         if junk:
-            if not seen_dest:
-                ops.append(Op("mkdir", dest)); seen_dest = True
-            ops.append(Op("move", fp, backend.join(dest, name)))
+            if use_trash:
+                ops.append(Op("trash", fp))
+            else:
+                if not seen_dest:
+                    ops.append(Op("mkdir", dest)); seen_dest = True
+                ops.append(Op("move", fp, backend.join(dest, name)))
             counts[why] += 1
     summary = {"folder": review_folder, "by_reason": dict(counts),
-               "total": sum(counts.values())}
+               "total": sum(counts.values()), "to_trash": use_trash}
     return ops, summary
 
 
@@ -281,6 +286,9 @@ def plan_categorize_images(backend, root, safety, options,
     for person in (options.get("people") or []):
         if person.get("name"):
             category_folders.add(vision.person_folder(person["name"]))
+    for grp in (options.get("people_groups") or []):
+        if grp.get("name"):
+            category_folders.add(vision.person_folder(grp["name"]))
     recursive = bool(options.get("recursive"))
 
     # gather image files first so we know the total (for progress)
@@ -309,10 +317,16 @@ def plan_categorize_images(backend, root, safety, options,
     import hashlib as _hashlib
     use_cache = backend.name == "local" and not limit
     people_enabled = bool(enabled.get("people"))
-    _psig_src = _json.dumps([{"n": p.get("name"), "s": p.get("samples")}
-                            for p in (options.get("people") or [])],
-                            sort_keys=True) + str(options.get("person_threshold"))
-    people_sig = _hashlib.md5(_psig_src.encode()).hexdigest() if people_enabled else ""
+    scene_enabled = bool(options.get("scene"))
+    _psig_src = (_json.dumps([{"n": p.get("name"), "s": p.get("samples")}
+                             for p in (options.get("people") or [])],
+                             sort_keys=True)
+                 + _json.dumps([{"n": g.get("name"), "s": g.get("samples")}
+                               for g in (options.get("people_groups") or [])],
+                               sort_keys=True)
+                 + str(options.get("person_threshold"))
+                 + ("|scene1" if scene_enabled else "|scene0"))
+    analysis_sig = _hashlib.md5(_psig_src.encode()).hexdigest()
     cache_file = os.path.join(to_native(root), ".phorg", "analysis_cache.json") \
         if use_cache else None
     cache = {}
@@ -340,13 +354,13 @@ def plan_categorize_images(backend, root, safety, options,
                 st_size = st_mtime = 0
             ce = cache.get(fp)
             if (ce and ce.get("size") == st_size and ce.get("mtime") == st_mtime
-                    and (not people_enabled or ce.get("sig") == people_sig)):
+                    and ce.get("sig") == analysis_sig):
                 metrics = dict(ce["m"])
         if metrics is None:
             metrics = cz.classify(to_native(fp))
             if use_cache and not metrics.get("unreadable"):
                 cache[fp] = {"size": st_size, "mtime": st_mtime,
-                             "sig": people_sig, "m": metrics}
+                             "sig": analysis_sig, "m": metrics}
                 cache_dirty = True
         # blur/dup/similar depend on live thresholds — recompute from raw focus
         if not metrics.get("unreadable"):
@@ -463,9 +477,24 @@ def plan_categorize_images(backend, root, safety, options,
 # ---------------------------------------------------------------------------
 # Whole-tree exact duplicate finder (any file type) — content hashing
 # ---------------------------------------------------------------------------
-def _file_hash(backend, fp, chunk=1 << 20):
+def _open_hash_cache(backend, root):
+    """A persistent SHA-1 cache for local trees (see phorg.hashcache)."""
+    if getattr(backend, "name", None) != "local":
+        return None
+    from .hashcache import MetaCache
+    return MetaCache(os.path.join(backend.native(root), ".phorg"))
+
+
+def _file_hash(backend, fp, chunk=1 << 20, cache=None):
     import hashlib
     native = backend.native(fp) if hasattr(backend, "native") else fp
+    key = None
+    if cache is not None:
+        key = cache.stat_key(native)
+        if key is not None:
+            hit = cache.get(native, key[0], key[1])
+            if hit is not None and "sha1" in hit:
+                return hit["sha1"]
     hh = hashlib.sha1()
     try:
         with open(native, "rb") as f:
@@ -476,7 +505,10 @@ def _file_hash(backend, fp, chunk=1 << 20):
                 hh.update(b)
     except OSError:
         return None
-    return hh.hexdigest()
+    digest = hh.hexdigest()
+    if cache is not None and key is not None:
+        cache.put(native, key[0], key[1], {"sha1": digest})
+    return digest
 
 
 def plan_duplicate_files(backend, root, safety, review_folder="Duplicates_Review"):
@@ -501,27 +533,32 @@ def plan_duplicate_files(backend, root, safety, review_folder="Duplicates_Review
     groups = 0
     dupes = 0
     wasted_kb = 0
-    for size, paths in by_size.items():
-        if len(paths) < 2 or size == 0:
-            continue
-        digests = defaultdict(list)
-        for fp in paths:
-            d = _file_hash(backend, fp)
-            if d:
-                digests[d].append(fp)
-        for d, fps in digests.items():
-            if len(fps) < 2:
+    cache = _open_hash_cache(backend, root)
+    try:
+        for size, paths in by_size.items():
+            if len(paths) < 2 or size == 0:
                 continue
-            groups += 1
-            keep = min(fps, key=lambda p: (p.count("/"), len(p)))
-            for fp in fps:
-                if fp == keep:
+            digests = defaultdict(list)
+            for fp in paths:
+                d = _file_hash(backend, fp, cache=cache)
+                if d:
+                    digests[d].append(fp)
+            for d, fps in digests.items():
+                if len(fps) < 2:
                     continue
-                if not seen_dest:
-                    ops.append(Op("mkdir", dest)); seen_dest = True
-                ops.append(Op("move", fp, backend.join(dest, posixpath.basename(fp))))
-                dupes += 1
-                wasted_kb += size // 1024
+                groups += 1
+                keep = min(fps, key=lambda p: (p.count("/"), len(p)))
+                for fp in fps:
+                    if fp == keep:
+                        continue
+                    if not seen_dest:
+                        ops.append(Op("mkdir", dest)); seen_dest = True
+                    ops.append(Op("move", fp, backend.join(dest, posixpath.basename(fp))))
+                    dupes += 1
+                    wasted_kb += size // 1024
+    finally:
+        if cache is not None:
+            cache.close()
     summary = {"groups": groups, "duplicates": dupes, "wasted_kb": wasted_kb,
                "folder": review_folder}
     return ops, summary
@@ -619,22 +656,27 @@ def duplicate_groups(backend, root, safety, review_folder="Duplicates_Review",
             continue
         by_size[backend.size(fp)].append(fp)
     out = []
-    for size, paths in by_size.items():
-        if len(paths) < 2 or size == 0:
-            continue
-        digests = defaultdict(list)
-        for fp in paths:
-            d = _file_hash(backend, fp)
-            if d:
-                digests[d].append(fp)
-        for d, fps in digests.items():
-            if len(fps) < 2:
+    cache = _open_hash_cache(backend, root)
+    try:
+        for size, paths in by_size.items():
+            if len(paths) < 2 or size == 0:
                 continue
-            keep = min(fps, key=lambda p: (p.count("/"), len(p)))
-            out.append({"size": size, "kb": size // 1024,
-                        "keep": keep, "members": fps})
-            if len(out) >= limit:
-                return sorted(out, key=lambda g: -g["size"])
+            digests = defaultdict(list)
+            for fp in paths:
+                d = _file_hash(backend, fp, cache=cache)
+                if d:
+                    digests[d].append(fp)
+            for d, fps in digests.items():
+                if len(fps) < 2:
+                    continue
+                keep = min(fps, key=lambda p: (p.count("/"), len(p)))
+                out.append({"size": size, "kb": size // 1024,
+                            "keep": keep, "members": fps})
+                if len(out) >= limit:
+                    return sorted(out, key=lambda g: -g["size"])
+    finally:
+        if cache is not None:
+            cache.close()
     return sorted(out, key=lambda g: -g["size"])
 
 

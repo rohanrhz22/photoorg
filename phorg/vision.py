@@ -34,7 +34,41 @@ CATEGORIES = {
     "single":     "Portraits_Single",
     "scenery":    "Scenery_Others",
     "video":      "Videos",
+    # AI content types (needs the MobileNet classifier model)
+    "animals":    "Animals",
+    "food":       "Food",
+    "nature":     "Nature_Scenery",
+    "plants":     "Plants_Flowers",
+    "vehicles":   "Vehicles",
 }
+
+# Content buckets keyed by ImageNet-1k class index ranges (the class ordering is
+# stable: 0-397 are animals, food/scenery/plants sit at the end).  Each entry is
+# (inclusive_start, inclusive_end, bucket_key).
+SCENE_INDEX_RANGES = (
+    (0, 397, "animals"),
+    (924, 969, "food"),
+    (970, 980, "nature"),
+    (984, 998, "plants"),
+)
+# A few well-known vehicle class indices scattered through the object range.
+VEHICLE_INDICES = frozenset({
+    403, 404, 405, 407, 408, 409, 436, 444, 468, 472, 484, 510, 511, 517, 547,
+    554, 555, 561, 569, 573, 575, 603, 609, 612, 625, 627, 628, 654, 656, 661,
+    665, 670, 671, 675, 705, 717, 724, 734, 751, 757, 779, 803, 812, 814, 817,
+    820, 829, 833, 847, 864, 866, 867, 870, 871, 874, 895, 908, 913, 914,
+})
+
+
+def scene_bucket_for_index(class_id):
+    """Map an ImageNet-1k class index to a friendly content bucket, or None."""
+    if class_id in VEHICLE_INDICES:
+        return "vehicles"
+    for lo, hi, key in SCENE_INDEX_RANGES:
+        if lo <= class_id <= hi:
+            return key
+    return None
+
 
 IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "bmp", "heic", "heif",
               "tif", "tiff", "gif"}
@@ -53,28 +87,61 @@ def is_image(name):
     return dot > 0 and name[dot + 1:].lower() in IMAGE_EXTS
 
 
-def perceptual_groups(native_paths, max_distance=8, progress=None, cancel=None):
-    """Group visually near-identical images (resized / re-saved / lightly
-    edited copies) across a whole tree.  Each image is reduced to two
-    perceptual fingerprints — a DCT ``pHash`` (robust to JPEG re-compression
-    and brightness/contrast changes) and a gradient ``dHash`` (robust to
-    structure).  Two photos are treated as near-duplicates only when *both*
-    fingerprints agree, which catches more genuine copies while rejecting
-    coincidental look-alikes.  Returns a list of member-path lists (2+ only)."""
+def perceptual_groups(native_paths, max_distance=8, progress=None, cancel=None,
+                      cache_dir=None):
+    """Group visually near-identical photos *and* videos (resized / re-saved /
+    lightly edited copies, re-encoded clips) across a whole tree.
+
+    Each file is reduced to two perceptual fingerprints — a DCT ``pHash`` and a
+    gradient ``dHash`` — and two files are treated as near-duplicates only when
+    both agree.  Videos are fingerprinted from their middle frame.  Resolution
+    and sharpness are recorded so the caller can keep the best copy.
+
+    When ``cache_dir`` is given, fingerprints are cached by (path, size, mtime)
+    so re-scans of an unchanged tree are near-instant.
+
+    Returns ``(groups, meta)`` where ``groups`` is a list of member-path lists
+    (2+ only) and ``meta`` maps each path to ``{"pixels":int, "focus":float}``.
+    """
     cat = Categorizer({})
-    hashes = []
-    total = len(native_paths)
-    for i, p in enumerate(native_paths):
-        if cancel and cancel():
-            break
+    cache = None
+    if cache_dir:
         try:
-            gray, _w, _h = cat._load_gray(p)
-            if gray is not None:
-                hashes.append((p, cat._phash(gray), cat._dhash(gray)))
+            from .hashcache import MetaCache
+            cache = MetaCache(cache_dir)
         except Exception:
-            pass
-        if progress and (i % 5 == 0 or i == total - 1):
-            progress(i + 1, total)
+            cache = None
+    hashes = []          # (path, phash, dhash)
+    meta = {}            # path -> {"pixels", "focus"}
+    total = len(native_paths)
+    try:
+        for i, p in enumerate(native_paths):
+            if cancel and cancel():
+                break
+            try:
+                sig = None
+                key = cache.stat_key(p) if cache is not None else None
+                if key is not None:
+                    hit = cache.get(p, key[0], key[1])
+                    if hit is not None and "ph" in hit:
+                        sig = (hit["ph"], hit["dh"], hit.get("px", 0),
+                               hit.get("fc", 0.0))
+                if sig is None:
+                    sig = cat._percept_sig(p)
+                    if sig is not None and cache is not None and key is not None:
+                        cache.put(p, key[0], key[1],
+                                  {"ph": sig[0], "dh": sig[1],
+                                   "px": sig[2], "fc": sig[3]})
+                if sig is not None:
+                    hashes.append((p, sig[0], sig[1]))
+                    meta[p] = {"pixels": sig[2], "focus": sig[3]}
+            except Exception:
+                pass
+            if progress and (i % 5 == 0 or i == total - 1):
+                progress(i + 1, total)
+    finally:
+        if cache is not None:
+            cache.close()
     n = len(hashes)
     parent = list(range(n))
 
@@ -98,7 +165,7 @@ def perceptual_groups(native_paths, max_distance=8, progress=None, cancel=None):
     groups = {}
     for i in range(n):
         groups.setdefault(find(i), []).append(hashes[i][0])
-    return [sorted(m) for m in groups.values() if len(m) > 1]
+    return [sorted(m) for m in groups.values() if len(m) > 1], meta
 
 
 def is_video(name):
@@ -202,10 +269,16 @@ def category_for(metrics, enabled):
         return CATEGORIES["duplicates"]
     if enabled.get("similar") and metrics.get("is_similar"):
         return CATEGORIES["similar"]
+    # recognised people-group (Family / School / …) wins over generic buckets
+    if metrics.get("people_group"):
+        return person_folder(metrics["people_group"])
     faces = metrics.get("faces", 0)
     if enabled.get("people") and metrics.get("person") and faces <= 1:
         return person_folder(metrics["person"])
     if faces == 0:
+        scene = metrics.get("scene_type")
+        if scene and enabled.get(scene):
+            return CATEGORIES[scene]
         return CATEGORIES["scenery"] if enabled.get("scenery") else None
     if faces == 1:
         return CATEGORIES["single"] if enabled.get("single") else None
@@ -248,6 +321,36 @@ class Categorizer:
                            "samples": options.get("bride_samples")})
         if people:
             self._train_people(people)
+
+        # optional AI content classifier (Animals / Food / Nature / Plants /
+        # Vehicles) — only loaded when asked for and the model is present.
+        self.scene_enabled = bool(options.get("scene"))
+        self.classifier = None
+        self.classifier_error = None
+        if self.scene_enabled:
+            if classifier_present():
+                try:
+                    self.classifier = ImageNetClassifier()
+                except Exception as e:
+                    self.classifier_error = f"Content classifier failed: {e}"
+            else:
+                self.classifier_error = "Content classifier model not downloaded."
+
+        # optional people-groups (Family / School / College …) matched by face
+        self.people_groups = list(options.get("people_groups") or [])
+        self.group_threshold = float(options.get("group_threshold", 0.40))
+        self._group_refs = None
+        self._grp_embedder = None
+        self.group_error = None
+        if self.people_groups:
+            if cluster_api_available() and models_present():
+                try:
+                    self._grp_embedder = FaceEmbedder()
+                    self._group_refs = embed_groups(self.people_groups) or None
+                except Exception as e:
+                    self.group_error = f"People groups failed: {e}"
+            else:
+                self.group_error = "People groups need the face models (auto-download)."
 
     # -- image loading ------------------------------------------------------
     def _load(self, path):
@@ -384,6 +487,53 @@ class Categorizer:
             bits = (bits << 1) | int(v > med)
         return bits
 
+    def _video_gray(self, path):
+        """Grab a representative grey frame (the middle one) from a video, so
+        the same perceptual hashing used for photos also works on clips."""
+        cv2 = self.cv2
+        cap = cv2.VideoCapture(path)
+        try:
+            if not cap.isOpened():
+                return None
+            n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            if n > 1:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, n // 2)
+            ok, frame = cap.read()
+            if (not ok or frame is None) and n > 1:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                ok, frame = cap.read()
+            if not ok or frame is None:
+                return None
+            return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        except Exception:
+            return None
+        finally:
+            cap.release()
+
+    def _percept_sig(self, path):
+        """Perceptual signature for a photo or video used by the near-duplicate
+        finder: ``(phash, dhash, pixels, focus)`` or ``None`` if unreadable.
+
+        ``pixels`` (resolution) and ``focus`` (Laplacian variance = sharpness)
+        let the finder pre-select the best copy to keep in each group.
+        """
+        cv2 = self.cv2
+        if is_video(os.path.basename(path)):
+            gray = self._video_gray(path)
+            if gray is None:
+                return None
+            h, w = gray.shape[:2]
+        else:
+            gray, w, h = self._load_gray(path)
+            if gray is None:
+                return None
+        try:
+            focus = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        except Exception:
+            focus = 0.0
+        return (self._phash(gray), self._dhash(gray), int(w) * int(h), focus)
+
+
     # -- screenshot / document heuristics ----------------------------------
     def _looks_screenshot(self, path):
         """Screenshots are detected by file name — reliable, no false hits on
@@ -416,6 +566,29 @@ class Categorizer:
         expo = max(0.0, 1.0 - abs(val_mean - 128.0) / 128.0)
         quality = round(0.55 * sharp + 0.30 * expo + 0.15 * (1 if faces else 0), 3)
 
+        # AI content type — only for people-free shots (refines "Scenery")
+        scene_type = None
+        if self.classifier is not None and len(faces) == 0 and not screenshot \
+                and not document:
+            scene_type, _conf = self.classifier.classify_bgr(bgr)
+
+        # people-group match (Family / School / …) — any member's face counts
+        people_group = None
+        if self._group_refs and len(faces) > 0:
+            try:
+                embeds = self._grp_embedder._embeds_from_img(bgr)
+                best_name, best_sim = None, -1.0
+                for v in embeds:
+                    for gname, refs in self._group_refs:
+                        for r in refs:
+                            s = float(np.dot(v, r))
+                            if s > best_sim:
+                                best_sim, best_name = s, gname
+                if best_sim >= self.group_threshold:
+                    people_group = best_name
+            except Exception:
+                people_group = None
+
         return {
             "focus": round(focus, 1),
             "is_blurry": focus < self.blur_threshold,
@@ -428,6 +601,8 @@ class Categorizer:
             "is_similar": False,
             "screenshot": bool(screenshot),
             "document": bool(document),
+            "scene_type": scene_type,
+            "people_group": people_group,
             "person": self._match_person(gray, faces),
         }
 
@@ -444,6 +619,76 @@ _YUNET = ("face_detection_yunet_2023mar.onnx",
 _SFACE = ("face_recognition_sface_2021dec.onnx",
           "https://github.com/opencv/opencv_zoo/raw/main/models/"
           "face_recognition_sface/face_recognition_sface_2021dec.onnx")
+_MOBILENET = ("image_classification_mobilenetv2_2022apr.onnx",
+              "https://github.com/opencv/opencv_zoo/raw/main/models/"
+              "image_classification_mobilenet/"
+              "image_classification_mobilenetv2_2022apr.onnx")
+
+
+def classifier_present():
+    return os.path.exists(os.path.join(MODELS_DIR, _MOBILENET[0]))
+
+
+def download_classifier(progress=None):
+    """Fetch the small MobileNetV2 ImageNet classifier into ~/.phorg/models."""
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    name, url = _MOBILENET
+    dst = os.path.join(MODELS_DIR, name)
+    if os.path.exists(dst):
+        return True
+    tmp = dst + ".part"
+
+    def _hook(blocks, bs, total):
+        if progress:
+            progress(name, min(blocks * bs, total) if total > 0 else 0, total)
+
+    urllib.request.urlretrieve(url, tmp, reporthook=_hook)
+    os.replace(tmp, dst)
+    return True
+
+
+class ImageNetClassifier:
+    """MobileNetV2 (ImageNet-1k) content classifier via OpenCV DNN.
+
+    Predicts a photo's dominant subject and maps it to a friendly content
+    bucket (Animals / Food / Nature / Plants / Vehicles).  Runs fully offline
+    on the CPU; the ~14 MB model is downloaded once into ~/.phorg/models.
+    """
+
+    _MEAN = (0.485, 0.456, 0.406)
+    _STD = (0.229, 0.224, 0.225)
+
+    def __init__(self):
+        import cv2
+        import numpy as np
+        self.cv2 = cv2
+        self.np = np
+        self.net = cv2.dnn.readNet(os.path.join(MODELS_DIR, _MOBILENET[0]))
+
+    def _blob(self, bgr):
+        cv2, np = self.cv2, self.np
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        rgb = cv2.resize(rgb, (256, 256), interpolation=cv2.INTER_AREA)
+        rgb = rgb[16:240, 16:240, :]                       # center crop 224
+        x = (rgb.astype(np.float32) / 255.0 - self._MEAN) / self._STD
+        return x.transpose(2, 0, 1)[np.newaxis, :, :, :].astype(np.float32)
+
+    def classify_bgr(self, bgr, min_conf=0.30):
+        """Return (bucket_key, confidence) for a BGR image, or (None, conf)."""
+        np = self.np
+        try:
+            self.net.setInput(self._blob(bgr))
+            out = self.net.forward().flatten()
+        except Exception:
+            return None, 0.0
+        e = np.exp(out - out.max())
+        probs = e / e.sum()
+        cid = int(probs.argmax())
+        conf = float(probs[cid])
+        if conf < min_conf:
+            return None, conf
+        return scene_bucket_for_index(cid), conf
+
 
 
 def cluster_api_available():
@@ -534,9 +779,16 @@ class FaceEmbedder:
         Needed so a guest who is only a small face in a group shot is still
         matched — ``embed`` only looks at the single largest face.
         """
+        return self._embeds_from_img(self._read(path), max_faces)
+
+    def _embeds_from_img(self, img, max_faces=12):
+        """Unit-norm embeddings for every face in an already-loaded BGR image.
+
+        Lets callers that have already decoded the image (e.g. to measure
+        sharpness) avoid reading it from disk a second time.
+        """
         import numpy as np
         cv2 = self.cv2
-        img = self._read(path)
         if img is None:
             return []
         h, w = img.shape[:2]
@@ -678,3 +930,283 @@ def embed_people(people):
             if n > 0:
                 refs.append((name, m / n))
     return refs
+
+
+def embed_groups(groups):
+    """Build face references for named people-groups (Family, School, …).
+
+    Each group is ``{name, samples}`` where ``samples`` is a folder holding
+    clear photos of that group's members.  *All* faces found across the folder
+    become references, so any member appearing in a photo matches the group.
+    Returns ``[(name, [unit_embeddings])]``.
+    """
+    emb = FaceEmbedder()
+    refs = []
+    for g in groups or []:
+        name = (g.get("name") or "").strip()
+        sdir = g.get("samples")
+        if not name or not sdir or not os.path.isdir(sdir):
+            continue
+        vecs = []
+        for fn in sorted(os.listdir(sdir)):
+            p = os.path.join(sdir, fn)
+            if not os.path.isfile(p) or not is_image(fn):
+                continue
+            vecs.extend(emb.embed_all(p))
+        if vecs:
+            refs.append((name, vecs))
+    return refs
+
+
+def social_groups(native_paths, cluster_threshold=0.363, min_together=2,
+                  progress=None, cancel=None):
+    """Discover social circles automatically from who appears *together*.
+
+    People who repeatedly show up in the same photos form a community (a family,
+    a friend group, …).  We cluster every face into people, build a
+    "co-appearance" graph, split it into communities via weighted label
+    propagation, then assign each photo to the community most of its faces
+    belong to.  The user names each discovered circle (Family / College / …).
+
+    Returns ``{"groups": [{id, count, people, rep, members}], "photos", "persons"}``.
+    """
+    import numpy as np
+    from collections import defaultdict, Counter
+    import random
+
+    emb = FaceEmbedder()
+    total = len(native_paths)
+
+    # 1. faces per photo
+    photo_faces = []
+    for i, p in enumerate(native_paths):
+        if cancel and cancel():
+            break
+        photo_faces.append(emb.embed_all(p))
+        if progress and (i % 3 == 0 or i == total - 1):
+            progress(i + 1, total)
+
+    # 2. greedy-cluster every face into a person; record who's in each photo
+    persons = []            # {centroid, sum, count}
+    photo_persons = []      # per photo: set of person indices
+    for faces in photo_faces:
+        pset = set()
+        for v in faces:
+            best_sim, best_i = -1.0, -1
+            for pi, c in enumerate(persons):
+                s = float(np.dot(v, c["centroid"]))
+                if s > best_sim:
+                    best_sim, best_i = s, pi
+            if best_i >= 0 and best_sim >= cluster_threshold:
+                c = persons[best_i]
+                c["sum"] = c["sum"] + v
+                nrm = float(np.linalg.norm(c["sum"]))
+                c["centroid"] = c["sum"] / nrm if nrm > 0 else c["centroid"]
+                c["count"] += 1
+                pset.add(best_i)
+            else:
+                persons.append({"centroid": v, "sum": v.copy(), "count": 1})
+                pset.add(len(persons) - 1)
+        photo_persons.append(pset)
+    n = len(persons)
+
+    # 3. co-appearance edges (how often two people share a photo)
+    edge = defaultdict(int)
+    for pset in photo_persons:
+        pl = sorted(pset)
+        for a in range(len(pl)):
+            for b in range(a + 1, len(pl)):
+                edge[(pl[a], pl[b])] += 1
+    adj = defaultdict(list)
+    for (a, b), w in edge.items():
+        if w >= min_together:
+            adj[a].append((b, w))
+            adj[b].append((a, w))
+
+    # 4. communities via weighted label propagation (deterministic seed)
+    labels = list(range(n))
+    rng = random.Random(0)
+    order = list(range(n))
+    for _ in range(20):
+        rng.shuffle(order)
+        changed = False
+        for node in order:
+            if not adj[node]:
+                continue
+            wl = defaultdict(float)
+            for nbr, w in adj[node]:
+                wl[labels[nbr]] += w
+            best = max(wl.items(), key=lambda kv: (kv[1], -kv[0]))[0]
+            if labels[node] != best:
+                labels[node] = best
+                changed = True
+        if not changed:
+            break
+
+    comm_persons = defaultdict(list)
+    for pi, lab in enumerate(labels):
+        comm_persons[lab].append(pi)
+
+    # 5. assign each photo to the community most of its faces belong to
+    comm_photos = defaultdict(list)
+    for idx, pset in enumerate(photo_persons):
+        if not pset:
+            continue
+        lab = Counter(labels[pi] for pi in pset).most_common(1)[0][0]
+        comm_photos[lab].append(idx)
+
+    out = []
+    for lab, photos in comm_photos.items():
+        if len(photos) < 2:
+            continue
+        rep = max(photos, key=lambda i: sum(
+            1 for pi in photo_persons[i] if labels[pi] == lab))
+        out.append({"id": lab, "count": len(photos),
+                    "people": len(comm_persons.get(lab, [])),
+                    "rep": native_paths[rep],
+                    "members": [native_paths[i] for i in photos]})
+    out.sort(key=lambda g: -g["count"])
+    for i, g in enumerate(out):
+        g["id"] = i
+    return {"groups": out, "photos": total, "persons": n}
+
+
+# ===========================================================================
+# AI wedding sorter — couple detection, face-count labels, venue-aware splits
+# ===========================================================================
+def _haversine_m(a, b):
+    """Great-circle distance in metres between two (lat, lon) points."""
+    from math import radians, sin, cos, asin, sqrt
+    lat1, lon1 = a
+    lat2, lon2 = b
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    h = (sin(dlat / 2) ** 2
+         + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2)
+    return 2 * 6371000.0 * asin(min(1.0, sqrt(h)))
+
+
+def wedding_ai(items, gap_seconds, names=None, progress=None, cancel=None,
+               venue_meters=150.0, match_threshold=0.363):
+    """Content-aware wedding sorting.
+
+    ``items`` is a list of ``(ts, lat_or_None, lon_or_None, native_path)``
+    sorted by ``ts``.  Each photo is analysed for faces + sharpness; the two
+    people appearing in the most photos are taken to be the couple.  Sessions
+    are split on time gaps *and* venue changes (GPS), each session is labelled
+    from its face content (Group Photos / Couple Portraits / Portraits, else a
+    positional function name), and the sharpest frame is chosen as the cover.
+
+    Returns ``{"sessions": [...], "couple": {"count": n}, "photos": n}``.
+    """
+    import numpy as np
+    emb = FaceEmbedder()
+    names = names or []
+
+    # -- 1. per-photo face embeddings + sharpness (single image read each) ---
+    info = []            # aligned with items: {"embeds","faces","focus"}
+    total = len(items)
+    for i, (_ts, _la, _lo, path) in enumerate(items):
+        if cancel and cancel():
+            break
+        rec = {"embeds": [], "faces": 0, "focus": 0.0}
+        img = emb._read(path)
+        if img is not None:
+            try:
+                gray = emb.cv2.cvtColor(img, emb.cv2.COLOR_BGR2GRAY)
+                rec["focus"] = float(emb.cv2.Laplacian(
+                    gray, emb.cv2.CV_64F).var())
+            except Exception:
+                pass
+            embeds = emb._embeds_from_img(img)
+            rec["embeds"] = embeds
+            rec["faces"] = len(embeds)
+        info.append(rec)
+        if progress and (i % 3 == 0 or i == total - 1):
+            progress(i + 1, total)
+
+    # -- 2. cluster every face to find recurring identities ------------------
+    clusters = []        # {"centroid","sum","photos": set(idx)}
+    for idx, rec in enumerate(info):
+        for v in rec["embeds"]:
+            best_sim, best_c = -1.0, -1
+            for ci, c in enumerate(clusters):
+                sim = float(np.dot(v, c["centroid"]))
+                if sim > best_sim:
+                    best_sim, best_c = sim, ci
+            if best_c >= 0 and best_sim >= match_threshold:
+                c = clusters[best_c]
+                c["sum"] = c["sum"] + v
+                nrm = float(np.linalg.norm(c["sum"]))
+                c["centroid"] = c["sum"] / nrm if nrm > 0 else c["centroid"]
+                c["photos"].add(idx)
+            else:
+                clusters.append({"centroid": v, "sum": v.copy(),
+                                 "photos": {idx}})
+    clusters.sort(key=lambda c: len(c["photos"]), reverse=True)
+    # the couple = the two identities present in the most photos (if frequent)
+    couple = [c for c in clusters[:2] if len(c["photos"]) >= 3]
+
+    def _couple_hits(rec):
+        hits = 0
+        for c in couple:
+            if any(float(np.dot(v, c["centroid"])) >= match_threshold
+                   for v in rec["embeds"]):
+                hits += 1
+        return hits
+
+    # -- 3. split into sessions on time gaps and venue (GPS) changes ---------
+    sessions = []
+    cur = []
+    last_ts = None
+    last_gps = None
+    for idx, (ts, la, lo, path) in enumerate(items):
+        gps = (la, lo) if (la is not None and lo is not None) else None
+        split = False
+        if last_ts is not None and (ts - last_ts) > gap_seconds:
+            split = True
+        elif gps and last_gps and _haversine_m(last_gps, gps) > venue_meters:
+            split = True
+        if split and cur:
+            sessions.append(cur)
+            cur = []
+        cur.append(idx)
+        last_ts = ts
+        if gps:
+            last_gps = gps
+    if cur:
+        sessions.append(cur)
+
+    # -- 4. label each session from its content + pick the sharpest cover ----
+    out = []
+    for si, members in enumerate(sessions):
+        recs = [info[i] for i in members]
+        n = len(members)
+        big = sum(1 for r in recs if r["faces"] >= 5)
+        both = sum(1 for r in recs if _couple_hits(r) >= 2)
+        one = sum(1 for r in recs if r["faces"] == 1)
+        couple_pct = round(100.0 * both / n) if n else 0
+        avg_faces = round(sum(r["faces"] for r in recs) / n, 1) if n else 0
+        if n and big / n >= 0.5:
+            label = "Group Photos"
+        elif n and both / n >= 0.5:
+            label = "Couple Portraits"
+        elif n and one / n >= 0.6:
+            label = "Portraits"
+        elif si < len(names):
+            label = names[si]
+        else:
+            label = f"Session {si + 1}"
+        best = max(members, key=lambda i: info[i]["focus"])
+        tss = [items[i][0] for i in members]
+        out.append({
+            "id": si, "count": n,
+            "start": int(min(tss)), "end": int(max(tss)),
+            "rep": items[best][3],
+            "members": [items[i][3] for i in members],
+            "suggested": label,
+            "faces": avg_faces, "couplePct": couple_pct,
+        })
+    return {"sessions": out, "couple": {"count": len(couple)},
+            "photos": len(items)}
+

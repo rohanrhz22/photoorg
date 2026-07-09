@@ -23,7 +23,7 @@ class Op:
     __slots__ = ("kind", "a", "b")
 
     def __init__(self, kind, a, b=None):
-        self.kind = kind      # 'mkdir' | 'move' | 'rmdir'
+        self.kind = kind      # 'mkdir' | 'move' | 'rmdir' | 'trash'
         self.a = a
         self.b = b
 
@@ -34,7 +34,55 @@ class Op:
             return f"MKDIR {self.a}"
         if self.kind == "rmdir":
             return f"RMDIR {self.a}"
+        if self.kind == "trash":
+            return f"TRASH {self.a}"
         return f"{self.kind} {self.a} {self.b}"
+
+
+def _send_to_trash(native_path):
+    """Move a single file to the OS Recycle Bin / Trash (recoverable by the
+    user).  Returns True on success.  On Windows this uses the shell natively
+    via ctypes (no third-party dependency); on other platforms it falls back to
+    the optional ``send2trash`` package.
+    """
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        FO_DELETE = 0x0003
+        FOF_ALLOWUNDO = 0x0040        # send to Recycle Bin instead of erasing
+        FOF_NOCONFIRMATION = 0x0010
+        FOF_NOERRORUI = 0x0400
+        FOF_SILENT = 0x0004
+
+        class _SHFILEOPSTRUCTW(ctypes.Structure):
+            _fields_ = [
+                ("hwnd", wintypes.HWND),
+                ("wFunc", wintypes.UINT),
+                ("pFrom", wintypes.LPCWSTR),
+                ("pTo", wintypes.LPCWSTR),
+                ("fFlags", ctypes.c_uint16),
+                ("fAnyOperationsAborted", wintypes.BOOL),
+                ("hNameMappings", ctypes.c_void_p),
+                ("lpszProgressTitle", wintypes.LPCWSTR),
+            ]
+
+        path = os.path.abspath(native_path)
+        op = _SHFILEOPSTRUCTW()
+        op.wFunc = FO_DELETE
+        op.pFrom = path + "\x00\x00"   # list must be double-null terminated
+        op.fFlags = (FOF_ALLOWUNDO | FOF_NOCONFIRMATION
+                     | FOF_NOERRORUI | FOF_SILENT)
+        res = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
+        return res == 0 and not op.fAnyOperationsAborted
+    try:
+        from send2trash import send2trash
+        send2trash(native_path)
+        return True
+    except Exception:
+        raise OSError("Recycle Bin isn't available here — "
+                      "install 'send2trash' or use the review-folder mode.")
+
 
 
 def _b64(s):
@@ -139,6 +187,7 @@ class LocalBackend:
         seen = 0
         self.merged_skips = 0
         self.copied = 0
+        self.trashed = 0
         for op in ops:
             if cancel and cancel():
                 break
@@ -193,6 +242,17 @@ class LocalBackend:
                         if journal is not None:
                             journal.append({"op": "move", "src": op.a,
                                             "dst": dst.replace(os.sep, "/")})
+                elif op.kind == "trash":
+                    try:
+                        if _send_to_trash(self.native(op.a)):
+                            self.trashed += 1
+                            done += 1
+                            if journal is not None:
+                                journal.append({"op": "trash", "src": op.a})
+                        else:
+                            log(f"  ! could not recycle: {op.a}")
+                    except OSError as e:
+                        log(f"  ! recycle failed for {op.a}: {e}")
                 elif op.kind == "rmdir":
                     try:
                         os.rmdir(self.native(op.a))
