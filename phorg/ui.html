@@ -315,6 +315,7 @@ body.light .btn.ghost{background:#e3ecfb}
       <button data-page="organize" data-need="conn" disabled><span class="ic">✨</span> Organize</button>
       <button data-page="photos" data-need="conn" disabled><span class="ic">🖼️</span> Photo AI</button>
       <button data-page="wedding" data-need="conn" disabled><span class="ic">💍</span> Wedding</button>
+      <button data-page="memories" data-need="conn" disabled><span class="ic">🗓️</span> Memories</button>
       <button data-page="facefind" data-need="conn" disabled><span class="ic">🙋</span> FaceFind</button>
       <button data-page="compress" data-need="conn" disabled><span class="ic">🗜️</span> Compress</button>
       <button data-page="report" data-need="conn" disabled><span class="ic">📄</span> Report</button>
@@ -346,7 +347,7 @@ const S = {
     duplicates:true,similar:false,screenshot:true,document:true,best:false,video:true,
     animals:false,food:false,nature:false,plants:false,vehicles:false},
   people:[{name:"Bride",samples:""},{name:"Groom",samples:""}], photoJob:null,
-  peopleGroups:[], groupsOn:false, socialGroups:[],
+  peopleGroups:[], groupsOn:false, socialGroups:[], knownPeople:false, memSessions:[], cullItems:[],
   granularity:"month", useExif:true,
   blurThreshold:50, personThreshold:78, photoItems:[], photoTest:false,
   photoSel:new Set(), clusterJob:null, clusters:[], clusterSel:new Set(),
@@ -444,7 +445,7 @@ function go(page){
   document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
   const m=$("#main");m.innerHTML="";
   ({connect:pageConnect,dashboard:pageDashboard,organize:pageOrganize,
-    photos:pagePhotos,wedding:pageWedding,facefind:pageFaceFind,compress:pageCompress,report:pageReport,safety:pageSafety}[page]||pageConnect)(m);
+    photos:pagePhotos,wedding:pageWedding,memories:pageMemories,facefind:pageFaceFind,compress:pageCompress,report:pageReport,safety:pageSafety}[page]||pageConnect)(m);
 }
 $("#nav").addEventListener("click",e=>{const b=e.target.closest("button");
   if(!b||b.disabled)return;go(b.dataset.page);});
@@ -742,7 +743,9 @@ async function doReclaim(e){
         ${row("🧬","Duplicate files",d.duplicates.count,d.duplicates.kb,"dedupe")}
         ${row("🧹","Junk files",d.junk.count,d.junk.kb,"junk")}
         ${row("🗄️","Large files older than 6 months",d.largeOld.count,d.largeOld.kb,"")}
-      </div>`;
+      </div>
+      <div class="btn-row" style="margin-top:12px"><button class="btn ghost" id="cullBtn">🧹 Cull blurry &amp; duplicate photos → Recycle Bin</button></div>
+      <div id="cullOut"></div>`;
     if(d.largeOld.items&&d.largeOld.items.length){
       html+=`<div style="color:var(--mut);font-size:11.5px;margin-top:10px">Biggest old files:</div>
         <div class="rclist">`+d.largeOld.items.slice(0,6).map(it=>`<div class="rcrow">
@@ -752,7 +755,46 @@ async function doReclaim(e){
     out.innerHTML=html;
     out.querySelectorAll("[data-rcgo]").forEach(b=>b.onclick=()=>{
       S.activeOp=b.dataset.rcgo;go("organize");});
+    const cb=$("#cullBtn");if(cb)cb.onclick=startCull;
   }catch(err){toast(err.message,"bad");}finally{busy(btn,false);}
+}
+async function startCull(e){
+  const btn=e.target;busy(btn,true,"Scanning photos…");
+  const out=$("#cullOut");out.innerHTML="";
+  try{
+    const d=await runApplyJob("cull/start",{backend:S.backend,root:S.root,recursive:true,_verb:"Scanned"},out);
+    if(!d||!d.items.length){out.innerHTML=`<div class="callout safe" style="margin-top:12px">✅ No blurry or duplicate photos found.</div>`;busy(btn,false);return;}
+    S.cullItems=d.items.map(it=>({...it,sel:true}));
+    renderCullReview(d);
+  }catch(err){toast(err.message,"bad");}finally{busy(btn,false);}
+}
+function renderCullReview(d){
+  const out=$("#cullOut");
+  const nSel=S.cullItems.filter(x=>x.sel).length;
+  out.innerHTML=`<div class="callout warn" style="margin-top:12px">Found <b>${num(d.count)}</b> photo(s) to cull (${fmtKb(d.kb)}).
+    Untick any to keep — the rest go to the <b>Recycle Bin</b> (recoverable).</div>
+    <div class="thumbgrid" id="cullGrid"></div>
+    <div class="btn-row"><button class="btn warn" id="cullApply">🗑️ Send ${num(nSel)} to Recycle Bin</button></div>
+    <div id="cullApplyOut"></div>`;
+  $("#cullGrid").innerHTML=S.cullItems.map((it,i)=>`<div class="thumb ${it.sel?'sel':''}" data-ci="${i}" style="cursor:pointer;position:relative">
+    <span style="position:absolute;top:6px;left:6px;background:rgba(0,0,0,.6);color:#fff;border-radius:4px;padding:1px 6px;font-size:10px;z-index:2">${it.reason==='blurry'?'🌀 blurry':'🔁 dup'}</span>
+    <img loading="lazy" src="/api/thumb?size=300&path=${encodeURIComponent(it.path)}" alt=""/>
+    <div class="nm" title="${esc(it.path)}">${it.sel?'☑':'☐'} ${esc(it.name)}</div></div>`).join("");
+  $("#cullGrid").querySelectorAll("[data-ci]").forEach(elm=>elm.onclick=()=>{
+    const i=+elm.dataset.ci;S.cullItems[i].sel=!S.cullItems[i].sel;renderCullReview(d);});
+  $("#cullApply").onclick=applyCull;
+}
+async function applyCull(e){
+  const paths=S.cullItems.filter(x=>x.sel).map(x=>x.path);
+  if(!paths.length){toast("Nothing selected to cull","info");return;}
+  const btn=e.target;busy(btn,true,"Recycling…");
+  try{
+    const d=await api("cull/apply",{backend:S.backend,root:S.root,paths});
+    $("#cullApplyOut").innerHTML=`<div class="callout safe" style="margin-top:12px">✅ Sent <b>${num(d.trashed)}</b> photo(s) to the Recycle Bin. Restore them from there if needed.</div>`;
+    btn.remove();
+    toast("Culled "+num(d.trashed)+" photos","good");
+    api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth}).then(sc=>S.scan=sc).catch(()=>{});
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
 }
 async function doTreeSearch(q){
   const out=$("#searchResults");if(!out)return;
@@ -1512,6 +1554,7 @@ function renderPhotoOptions(st){
       <div class="orline">— or, without any samples —</div>
       <button class="btn ghost" id="autoGroupBtn" ${peopleDisabled?"disabled":""} style="width:100%">🪄 Auto-group everyone by face</button>
       <div class="subhint">Finds recurring faces automatically and lets you name each person. First use downloads a small (~37 MB) face model.</div>
+      <div id="savedPeople" style="margin-top:10px"></div>
     </div>
     <div class="card" style="margin-top:14px">
       <h4 class="cardh">👨‍👩‍👧‍👦 People groups</h4>
@@ -1568,6 +1611,52 @@ function renderPhotoOptions(st){
   if(gchk)gchk.onchange=e=>{S.groupsOn=e.target.checked;renderGroupsBox();};
   renderGroupsBox();
   const sb=$("#socialBtn");if(sb)sb.onclick=discoverSocialGroups;
+  renderSavedPeople();
+}
+async function renderSavedPeople(){
+  const box=$("#savedPeople");if(!box)return;
+  let ppl=[];try{ppl=(await api("people/list",{})).people||[];}catch(e){}
+  const toolbar=`<div class="btn-row" style="margin:10px 0 0">
+    <button class="btn ghost sm" id="whoisBtn">🔍 Who's in a photo?</button>
+    <button class="btn ghost sm" id="pplExport">⬇️ Back up</button>
+    <button class="btn ghost sm" id="pplImport">⬆️ Restore</button>
+    <input type="file" id="pplImportFile" accept="application/json,.json" style="display:none"/>
+  </div><div id="whoisOut"></div>`;
+  if(!ppl.length){
+    box.innerHTML=`<div style="color:var(--mut);font-size:11.5px">No remembered people yet — name faces in “Auto-group” and keep “🧠 Remember” ticked.</div>${toolbar}`;
+  }else{
+    box.innerHTML=`
+      <label class="toggle"><input type="checkbox" id="knownChk" ${S.knownPeople?"checked":""}/>
+        <span class="tk"></span><span>🧠 Auto-sort my remembered people<span class="desc"> — file their photos into per-person folders when you Analyze</span></span></label>
+      <div style="color:var(--mut);font-size:11.5px;margin:6px 0 6px">Remembered — recognised automatically:</div>
+      <div class="chips">${ppl.map(p=>`<span class="chip" style="gap:6px">${esc(p.name)}<span style="color:var(--mut)">·${num(p.n)}</span>
+        <b data-forget="${esc(p.name)}" style="cursor:pointer;color:var(--mut)" title="Forget">✕</b></span>`).join("")}</div>${toolbar}`;
+  }
+  const kc=$("#knownChk");if(kc)kc.onchange=e=>S.knownPeople=e.target.checked;
+  box.querySelectorAll("[data-forget]").forEach(x=>x.onclick=async()=>{
+    try{await api("people/forget",{name:x.dataset.forget});toast("Forgot "+x.dataset.forget,"info");renderSavedPeople();}
+    catch(err){toast(err.message,"bad");}});
+  $("#whoisBtn").onclick=async()=>{
+    const path=(prompt("Paste the full path to a photo to identify:")||"").trim();if(!path)return;
+    const out=$("#whoisOut");out.innerHTML=`<div class="empty" style="padding:10px"><span class="spin"></span> Looking…</div>`;
+    try{const r=await api("people/whois",{path});
+      if(r.empty_db){out.innerHTML=`<div class="callout warn" style="margin-top:8px">No remembered people yet.</div>`;return;}
+      out.innerHTML=`<div class="callout ${r.names.length?'safe':'info'}" style="margin-top:8px">${num(r.faces)} face(s) found.
+        ${r.names.length?"Recognised: <b>"+r.names.map(esc).join(", ")+"</b>":"None of them are remembered yet."}</div>`;
+    }catch(err){out.innerHTML=`<div class="callout bad" style="margin-top:8px">${esc(err.message)}</div>`;}
+  };
+  $("#pplExport").onclick=async()=>{
+    try{const d=await api("people/export",{});
+      const blob=new Blob([JSON.stringify(d.db,null,2)],{type:"application/json"});
+      const url=URL.createObjectURL(blob);const a=document.createElement("a");
+      a.href=url;a.download="phorg-people.json";document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+      toast("Backed up "+num(d.count)+" people","good");}catch(err){toast(err.message,"bad");}};
+  $("#pplImport").onclick=()=>$("#pplImportFile").click();
+  $("#pplImportFile").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();
+    rd.onload=async()=>{try{const db=JSON.parse(rd.result);const r=await api("people/import",{db});
+      toast("Restored "+num(r.added)+" new people","good");renderSavedPeople();}
+      catch(err){toast("Couldn't import: "+err.message,"bad");}};
+    rd.readAsText(f);};
 }
 // -- presets (saved in the browser) -------------------------------------
 function loadPresets(){try{return JSON.parse(localStorage.getItem("phorg-presets")||"{}");}catch(e){return {};}}
@@ -1707,7 +1796,7 @@ async function applySocialGroups(e){
   }catch(err){toast(err.message,"bad");busy(btn,false);}
 }
 async function startAnalyze(e,test){
-  if(!Object.values(S.photoCats).some(Boolean)&&!(S.groupsOn&&S.peopleGroups.some(g=>g.name.trim()&&g.samples.trim()))){toast("Pick at least one category or add a people group","bad");return;}
+  if(!Object.values(S.photoCats).some(Boolean)&&!(S.groupsOn&&S.peopleGroups.some(g=>g.name.trim()&&g.samples.trim()))&&!S.knownPeople){toast("Pick at least one category, add a people group, or enable remembered people","bad");return;}
   const people=S.photoCats.people?S.people.filter(p=>p.name.trim()&&p.samples.trim()):[];
   if(S.photoCats.people&&!people.length){
     toast("Add at least one person with a sample folder, or turn off people","bad");return;}
@@ -1720,7 +1809,7 @@ async function startAnalyze(e,test){
   try{
     const body={backend:S.backend,root:S.root,include_hidden:S.include_hidden,protect:S.protect,
       recursive:S.recursive,blur_threshold:S.blurThreshold,person_threshold:S.personThreshold,
-      dup_distance:8,...S.photoCats,people:people,people_groups:groups};
+      dup_distance:8,...S.photoCats,people:people,people_groups:groups,known_people:S.knownPeople};
     if(test)body.limit=20;
     const d=await api("categorize/start",body);
     S.photoJob=d.jobId;
@@ -1919,6 +2008,7 @@ function lbShow(i){
   const nav=n>1?"":"none";$("#lbPrev").style.display=nav;$("#lbNext").style.display=nav;
 }
 // -- gallery: preview many photos at once -------------------------------
+function isVid(n){return /\.(mp4|mkv|avi|mov|3gp|webm|m4v|flv|wmv|mpg|mpeg)$/i.test(n||"");}
 function openGallery(title,items,opts){
   opts=opts||{};
   if(!items||!items.length)return;
@@ -1935,8 +2025,9 @@ function openGallery(title,items,opts){
   const close=()=>{host.innerHTML="";document.onkeydown=null;};
   const draw=()=>{
     $("#galTitle").textContent=`${title} — ${num(list.length)} photos`;
-    $("#galgrid").innerHTML=list.map((it,i)=>`<div class="thumb" style="cursor:zoom-in">
+    $("#galgrid").innerHTML=list.map((it,i)=>`<div class="thumb" style="cursor:zoom-in;position:relative">
       ${removable?`<button class="galrm" data-rm="${i}" title="Remove from this group">✕</button>`:""}
+      ${isVid(it.name)?`<span style="position:absolute;top:6px;left:6px;background:rgba(0,0,0,.6);color:#fff;border-radius:4px;padding:1px 7px;font-size:11px;z-index:2">▶</span>`:""}
       <img loading="lazy" src="/api/thumb?size=300&path=${encodeURIComponent(it.path)}" data-gi="${i}" alt=""/>
       <div class="nm" title="${esc(it.name)}">${esc(it.name)}</div></div>`).join("");
     $("#galgrid").querySelectorAll("img[data-gi]").forEach(img=>img.onclick=e=>
@@ -2085,6 +2176,8 @@ function renderClusters(clusters){
   html+=`</div>
     <div class="callout info" style="margin-top:16px">ℹ️ Click a face to flip through that person's photos.
       Tick two or more to <b>merge</b> them. Each photo is filed under its main subject's name; blank = skip.</div>
+    <label class="toggle" style="margin-top:10px"><input type="checkbox" id="clusterRemember" checked/>
+      <span class="tk"></span><span>🧠 Remember these people<span class="desc"> — recognise them automatically in future scans</span></span></label>
     <div class="btn-row">
       <button class="btn ghost" id="clusterMerge" style="display:none">🔗 Merge selected</button>
       <button class="btn warn" id="clusterApply">⚡ File named groups into folders</button>
@@ -2134,6 +2227,8 @@ function mergeClusters(){
   renderClusters(S.clusters);
 }
 async function applyClusters(e){
+  const remember=$("#clusterRemember")?$("#clusterRemember").checked:false;
+  const named=(S.clusters||[]).filter(c=>(c.name||"").trim());
   const assignments=[];
   (S.clusters||[]).forEach(c=>{
     const name=(c.name||"").trim();if(!name)return;
@@ -2147,6 +2242,12 @@ async function applyClusters(e){
     const d=await runApplyJob("categorize/apply/start",{backend:S.backend,root:S.root,assignments},out);
     renderApplyResult(out,d);btn.remove();
     toast(d.cancelled?"Stopped":"Groups filed",d.cancelled?"info":"good");
+    if(remember&&named.length){
+      api("people/remember",{backend:S.backend,root:S.root,
+        people:named.map(c=>({name:c.name.trim(),photos:c.members}))})
+        .then(r=>{if(r.saved&&r.saved.length){toast("🧠 Remembered "+r.saved.length+" people for next time","good");renderSavedPeople();}})
+        .catch(()=>{});
+    }
     api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth})
       .then(sc=>S.scan=sc).catch(()=>{});
   }catch(err){toast(err.message,"bad");busy(btn,false);}
@@ -2263,6 +2364,98 @@ async function applyWeddingEvents(e){
     const d=await runApplyJob("categorize/apply/start",{backend:S.backend,root:S.root,assignments,_verb:"Filed"},out);
     renderApplyResult(out,d);btn.remove();
     toast(d.cancelled?"Stopped":"Events filed","good");
+    api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth}).then(sc=>S.scan=sc).catch(()=>{});
+  }catch(err){toast(err.message,"bad");busy(btn,false);}
+}
+
+// ---------------------------------------------------------------- Memories / trips (time + place)
+function pageMemories(m){
+  const p=el("div","page");
+  p.innerHTML=`
+    <h1>Memories <span style="font-size:14px;color:var(--mut);font-weight:400">· trips &amp; events</span></h1>
+    <p class="lead">Group a photo dump into <b>memories</b> — a trip, a day out, an event — using each
+      photo's capture time and location. A new memory starts after a long gap or a change of place.</p>
+    <div class="card" id="memCard"></div>`;
+  m.appendChild(p);
+  renderMemories();
+}
+function renderMemories(){
+  const card=$("#memCard");
+  if(S.backend!=="local"){
+    card.innerHTML=`<div class="callout warn">🗓️ Memories works on a local folder. Copy your photos to the PC first.</div>`;return;}
+  card.innerHTML=`
+    <div class="callout info">🕒 Photos are grouped by <b>capture time</b> and <b>GPS location</b> (EXIF).
+      Nothing moves until you name the memories and apply — and it's fully undoable.</div>
+    <div class="opts">
+      <label class="toggle"><input type="checkbox" id="memRec" checked/>
+        <span class="tk"></span><span>Include sub-folders<span class="desc"> — scan the whole tree</span></span></label>
+    </div>
+    <div class="slider" style="margin-top:8px">
+      <label><span>⏱️ New memory after a gap of</span><span><b id="memGapVal">8</b> h</span></label>
+      <input type="range" id="memGap" min="1" max="72" step="1" value="8"/>
+      <div class="ends"><span>Many small memories</span><span>Few big ones</span></div>
+    </div>
+    <div class="slider" style="margin-top:8px">
+      <label><span>📍 …or a place change over</span><span><b id="memKmVal">25</b> km</span></label>
+      <input type="range" id="memKm" min="1" max="200" step="1" value="25"/>
+      <div class="ends"><span>Same neighbourhood</span><span>Different city</span></div>
+    </div>
+    <div class="btn-row"><button class="btn" id="memDetect">🔍 Find memories</button></div>
+    <div id="memOut"></div>`;
+  $("#memGap").oninput=e=>{$("#memGapVal").textContent=e.target.value;};
+  $("#memKm").oninput=e=>{$("#memKmVal").textContent=e.target.value;};
+  $("#memDetect").onclick=detectMemories;
+}
+async function detectMemories(e){
+  const btn=e.target;busy(btn,true,"Reading capture times…");
+  const out=$("#memOut");
+  try{
+    const d=await api("memories",{backend:S.backend,root:S.root,
+      recursive:$("#memRec").checked,gap_hours:+$("#memGap").value,venue_km:+$("#memKm").value});
+    if(!d.sessions.length){out.innerHTML=`<div class="callout warn" style="margin-top:14px">No photos found to group here.</div>`;busy(btn,false);return;}
+    S.memSessions=d.sessions.map(s=>({...s,name:s.suggested}));
+    renderMemorySessions(d);
+  }catch(err){toast(err.message,"bad");}finally{busy(btn,false);}
+}
+function renderMemorySessions(d){
+  const out=$("#memOut");
+  let html=`<div class="callout safe" style="margin-top:14px">✅ Found <b>${num(d.count)}</b> memory(ies)
+    across ${num(d.photos)} photo(s). Name each (or clear to skip), then file them.</div>
+    <div class="clustergrid">`;
+  S.memSessions.forEach((s,i)=>{
+    const src="/api/thumb?size=300&path="+encodeURIComponent(s.rep);
+    html+=`<div class="clustercard">
+      <img loading="lazy" src="${src}" data-mem-open="${i}" alt="" title="Preview all photos"/>
+      <div class="cc">🕒 ${esc(fmtTimeRange(s.start,s.end))}</div>
+      <div class="cc" style="color:var(--txt)">📸 ${num(s.count)} photo(s)</div>
+      <button class="btn ghost sm" data-mem-open="${i}" style="width:100%;margin-bottom:6px">🔍 Preview all ${num(s.count)}</button>
+      <input type="text" data-mem="${i}" placeholder="Memory name (blank = skip)" value="${esc(s.name)}"/>
+    </div>`;
+  });
+  html+=`</div>
+    <div class="callout info" style="margin-top:16px">ℹ️ Each memory is filed into a folder named after it. Blank names are left where they are.</div>
+    <div class="btn-row"><button class="btn warn" id="memApply">⚡ File photos into memory folders</button></div>
+    <div id="memApplyOut"></div>`;
+  out.innerHTML=html;
+  out.querySelectorAll("input[data-mem]").forEach(inp=>inp.oninput=e=>{
+    S.memSessions[+e.target.dataset.mem].name=e.target.value;});
+  out.querySelectorAll("[data-mem-open]").forEach(elm=>elm.onclick=ev=>{
+    ev.preventDefault();const s=S.memSessions[+ev.currentTarget.dataset.memOpen];
+    openGallery(s.name||("Memory — "+num(s.count)),s.members.map(pth=>({path:pth,name:pth.split(/[\\/]/).pop()})));});
+  $("#memApply").onclick=applyMemories;
+}
+async function applyMemories(e){
+  const assignments=[];
+  S.memSessions.forEach(s=>{const nm=(s.name||"").trim();if(!nm)return;
+    const safe=nm.replace(/[^A-Za-z0-9 ()/_-]/g,"").trim().replace(/\s+/g,"_")||"Memory";
+    s.members.forEach(pth=>assignments.push({path:pth,category:safe}));});
+  if(!assignments.length){toast("Name at least one memory first","bad");return;}
+  const btn=e.target;busy(btn,true,"Filing…");
+  const out=$("#memApplyOut");
+  try{
+    const d=await runApplyJob("categorize/apply/start",{backend:S.backend,root:S.root,assignments,_verb:"Filed"},out);
+    renderApplyResult(out,d);btn.remove();
+    toast(d.cancelled?"Stopped":"Memories filed","good");
     api("scan",{backend:S.backend,root:S.root,adb:S.adb,device:S.device,depth:S.depth}).then(sc=>S.scan=sc).catch(()=>{});
   }catch(err){toast(err.message,"bad");busy(btn,false);}
 }
@@ -3210,6 +3403,7 @@ const TAB_DEFS=[
   {id:"compress",label:"🗜️ Compress",desc:"shrink images losslessly",def:false},
   {id:"photos",label:"🖼️ Photo AI",desc:"sort photos by content & people",def:false},
   {id:"wedding",label:"💍 Wedding",desc:"sort a wedding dump by event",def:false},
+  {id:"memories",label:"🗓️ Memories",desc:"group photos into trips & events",def:false},
   {id:"facefind",label:"🙋 FaceFind",desc:"find a person's photos from a selfie",def:false},
 ];
 function loadTabPrefs(){

@@ -269,6 +269,9 @@ def category_for(metrics, enabled):
         return CATEGORIES["duplicates"]
     if enabled.get("similar") and metrics.get("is_similar"):
         return CATEGORIES["similar"]
+    # a remembered person (face database) — most specific, wins first
+    if metrics.get("known_person"):
+        return person_folder(metrics["known_person"])
     # recognised people-group (Family / School / …) wins over generic buckets
     if metrics.get("people_group"):
         return person_folder(metrics["people_group"])
@@ -351,6 +354,20 @@ class Categorizer:
                     self.group_error = f"People groups failed: {e}"
             else:
                 self.group_error = "People groups need the face models (auto-download)."
+
+        # optional: auto-file people remembered in the face database
+        self._known_refs = None
+        if options.get("known_people"):
+            if cluster_api_available() and models_present():
+                try:
+                    from . import peopledb
+                    if self._grp_embedder is None:
+                        self._grp_embedder = FaceEmbedder()
+                    self._known_refs = peopledb.refs() or None
+                except Exception as e:
+                    self.group_error = f"Known people failed: {e}"
+            elif not self.group_error:
+                self.group_error = "Known people need the face models (auto-download)."
 
     # -- image loading ------------------------------------------------------
     def _load(self, path):
@@ -574,9 +591,13 @@ class Categorizer:
 
         # people-group match (Family / School / …) — any member's face counts
         people_group = None
-        if self._group_refs and len(faces) > 0:
+        known_person = None
+        if (self._group_refs or self._known_refs) and len(faces) > 0:
             try:
                 embeds = self._grp_embedder._embeds_from_img(bgr)
+            except Exception:
+                embeds = []
+            if embeds and self._group_refs:
                 best_name, best_sim = None, -1.0
                 for v in embeds:
                     for gname, refs in self._group_refs:
@@ -586,8 +607,15 @@ class Categorizer:
                                 best_sim, best_name = s, gname
                 if best_sim >= self.group_threshold:
                     people_group = best_name
-            except Exception:
-                people_group = None
+            if embeds and self._known_refs:
+                best_name, best_sim = None, -1.0
+                for v in embeds:
+                    for kname, r in self._known_refs:
+                        s = float(np.dot(v, r))
+                        if s > best_sim:
+                            best_sim, best_name = s, kname
+                if best_sim >= self.group_threshold:
+                    known_person = best_name
 
         return {
             "focus": round(focus, 1),
@@ -603,6 +631,7 @@ class Categorizer:
             "document": bool(document),
             "scene_type": scene_type,
             "people_group": people_group,
+            "known_person": known_person,
             "person": self._match_person(gray, faces),
         }
 
@@ -930,6 +959,24 @@ def embed_people(people):
             if n > 0:
                 refs.append((name, m / n))
     return refs
+
+
+def mean_embedding_of(native_paths):
+    """Mean unit-norm face embedding (largest face per photo) across the given
+    photos — used to remember a named person from their grouped shots.
+    Returns a plain list of floats, or None if no face was found."""
+    import numpy as np
+    emb = FaceEmbedder()
+    vecs = []
+    for p in native_paths or []:
+        v = emb.embed(p)
+        if v is not None:
+            vecs.append(v)
+    if not vecs:
+        return None
+    m = np.mean(vecs, axis=0)
+    n = float(np.linalg.norm(m))
+    return (m / n).tolist() if n > 0 else None
 
 
 def embed_groups(groups):

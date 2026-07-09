@@ -79,6 +79,12 @@ What you get:
   a personal `FaceFind_<name>/` album (copies — originals untouched) you can zip
   and share via WhatsApp/email. A **Match strictness** slider trades off more
   results vs. only-sure matches. All face matching runs locally.
+  - **Guest self-service portal** — turn on sharing and phorg gives you a link
+    (works for anyone on the **same Wi-Fi**). Guests open it on their phone, add a
+    selfie, and download the photos they're in (including group shots) — no
+    scrolling through thousands of images. Sharing is **off by default** and only
+    exposes the guest portal (never your other files or organize tools); it stops
+    when you close the app.
 - **Compress** — shrink images **losslessly** (no quality loss at all): JPEGs
   are slimmed by stripping bulky metadata & embedded thumbnails while the picture
   data stays byte-for-byte identical, and PNGs are re-packed losslessly. You can
@@ -165,6 +171,41 @@ photos to PC”** button that pulls them over and switches to that folder).
   `YYYY / YYYY-MM` folders using their EXIF capture date (falls back to file date).
 - **Sort by Location** (Organize tab) — group geotagged photos into `Places/`
   folders by their GPS coordinates from EXIF.
+
+### 🧠 More AI features (all local, all previewed)
+- **Content types** — sort people-free photos by *what's in them*: **Animals**,
+  **Food**, **Nature/Scenery**, **Plants & Flowers**, **Vehicles**, using a small
+  offline MobileNet classifier (downloaded once, ~14 MB). Categories are grouped
+  into **Wedding** and **Other** sets with a toggle to select a whole set at once.
+- **Remembered people (face database)** — name someone once in *Auto-group* and
+  phorg **remembers their face forever** (`~/.phorg/people.json`). Next time it
+  auto-suggests the name, and a **“Auto-sort my remembered people”** toggle files
+  their photos into per-person folders on any Analyze run — no samples needed.
+  You can **back up / restore** the database and ask **“Who's in a photo?”** to
+  name everyone in a single picture.
+- **People groups** — define groups like **Family / School / College / Home** from
+  a folder of member faces; any photo containing a member is filed into that group.
+- **Auto-discover social groups** — no input needed: phorg finds circles of people
+  who appear **together** and lets you name each once (family, a friend group, a
+  class), then files their photos.
+- **AI wedding sorting** — a smart mode that detects the **couple**, labels events
+  by content (Group Photos / Couple Portraits / Portraits), splits by **venue
+  (GPS)**, and picks the **sharpest cover** for each event.
+- **Near-duplicate detection for photos *and* videos** — a robust DCT **pHash** +
+  gradient **dHash** finder (cached for instant re-scans) that also catches
+  re-encoded video copies; the review gallery keeps the sharpest/highest-res copy.
+
+### 🗓️ Memories & 🧹 cleanup
+- **Memories / trips** — group any photo dump into **events** by capture time
+  **and** GPS location; a new memory starts after a long gap or a place change.
+  Name each and file it.
+- **Cull blurry & duplicates → Recycle Bin** — on the Dashboard's *reclaim* panel,
+  scan for blurry shots + near-duplicate extras, review them in a grid, and send
+  the rest to the **OS Recycle Bin** (recoverable) in one click.
+- **Junk → Recycle Bin** — Junk Sweep can send junk straight to the Recycle Bin
+  (native, no dependency) instead of a review folder.
+- **Video thumbnails** — galleries show a real **middle-frame** thumbnail (with a
+  ▶ badge), not a black first frame.
 
 ## ↩️ Undo & redo
 Every apply is journalled into a history stack, so you can **Undo** recent
@@ -277,10 +318,21 @@ phone_organizer/
 │   ├── safety.py          # protected-path policy
 │   ├── classify.py        # type/size/junk rules + magic-byte detection
 │   ├── organizer.py       # planners: junk / type / size / fix-ext / empties / photos
-│   ├── vision.py          # optional AI image analysis (blur/faces/bride/dupes)
+│   ├── vision.py          # optional AI image analysis (blur/faces/content/dupes)
+│   ├── peopledb.py        # persistent face database (remembered people)
+│   ├── hashcache.py       # per-file SHA-1 / perceptual-hash cache
 │   ├── report.py          # HTML report builder
 │   └── report_template.html
+├── tests/                 # pytest regression suite (python -m pytest -q)
 ├── phorg.bat              # Windows launcher (CLI)
 ├── phorg-ui.bat           # Windows launcher (web UI)
 └── README.md
+```
+
+## Testing
+A pytest suite covers the core logic (safety rules, planners, dedupe/flatten,
+hash cache, people database, vision helpers). Run it with:
+
+```powershell
+python -m pytest -q
 ```

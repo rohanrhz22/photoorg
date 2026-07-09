@@ -837,6 +837,7 @@ def _vision_options(p):
         "dup_distance": int(p.get("dup_distance") or 8),
         "people": people,
         "people_groups": groups,
+        "known_people": bool(p.get("known_people")),
         "person_threshold": float(p.get("person_threshold") or 78.0),
         "limit": int(p["limit"]) if p.get("limit") else None,
         "similar_distance": int(p.get("similar_distance") or 16),
@@ -856,7 +857,8 @@ def api_categorize_start(p):
     be = _build_backend(p)
     saf = _build_safety(p)
     options = _vision_options(p)
-    if not any(options["enabled"].values()) and not options.get("people_groups"):
+    if (not any(options["enabled"].values()) and not options.get("people_groups")
+            and not options.get("known_people")):
         raise ValueError("Select at least one category to sort into.")
     _register_root(be.root)
 
@@ -886,7 +888,8 @@ def api_categorize_start(p):
                         f"{e}")
 
             # people-groups need the face models (YuNet + SFace)
-            if options.get("people_groups") and not vision.models_present():
+            if (options.get("people_groups") or options.get("known_people")) \
+                    and not vision.models_present():
                 job["phase"] = "downloading"
 
                 def fprog(name, got, total):
@@ -1176,6 +1179,14 @@ def api_cluster_start(p):
                     job["model_total"] = total
                 vision.download_models(progress=mprog)
             refs = vision.embed_people(people) if people else None
+            # also suggest names from the saved people database
+            try:
+                from . import peopledb
+                db_refs = peopledb.refs()
+                if db_refs:
+                    refs = (refs or []) + db_refs
+            except Exception:
+                pass
             job["phase"] = "clustering"
 
             def prog(done, total, nclusters):
@@ -1217,6 +1228,100 @@ def api_cluster_cancel(p):
     if job:
         job["cancel"] = True
     return {"ok": True}
+
+
+def api_people_list(_p):
+    """Saved people in the persistent face database."""
+    from . import peopledb
+    return {"people": peopledb.summary()}
+
+
+def api_people_remember(p):
+    """Teach the face database one or more named people from their photos, so
+    future scans recognise them automatically."""
+    from . import vision, peopledb
+    if vision.check_deps() or not vision.cluster_api_available():
+        raise ValueError("Face tools not available.")
+    saved = []
+    for item in (p.get("people") or []):
+        name = (item.get("name") or "").strip()
+        photos = item.get("photos") or []
+        if not name or not photos:
+            continue
+        native = [x.replace("/", os.sep) for x in photos[:25]]   # cap for speed
+        emb = vision.mean_embedding_of(native)
+        if emb:
+            peopledb.remember(name, emb, count=len(photos))
+            saved.append(name)
+    return {"saved": saved, "people": peopledb.summary()}
+
+
+def api_people_forget(p):
+    from . import peopledb
+    peopledb.forget((p.get("name") or "").strip())
+    return {"people": peopledb.summary()}
+
+
+def api_people_whois(p):
+    """Name everyone in a single photo using the saved face database."""
+    from . import vision, peopledb
+    if vision.check_deps() or not vision.cluster_api_available():
+        raise ValueError("Face tools not available.")
+    if not vision.models_present():
+        vision.download_models()
+    path = (p.get("path") or "").replace("/", os.sep)
+    if not path or not os.path.isfile(path):
+        raise ValueError("Pick a photo first.")
+    refs = peopledb.refs()
+    if not refs:
+        return {"faces": 0, "matches": [], "names": [],
+                "empty_db": True}
+    import numpy as np
+    emb = vision.FaceEmbedder()
+    embeds = emb.embed_all(path)
+    matches = []
+    for v in embeds:
+        best_name, best = None, -1.0
+        for name, r in refs:
+            s = float(np.dot(v, r))
+            if s > best:
+                best, best_name = s, name
+        if best >= 0.40:
+            matches.append({"name": best_name, "score": round(best, 3)})
+    # de-dup names, keep highest score
+    seen = {}
+    for m in matches:
+        if m["name"] not in seen or m["score"] > seen[m["name"]]:
+            seen[m["name"]] = m["score"]
+    names = sorted(seen, key=lambda k: -seen[k])
+    return {"faces": len(embeds), "matches": matches, "names": names}
+
+
+def api_people_export(_p):
+    """Return the whole face database as a portable JSON blob (for backup)."""
+    from . import peopledb
+    return {"db": peopledb.load(), "count": len(peopledb.load())}
+
+
+def api_people_import(p):
+    """Merge an exported face database into the local one (union; incoming wins
+    only for brand-new names, existing names are kept)."""
+    from . import peopledb
+    incoming = p.get("db") or {}
+    if not isinstance(incoming, dict):
+        raise ValueError("Not a valid people database file.")
+    with peopledb._LOCK:
+        db = peopledb.load()
+        added = 0
+        for name, v in incoming.items():
+            name = (name or "").strip()
+            if not name or not isinstance(v, dict) or not v.get("emb"):
+                continue
+            if name not in db:
+                db[name] = {"emb": v["emb"], "n": int(v.get("n", 1))}
+                added += 1
+        peopledb._save(db)
+    return {"added": added, "people": peopledb.summary()}
 
 
 # ==========================================================================
@@ -1437,6 +1542,82 @@ def api_share_guests(_p):
 # ==========================================================================
 # Rename live-preview sample, duplicate groups, search
 # ==========================================================================
+def api_memories(p):
+    """Group photos into time+place 'memories' (trips / events): a new memory
+    starts after a big time gap or a change of venue (GPS)."""
+    if (p.get("backend") or "local").lower() != "local":
+        raise ValueError("Memories works on local folders only.")
+    be = _build_backend(p)
+    saf = _build_safety(p)
+    recursive = bool(p.get("recursive", True))
+    gap_hours = max(1, int(p.get("gap_hours") or 8))
+    venue_km = float(p.get("venue_km") or 25)
+    from . import vision
+    skip_top = {"Compressed_Images", "Originals_Backup"}
+    items = []
+    for fp in be.iter_files(be.root):
+        name = posixpath.basename(fp)
+        rel = be.relpath(posixpath.dirname(fp)).replace("\\", "/")
+        segs = [s for s in rel.split("/") if s and s != "."]
+        if segs and (segs[0] in skip_top or saf.is_protected_dir("/".join(segs))):
+            continue
+        if not recursive and segs:
+            continue
+        if saf.is_protected_file(name) or not vision.is_image(name):
+            continue
+        native = be.native(fp)
+        dt = organizer._exif_datetime(native)
+        ts = dt.timestamp() if dt else float(be.mtime(fp) or 0)
+        gps = vision.exif_gps(native)
+        la, lo = (gps if gps else (None, None))
+        items.append((ts, la, lo, fp))
+    items.sort(key=lambda x: x[0])
+
+    gap = gap_hours * 3600
+    venue_m = venue_km * 1000.0
+    sessions = []
+    cur = []
+    last_ts = None
+    last_gps = None
+    for ts, la, lo, fp in items:
+        gps = (la, lo) if (la is not None and lo is not None) else None
+        split = False
+        if last_ts is not None and (ts - last_ts) > gap:
+            split = True
+        elif gps and last_gps and vision._haversine_m(last_gps, gps) > venue_m:
+            split = True
+        if split and cur:
+            sessions.append(cur)
+            cur = []
+        cur.append((ts, fp))
+        last_ts = ts
+        if gps:
+            last_gps = gps
+    if cur:
+        sessions.append(cur)
+
+    import datetime as _dt
+    out = []
+    for i, sess in enumerate(sessions):
+        tss = [s[0] for s in sess]
+        start, end = int(min(tss)), int(max(tss))
+        d0 = _dt.datetime.fromtimestamp(start)
+        d1 = _dt.datetime.fromtimestamp(end)
+        if d0.date() == d1.date():
+            label = d0.strftime("%Y-%m-%d")
+        else:
+            label = d0.strftime("%Y-%m-%d") + "_to_" + d1.strftime("%m-%d")
+        out.append({
+            "id": i, "count": len(sess),
+            "start": start, "end": end,
+            "rep": sess[len(sess) // 2][1],
+            "members": [s[1] for s in sess],
+            "suggested": label,
+        })
+    return {"sessions": out, "count": len(out), "photos": len(items),
+            "root": be.root}
+
+
 def api_rename_sample(p):
     be = _build_backend(p)
     saf = _build_safety(p)
@@ -2046,6 +2227,103 @@ def api_phash_start(p):
 
 
 # ==========================================================================
+# Cull sweep — blurry photos + near-duplicate extras → Recycle Bin
+# ==========================================================================
+def api_cull_start(p):
+    if (p.get("backend") or "local").lower() != "local":
+        raise ValueError("Cull works on local folders only.")
+    from . import vision
+    if vision.check_deps():
+        raise ValueError("This needs the image-analysis packages (install AI "
+                         "support / pip install -r requirements-vision.txt).")
+    be = _build_backend(p)
+    saf = _build_safety(p)
+    recursive = bool(p.get("recursive", True))
+    blur_threshold = float(p.get("blur_threshold") or 50.0)
+    dist = int(p.get("distance") or 8)
+    files = organizer.list_image_files(be, be.root, saf, recursive)
+    native = [be.native(f) for f in files]
+
+    job_id = uuid.uuid4().hex
+    job = {"done": 0, "total": len(native), "phase": "starting",
+           "finished": False, "error": None, "result": None, "cancel": False}
+    with _JOBS_LOCK:
+        _JOBS[job_id] = job
+        for k in list(_JOBS.keys())[:-20]:
+            _JOBS.pop(k, None)
+
+    def _kb(pth):
+        try:
+            return os.path.getsize(pth) // 1024
+        except OSError:
+            return 0
+
+    def run():
+        try:
+            job["phase"] = "analyzing"
+            cz = vision.Categorizer({"blur_threshold": blur_threshold})
+            items = []
+            seen = set()
+            total = len(native)
+            for i, fp in enumerate(native):
+                if job["cancel"]:
+                    break
+                m = cz.classify(fp)
+                if not m.get("unreadable") and m.get("is_blurry"):
+                    items.append({"path": fp.replace(os.sep, "/"),
+                                  "name": os.path.basename(fp),
+                                  "reason": "blurry", "kb": _kb(fp)})
+                    seen.add(fp)
+                job["done"] = i + 1
+                job["total"] = total
+
+            def cancelled():
+                return job["cancel"]
+
+            groups, meta = vision.perceptual_groups(
+                native, max_distance=dist, cancel=cancelled,
+                cache_dir=os.path.join(be.native(be.root), ".phorg"))
+            for g in groups:
+                keep = max(g, key=lambda pth: (meta.get(pth, {}).get("focus", 0),
+                                               meta.get(pth, {}).get("pixels", 0),
+                                               _kb(pth)))
+                for pth in g:
+                    if pth == keep or pth in seen:
+                        continue
+                    items.append({"path": pth.replace(os.sep, "/"),
+                                  "name": os.path.basename(pth),
+                                  "reason": "duplicate", "kb": _kb(pth)})
+                    seen.add(pth)
+            job["result"] = {"items": items, "count": len(items),
+                             "kb": sum(x["kb"] for x in items),
+                             "cancelled": job["cancel"], "root": be.root}
+            job["phase"] = "done"
+        except Exception as e:  # pragma: no cover - defensive
+            job["error"] = f"{type(e).__name__}: {e}"
+            job["phase"] = "error"
+        finally:
+            job["finished"] = True
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"jobId": job_id}
+
+
+def api_cull_apply(p):
+    """Send the chosen photos to the Recycle Bin (recoverable)."""
+    if (p.get("backend") or "local").lower() != "local":
+        raise ValueError("Cull works on local folders only.")
+    from .backends import Op
+    be = _build_backend(p)
+    paths = [x for x in (p.get("paths") or []) if x]
+    if not paths:
+        return {"trashed": 0}
+    ops = [Op("trash", x) for x in paths]
+    log = []
+    be.apply_ops(ops, log=log.append)
+    return {"trashed": getattr(be, "trashed", 0), "log": log}
+
+
+# ==========================================================================
 # Reclaim summary (duplicates + junk + large old files)
 # ==========================================================================
 def api_reclaim(p):
@@ -2350,6 +2628,9 @@ ROUTES = {
     "/api/wedding/sessions": api_wedding_sessions,
     "/api/wedding/ai/start": api_wedding_ai_start,
     "/api/social/start": api_social_start,
+    "/api/memories": api_memories,
+    "/api/cull/start": api_cull_start,
+    "/api/cull/apply": api_cull_apply,
     "/api/compress/status": api_compress_status,
     "/api/compress/start": api_compress_start,
     "/api/compress/estimate": api_compress_estimate,
@@ -2374,6 +2655,12 @@ ROUTES = {
     "/api/cluster/start": api_cluster_start,
     "/api/cluster/progress": api_cluster_progress,
     "/api/cluster/cancel": api_cluster_cancel,
+    "/api/people/list": api_people_list,
+    "/api/people/remember": api_people_remember,
+    "/api/people/forget": api_people_forget,
+    "/api/people/whois": api_people_whois,
+    "/api/people/export": api_people_export,
+    "/api/people/import": api_people_import,
     "/api/facefind/selfie": api_facefind_selfie,
     "/api/facefind/start": api_facefind_start,
     "/api/share/enable": api_share_enable,
@@ -2481,9 +2768,19 @@ class Handler(BaseHTTPRequestHandler):
             if ext in video_exts:
                 import cv2
                 cap = cv2.VideoCapture(fp)
+                # seek to the middle — the first frame is often black
+                try:
+                    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+                    if n > 1:
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, n // 2)
+                except Exception:
+                    pass
                 ok, frame = cap.read()
+                if (not ok or frame is None):
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    ok, frame = cap.read()
                 cap.release()
-                if not ok:
+                if not ok or frame is None:
                     self._send(404, {"error": "no frame"})
                     return
                 frame = frame[:, :, ::-1]  # BGR -> RGB

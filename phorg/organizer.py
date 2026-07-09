@@ -289,6 +289,13 @@ def plan_categorize_images(backend, root, safety, options,
     for grp in (options.get("people_groups") or []):
         if grp.get("name"):
             category_folders.add(vision.person_folder(grp["name"]))
+    if options.get("known_people"):
+        try:
+            from . import peopledb
+            for _p in peopledb.summary():
+                category_folders.add(vision.person_folder(_p["name"]))
+        except Exception:
+            pass
     recursive = bool(options.get("recursive"))
 
     # gather image files first so we know the total (for progress)
@@ -325,7 +332,8 @@ def plan_categorize_images(backend, root, safety, options,
                                for g in (options.get("people_groups") or [])],
                                sort_keys=True)
                  + str(options.get("person_threshold"))
-                 + ("|scene1" if scene_enabled else "|scene0"))
+                 + ("|scene1" if scene_enabled else "|scene0")
+                 + ("|known1" if options.get("known_people") else "|known0"))
     analysis_sig = _hashlib.md5(_psig_src.encode()).hexdigest()
     cache_file = os.path.join(to_native(root), ".phorg", "analysis_cache.json") \
         if use_cache else None
