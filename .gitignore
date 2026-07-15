@@ -5,8 +5,9 @@ __pycache__/
 .venv/
 venv/
 
-# PyInstaller build artifacts (the exe in dist/ is kept for sharing)
+# PyInstaller build artifacts
 build/
+dist/
 *.spec
 
 # App runtime metadata written into organized folders
