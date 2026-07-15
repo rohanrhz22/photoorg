@@ -763,7 +763,19 @@ class FaceEmbedder:
 
     def _read(self, path):
         cv2 = self.cv2
-        img = cv2.imread(path)
+        # Decode large photos at half resolution straight from the JPEG (much
+        # faster + far less memory). Faces stay big enough to detect/recognise,
+        # and the working image is capped again below anyway. Only kicks in for
+        # big images (>=2600px) so small photos keep full detail.
+        flag = cv2.IMREAD_COLOR
+        try:
+            from PIL import Image
+            with Image.open(path) as im:
+                if max(im.size) >= 2600:
+                    flag = cv2.IMREAD_REDUCED_COLOR_2
+        except Exception:
+            pass
+        img = cv2.imread(path, flag)
         if img is None:
             try:
                 from PIL import Image
@@ -943,6 +955,13 @@ def facefind(native_paths, selfie_path, threshold=0.40,
 
         # Pass 2: compute the missing embeddings in parallel across cores.
         if pending and not (cancel and cancel()):
+            # OpenCV internally spreads a single op over all cores; combined with
+            # our own thread pool that oversubscribes the CPU and *slows* things
+            # down. Make each op single-threaded and parallelise across photos
+            # instead — the right pattern for a batch of many images.
+            import cv2
+            prev_threads = cv2.getNumThreads()
+            cv2.setNumThreads(1)
             pool = ThreadPoolExecutor(max_workers=workers)
             try:
                 futs = {pool.submit(embed_one, p): key for (p, key) in pending}
@@ -963,6 +982,10 @@ def facefind(native_paths, selfie_path, threshold=0.40,
                         break
             finally:
                 pool.shutdown(wait=False, cancel_futures=True)
+                try:
+                    cv2.setNumThreads(prev_threads)
+                except Exception:
+                    pass
     finally:
         if cache is not None:
             cache.close()

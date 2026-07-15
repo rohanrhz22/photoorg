@@ -2748,6 +2748,7 @@ async function guestFind(e){
     if(!S.guestSelfie){toast("Selfie didn't upload — please try again","bad");busy(btn,false);return;}
   }
   busy(btn,true,"Finding…");
+  S.gFails=0;
   const prog=$("#gProgress");$("#gOut").innerHTML="";
   try{
     const d=await api("share/find/start",{token:S.guestToken,selfie:S.guestSelfie,
@@ -2761,7 +2762,19 @@ async function guestFind(e){
   }catch(err){toast(err.message,"bad");busy(btn,false);}
 }
 async function guestPoll(btn){
-  let d;try{d=await api("cluster/progress",{jobId:S.gJob});}catch(err){toast(err.message,"bad");busy(btn,false);return;}
+  let d;
+  try{d=await api("cluster/progress",{jobId:S.gJob});S.gFails=0;}
+  catch(err){
+    // The phone reaches the host only while its app is open. A failed poll is
+    // usually a brief network blip — retry a few times — but repeated failures
+    // (or a lost job after a restart) mean the host went offline: say so and
+    // stop, instead of leaving a frozen "Finding…" spinner on screen.
+    S.gFails=(S.gFails||0)+1;
+    if(S.gFails<4){setTimeout(()=>guestPoll(btn),1500);return;}
+    busy(btn,false);
+    $("#gProgress").innerHTML=`<div class="callout warn" style="margin-top:14px">⚠️ Lost connection to the host. The photo app was probably closed or sharing was stopped. Please try again when the host is back online.</div>`;
+    return;
+  }
   const bar=$("#gBar"),pc=$("#gCount"),tally=$("#gTally");
   if(d.phase==="downloading"){const mt=d.model_total||0,md=d.model_done||0,mp=mt?Math.round(md/mt*100):0;
     if(bar)bar.style.width=mp+"%";if(pc)pc.textContent=`Getting ready ${mp}%…`;}
