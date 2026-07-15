@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Event Photo-Sharing Apps — Market &amp; Business Analysis (FotoOwl, Premagic &amp; Peers)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#121a33; --card:#161f3d; --card2:#1c2850;
+    --ink:#e8ecf8; --muted:#9aa6c7; --line:#28345c;
+    --accent:#6ea8fe; --accent2:#7ef0c2; --accent3:#ffb86b; --accent4:#ff7b9c; --accent5:#c58bff;
+    --good:#39d98a; --bad:#ff6b6b; --warn:#ffcf5c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b1020,#0d1226 60%,#0b0f1e);color:var(--ink);line-height:1.55}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 22px 80px}
+  header.hero{padding:46px 34px;border-radius:20px;background:radial-gradient(1200px 400px at 10% -10%,rgba(110,168,254,.25),transparent),radial-gradient(900px 400px at 100% 0%,rgba(126,240,194,.18),transparent),var(--card);border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  header.hero h1{margin:0 0 10px;font-size:2.15rem;line-height:1.2}
+  header.hero p{margin:6px 0;color:var(--muted);max-width:820px}
+  .tagpills{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px}
+  .pill{font-size:.78rem;padding:6px 12px;border-radius:999px;background:var(--card2);border:1px solid var(--line);color:var(--ink)}
+  h2{margin:46px 0 8px;font-size:1.5rem;border-left:4px solid var(--accent);padding-left:12px}
+  h3{margin:26px 0 8px;font-size:1.15rem;color:#dfe6fb}
+  p.lead{color:var(--muted)}
+  section{scroll-margin-top:20px}
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:900px){.g2,.g3,.g4{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .kpi{display:flex;flex-direction:column;gap:4px}
+  .kpi .num{font-size:1.7rem;font-weight:700}
+  .kpi .lbl{color:var(--muted);font-size:.86rem}
+  .kpi .sub{font-size:.78rem;color:var(--accent2)}
+  .chartbox{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 8px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .chartbox h3{margin-top:4px}
+  .chartbox .cap{color:var(--muted);font-size:.8rem;margin:2px 0 12px}
+  canvas{max-height:360px}
+  table{width:100%;border-collapse:collapse;font-size:.92rem;margin-top:8px;overflow:hidden;border-radius:12px}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line)}
+  th{background:var(--card2);color:#dbe4ff;font-weight:600}
+  tr:hover td{background:rgba(110,168,254,.06)}
+  .good{color:var(--good);font-weight:600}
+  .bad{color:var(--bad);font-weight:600}
+  .warn{color:var(--warn);font-weight:600}
+  .muted{color:var(--muted)}
+  ul.clean{margin:8px 0;padding-left:20px}
+  ul.clean li{margin:6px 0}
+  .swot{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:760px){.swot{grid-template-columns:1fr}}
+  .swot .box{border-radius:14px;padding:16px;border:1px solid var(--line)}
+  .swot .s{background:linear-gradient(180deg,rgba(57,217,138,.12),transparent)}
+  .swot .w{background:linear-gradient(180deg,rgba(255,107,107,.12),transparent)}
+  .swot .o{background:linear-gradient(180deg,rgba(110,168,254,.14),transparent)}
+  .swot .t{background:linear-gradient(180deg,rgba(255,207,92,.12),transparent)}
+  .verdict{background:linear-gradient(135deg,rgba(126,240,194,.14),rgba(110,168,254,.14));border:1px solid var(--line);border-radius:18px;padding:26px}
+  .scorebar{height:12px;border-radius:8px;background:var(--card2);overflow:hidden;margin:6px 0 2px}
+  .scorebar > span{display:block;height:100%}
+  .note{font-size:.82rem;color:var(--muted);background:var(--bg2);border:1px dashed var(--line);border-radius:12px;padding:14px;margin-top:14px}
+  a.src{color:var(--accent);text-decoration:none;font-size:.82rem}
+  .toc{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .toc a{font-size:.85rem;color:var(--ink);background:var(--card2);border:1px solid var(--line);padding:7px 12px;border-radius:10px;text-decoration:none}
+  .toc a:hover{border-color:var(--accent)}
+  .badge{display:inline-block;font-size:.72rem;padding:3px 8px;border-radius:6px;background:var(--card2);border:1px solid var(--line);color:var(--muted);margin-left:6px}
+  footer{margin-top:50px;color:var(--muted);font-size:.82rem;border-top:1px solid var(--line);padding-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>📸 Event Photo-Sharing Apps — Market &amp; Business Analysis</h1>
+    <p>A 5-year business and market deep-dive on AI event-photography &amp; photo-distribution platforms — <strong>FotoOwl</strong>, <strong>Premagic</strong>, <strong>Kamero</strong> and peers — covering revenue, profit/loss, funding, market size, and the outlook for the coming years.</p>
+    <div class="tagpills">
+      <span class="pill">AI Face-Recognition Photo Sharing</span>
+      <span class="pill">Event Tech / SaaS</span>
+      <span class="pill">India-born, global market</span>
+      <span class="pill">Data window: FY2021 → FY2025 · Outlook → 2030</span>
+    </div>
+    <div class="toc">
+      <a href="#tldr">TL;DR</a>
+      <a href="#what">What these apps do</a>
+      <a href="#market">Market size</a>
+      <a href="#companies">Company financials</a>
+      <a href="#revchart">5-yr revenue</a>
+      <a href="#pl">Profit / Loss</a>
+      <a href="#funding">Funding</a>
+      <a href="#competition">Competition</a>
+      <a href="#swot">SWOT</a>
+      <a href="#future">Future scope</a>
+      <a href="#verdict">Verdict</a>
+      <a href="#kerala" style="border-color:var(--accent2);background:rgba(126,240,194,.12)">🌴 Kerala focus</a>
+      <a href="#pricing" style="border-color:var(--accent3);background:rgba(255,184,107,.12)">💲 Pricing</a>
+    </div>
+  </header>
+
+  <!-- ================= TL;DR ================= -->
+  <section id="tldr">
+    <h2>1 · TL;DR — Is this market done, or is there scope?</h2>
+    <div class="card verdict">
+      <p style="font-size:1.05rem;margin-top:0"><strong>Verdict: The market is <span class="good">NOT done — it is early-stage and expanding</span>, but it is getting crowded and commoditising fast.</strong></p>
+      <ul class="clean">
+        <li>🟢 <strong>The underlying market is growing.</strong> Global event photography is a ~<strong>$38B</strong> market growing to ~<strong>$50B by 2030</strong> (5.8% CAGR); the enabling face/image-recognition tech is growing at <strong>12–16% CAGR</strong>. Real-time AI photo sharing is shifting from "premium add-on" to "expected default" at events.</li>
+        <li>🟢 <strong>Unit economics are attractive.</strong> Leaders like FotoOwl are already <strong>profitable while bootstrapped</strong> — rare for early SaaS — proving the model works without burning VC cash.</li>
+        <li>🟠 <strong>But it is crowding fast.</strong> 15+ near-identical players (FotoOwl, Premagic, Kamero, Turtlepic, Fotify, AccioPix, KwikPic, Guesticon…). Face-recognition is now a <em>commodity feature</em>, so differentiation is moving to distribution, branding, monetisation and enterprise/event-management integration.</li>
+        <li>🟠 <strong>Regulatory risk is real.</strong> Biometric/face-recognition data laws (GDPR, India DPDP Act, US state biometric laws) are the biggest structural threat.</li>
+      </ul>
+      <p class="muted" style="margin-bottom:0">Bottom line: <strong>Good time to enter with a sharp niche or a monetisation/enterprise angle — bad time to enter as a generic "photos + face recognition" clone.</strong></p>
+    </div>
+
+    <div class="grid g4" style="margin-top:18px">
+      <div class="card kpi"><span class="num">$38B → $50B</span><span class="lbl">Global event photography market</span><span class="sub">2025 → 2030 · 5.8% CAGR</span></div>
+      <div class="card kpi"><span class="num">12–16%</span><span class="lbl">Face/image-recognition tech CAGR</span><span class="sub">2024 → 2030</span></div>
+      <div class="card kpi"><span class="num">Profitable</span><span class="lbl">FotoOwl net margin (FY25)</span><span class="sub">~7% · bootstrapped</span></div>
+      <div class="card kpi"><span class="num">15+</span><span class="lbl">Direct competitors tracked</span><span class="sub">Crowding &amp; commoditising</span></div>
+    </div>
+  </section>
+
+  <!-- ================= WHAT ================= -->
+  <section id="what">
+    <h2>2 · What these apps actually do</h2>
+    <p class="lead">FotoOwl, Premagic, Kamero and peers are <strong>AI event-photo distribution SaaS platforms</strong>. The core loop:</p>
+    <div class="grid g3">
+      <div class="card"><h3>📷 Capture &amp; upload</h3><p class="muted">Photographers push photos (often live, cloud-to-camera) during weddings, concerts, conferences, sports and corporate events.</p></div>
+      <div class="card"><h3>🤖 AI face-matching</h3><p class="muted">Face recognition auto-sorts thousands of images so each guest instantly finds "photos of me" via a selfie or QR code — no app install needed.</p></div>
+      <div class="card"><h3>💸 Deliver &amp; monetise</h3><p class="muted">Instant WhatsApp / gallery delivery, branded pages, lead capture, and paid photo sales — turning one-off shoots into recurring, transactional revenue.</p></div>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card">
+        <h3>Two business-model flavours</h3>
+        <ul class="clean">
+          <li><strong>Photographer / B2C-led (FotoOwl, Kamero):</strong> sell tools + take a cut of guest photo sales. Volume game, prosumer pricing.</li>
+          <li><strong>Enterprise event-marketing (Premagic):</strong> B2B SaaS for conferences &amp; brands — photo distribution + attendee engagement, advocacy, and marketing analytics. Higher contract value, integrates with event-management stacks.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Revenue streams</h3>
+        <ul class="clean">
+          <li>SaaS subscriptions (monthly / annual / per-event)</li>
+          <li>Transaction fees / commission on photo sales</li>
+          <li>Enterprise &amp; white-label / branding tiers</li>
+          <li>Add-ons: lead-gen, analytics, AI enhancement, storage</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= MARKET ================= -->
+  <section id="market">
+    <h2>3 · Market size &amp; growth (the opportunity)</h2>
+    <p class="lead">These apps sit at the intersection of three growing markets. None of them is shrinking — the tailwinds are structural (AI adoption, live sharing becoming the default).</p>
+
+    <div class="chartbox">
+      <h3>Global event photography market — 5-year track + outlook</h3>
+      <p class="cap">Reported ~$38B in 2025, projected ~$50.5B by 2030 (≈5.8% CAGR). Pre-2025 years modelled back from the CAGR. Source: industry market reports (Kamero Biz-Lab / market research).</p>
+      <canvas id="chMarket"></canvas>
+    </div>
+
+    <div class="grid g2" style="margin-top:18px">
+      <div class="chartbox">
+        <h3>Adjacent markets — 2025 vs 2030</h3>
+        <p class="cap">The event-photo apps ride on top of these bigger tech markets.</p>
+        <canvas id="chAdjacent"></canvas>
+      </div>
+      <div class="chartbox">
+        <h3>Growth rate (CAGR) by market segment</h3>
+        <p class="cap">Enabling tech grows 2–3× faster than photography services overall.</p>
+        <canvas id="chCagr"></canvas>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>Reading the market:</strong> The <em>services</em> layer (photography itself) grows modestly (~6%), but the <em>software/AI</em> layer these apps sell grows 2–3× faster (12–16%). That gap <em>is</em> the opportunity: software is capturing a rising share of the photography dollar. AI face-sorting + instant sharing is moving from &lt;20% adoption to an expectation at &gt;80% of professional events by the late 2020s.
+    </div>
+  </section>
+
+  <!-- ================= COMPANIES ================= -->
+  <section id="companies">
+    <h2>4 · Company financials at a glance</h2>
+    <p class="lead">All three headline players are <strong>Indian-founded</strong>, small, and mostly bootstrapped. Figures below mix <strong>filed statutory revenue</strong> and third-party <strong>ARR/run-rate estimates</strong> — labelled where they differ.</p>
+
+    <table>
+      <thead>
+        <tr><th>Company</th><th>Founded</th><th>Latest revenue (FY25)</th><th>Run-rate / ARR est.</th><th>Funding</th><th>Valuation est.</th><th>Team</th><th>Profitability</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>FotoOwl AI</strong><br><span class="muted">Pune, IN</span></td>
+          <td>May 2023</td>
+          <td>₹1.91 Cr (~$230K) <span class="badge">filed</span></td>
+          <td>~$4.4M ARR <span class="badge">Latka est.</span></td>
+          <td class="warn">$0 — bootstrapped</td>
+          <td>~$13.2M</td>
+          <td>~40</td>
+          <td class="good">Profitable (~7% margin)</td>
+        </tr>
+        <tr>
+          <td><strong>Premagic</strong><br><span class="muted">Bengaluru/Thrissur, IN</span></td>
+          <td>2018</td>
+          <td>₹5.67 Cr (~$670K) <span class="badge">filed</span></td>
+          <td>n/a</td>
+          <td>$1.48M (3 seed rounds)</td>
+          <td>Undisclosed</td>
+          <td>~27–39</td>
+          <td class="warn">Not disclosed (likely near breakeven / reinvesting)</td>
+        </tr>
+        <tr>
+          <td><strong>Kamero AI</strong><br><span class="muted">Mumbai/Ahmedabad, IN</span></td>
+          <td>Apr 2024</td>
+          <td>n/a (very early)</td>
+          <td>~$1.1M ARR <span class="badge">Latka est.</span></td>
+          <td class="warn">$0 — bootstrapped (grants only)</td>
+          <td>~$3.3M</td>
+          <td>~10–13</td>
+          <td class="muted">Early / undisclosed</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">
+      <strong>⚠️ Data note on FotoOwl's two revenue numbers:</strong> ₹1.91 Cr (~$230K) is the <em>audited FY-ending-March-2025 statutory revenue</em> (up 343% YoY). The ~$4.4M is a third-party <em>current ARR run-rate estimate</em> (late-2025), which is more aggressive and not directly comparable. The truth is somewhere in a fast-rising curve between them. Charts below plot the conservative filed figures and show the run-rate separately.
+    </div>
+  </section>
+
+  <!-- ================= REVENUE CHART ================= -->
+  <section id="revchart">
+    <h2>5 · 5-year revenue trajectory</h2>
+    <div class="chartbox">
+      <h3>Estimated annual revenue, FY2021 → FY2025 (US$K)</h3>
+      <p class="cap">Solid points = reported/filed figures. Faded early years = modelled estimates (companies are young &amp; private, so full 5-yr filings don't exist — FotoOwl &amp; Kamero were only founded in 2023/2024). Premagic revenue back-modelled toward its ₹5.67 Cr FY25 filing.</p>
+      <canvas id="chRevenue"></canvas>
+    </div>
+
+    <div class="grid g2" style="margin-top:18px">
+      <div class="chartbox">
+        <h3>FotoOwl hyper-growth</h3>
+        <p class="cap">Filed revenue jumped 343% in one year; run-rate estimate is far higher.</p>
+        <canvas id="chFotoowl"></canvas>
+      </div>
+      <div class="chartbox">
+        <h3>Projected revenue → 2028 (scenario)</h3>
+        <p class="cap">Illustrative projection assuming category tailwinds continue (not company guidance).</p>
+        <canvas id="chProjection"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= P&L ================= -->
+  <section id="pl">
+    <h2>6 · Profit or loss? — the honest answer</h2>
+    <div class="grid g3">
+      <div class="card">
+        <h3>FotoOwl <span class="good">▲ Profitable</span></h3>
+        <p class="muted">~7% net margin in FY25 while fully bootstrapped. Unusual and healthy for an early SaaS — it proves the model can throw off cash without VC fuel. Small absolute base, but the direction is strongly positive.</p>
+      </div>
+      <div class="card">
+        <h3>Premagic <span class="warn">~ Undisclosed</span></h3>
+        <p class="muted">No public P&amp;L. As a VC-seeded B2B SaaS chasing enterprise logos and global events, it is most likely running near breakeven or at a modest, funded loss to buy growth — the classic SaaS trade-off.</p>
+      </div>
+      <div class="card">
+        <h3>Kamero <span class="muted">◷ Too early</span></h3>
+        <p class="muted">Founded 2024; ~$1.1M ARR estimate. P&amp;L not meaningful yet. Bootstrapped + grant-supported (DPIIT, NVIDIA Inception) implies disciplined, capital-light growth.</p>
+      </div>
+    </div>
+    <div class="note">
+      <strong>Sector pattern:</strong> Because face-recognition compute + cloud storage are the main costs and these are sold as high-margin SaaS, <em>gross margins are strong (typically 70–85% for SaaS)</em>. The bootstrapped players are near/at profit; the funded player is trading profit for market-share. There is <strong>no evidence of an industry in loss-making distress</strong> — quite the opposite.
+    </div>
+  </section>
+
+  <!-- ================= FUNDING ================= -->
+  <section id="funding">
+    <h2>7 · Funding landscape</h2>
+    <div class="chartbox">
+      <h3>Total capital raised (US$M)</h3>
+      <p class="cap">A striking feature of this niche: leaders are winning while <strong>bootstrapped</strong>. Capital intensity is low.</p>
+      <canvas id="chFunding"></canvas>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card">
+        <h3>What this tells investors</h3>
+        <ul class="clean">
+          <li><strong>Low barrier to entry</strong> — you can build a real business on &lt;$1.5M (or $0).</li>
+          <li><strong>Capital-efficient</strong> — good for founders, but also means <em>many</em> new entrants can appear cheaply.</li>
+          <li><strong>Limited VC interest so far</strong> — no mega-rounds; the category hasn't produced a clear breakout "category king" yet. That's an opening.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Premagic funding timeline</h3>
+        <ul class="clean">
+          <li><strong>Apr 2021</strong> — Seed (~$266K); Violet Sky, angels</li>
+          <li><strong>Nov 2021</strong> — Seed (~$269K); 300 Ventures, angels</li>
+          <li><strong>Dec 2024</strong> — Seed round (part of $1.48M cumulative); Kerala Angel Network + 20 angels</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= COMPETITION ================= -->
+  <section id="competition">
+    <h2>8 · Competitive landscape</h2>
+    <p class="lead">This is the crowded part. The feature set (AI face-match + QR + instant gallery + no-app) is now table stakes offered by many.</p>
+    <table>
+      <thead><tr><th>Player</th><th>Positioning / edge</th><th>Primary segment</th></tr></thead>
+      <tbody>
+        <tr><td><strong>FotoOwl</strong></td><td>Photographer monetisation, ROI focus, WhatsApp delivery, bootstrapped &amp; profitable</td><td>Pro/prosumer photographers</td></tr>
+        <tr><td><strong>Premagic</strong></td><td>Enterprise event marketing + attendee advocacy &amp; analytics; CRM/event-stack integration</td><td>B2B conferences &amp; brands</td></tr>
+        <tr><td><strong>Kamero</strong></td><td>Real-time face recognition, in-event photo marketplace, grant-backed</td><td>Weddings, concerts, corporate</td></tr>
+        <tr><td>Turtlepic</td><td>Privacy controls, branding, analytics — positioned as Premagic alternative</td><td>Events needing privacy/branding</td></tr>
+        <tr><td>Fotify</td><td>Live streaming of photos, AI moderation, RSVP, no-app</td><td>All event types</td></tr>
+        <tr><td>AccioPix / KwikPic</td><td>Fast AI photo sorting for large weddings &amp; conferences</td><td>Large events</td></tr>
+        <tr><td>Guesticon / GuestCam / Guestpix</td><td>Guest "find-my-photos", templates, no-app galleries</td><td>Weddings/personal</td></tr>
+        <tr><td>Pixieset / Pic-Time / ShootProof / SmugMug</td><td>Incumbent pro client-gallery/delivery (less instant-guest)</td><td>Pro photographer delivery</td></tr>
+        <tr><td>Google Photos</td><td>Free, universal, "good enough" for casual sharing</td><td>Casual / the free threat</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><strong>Competitive read:</strong> Differentiation on "we have face recognition" is dead. The durable moats now are: (1) <strong>distribution</strong> (photographer/organiser networks), (2) <strong>monetisation depth</strong> (payments, marketplace take-rate), (3) <strong>enterprise integration</strong> (event-management/CRM), and (4) <strong>brand/trust</strong> around privacy. The looming free threat is Google Photos / big-tech face grouping.</div>
+  </section>
+
+  <!-- ================= SWOT ================= -->
+  <section id="swot">
+    <h2>9 · Sector SWOT</h2>
+    <div class="swot">
+      <div class="box s"><h3>💪 Strengths</h3><ul class="clean"><li>High-margin SaaS; low capital needs</li><li>Bootstrapped players already profitable</li><li>Clear, painful problem solved (photo delivery)</li><li>Built-in viral loop — every guest is a new user</li></ul></div>
+      <div class="box w"><h3>⚠️ Weaknesses</h3><ul class="clean"><li>Feature commoditisation — easy to clone</li><li>Seasonal / event-cyclical revenue</li><li>Cloud + GPU/compute costs scale with usage</li><li>Small absolute revenue bases today</li></ul></div>
+      <div class="box o"><h3>🚀 Opportunities</h3><ul class="clean"><li>AI sharing becoming the default expectation</li><li>Enterprise event-marketing upsell (higher ACV)</li><li>Global expansion beyond India</li><li>Adjacent: video, highlight reels, sponsorship/ads</li><li>No dominant global "category king" yet</li></ul></div>
+      <div class="box t"><h3>🛑 Threats</h3><ul class="clean"><li>Biometric/privacy regulation (GDPR, DPDP, US state laws)</li><li>Google Photos &amp; big-tech free face-grouping</li><li>Price war among 15+ near-identical apps</li><li>AI models commoditising the core tech</li></ul></div>
+    </div>
+  </section>
+
+  <!-- ================= FUTURE ================= -->
+  <section id="future">
+    <h2>10 · Future scope — the coming years</h2>
+    <div class="grid g2">
+      <div class="card">
+        <h3>Why there IS scope <span class="good">▲</span></h3>
+        <ul class="clean">
+          <li><strong>Rising penetration:</strong> AI face-sharing is going from niche to standard at events — the addressable base of events adopting it is still expanding rapidly.</li>
+          <li><strong>Software eating the photography dollar:</strong> tech layer grows 12–16% vs 6% for services.</li>
+          <li><strong>Monetisation upside:</strong> marketplace take-rates + enterprise tiers are barely tapped.</li>
+          <li><strong>Geographic whitespace:</strong> most players are India-first; global markets (US/EU/MENA/SEA) are open.</li>
+          <li><strong>Proven profitability</strong> at tiny scale suggests strong economics as they scale.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Why it could stall <span class="bad">▼</span></h3>
+        <ul class="clean">
+          <li><strong>Commoditisation:</strong> undifferentiated clones → price war → margin erosion.</li>
+          <li><strong>Regulation:</strong> biometric consent laws could restrict the core face-matching feature in key markets.</li>
+          <li><strong>Big-tech free option:</strong> Google/Apple "good enough" grouping caps willingness to pay for casual use.</li>
+          <li><strong>Seasonality &amp; churn:</strong> event-driven, project-based revenue is lumpy without recurring enterprise contracts.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="chartbox" style="margin-top:18px">
+      <h3>Category attractiveness scorecard</h3>
+      <p class="cap">Author's assessment (0–100) of building/entering an app like FotoOwl/Premagic today.</p>
+      <div class="grid g2">
+        <div>
+          <p class="muted" style="margin:8px 0 2px">Market growth <span class="good">82</span></p><div class="scorebar"><span style="width:82%;background:var(--good)"></span></div>
+          <p class="muted" style="margin:14px 0 2px">Unit economics / margins <span class="good">85</span></p><div class="scorebar"><span style="width:85%;background:var(--good)"></span></div>
+          <p class="muted" style="margin:14px 0 2px">Monetisation upside <span class="warn">70</span></p><div class="scorebar"><span style="width:70%;background:var(--warn)"></span></div>
+        </div>
+        <div>
+          <p class="muted" style="margin:8px 0 2px">Defensibility / moat <span class="bad">40</span></p><div class="scorebar"><span style="width:40%;background:var(--bad)"></span></div>
+          <p class="muted" style="margin:14px 0 2px">Competitive intensity (lower=worse) <span class="bad">35</span></p><div class="scorebar"><span style="width:35%;background:var(--bad)"></span></div>
+          <p class="muted" style="margin:14px 0 2px">Regulatory safety <span class="warn">55</span></p><div class="scorebar"><span style="width:55%;background:var(--warn)"></span></div>
+        </div>
+      </div>
+      <p class="note" style="margin-top:16px"><strong>Composite: ~61/100 — "Attractive but crowded."</strong> Strong market &amp; economics dragged down by weak defensibility and heavy competition. Winners will be picked on execution, distribution and a monetisation/enterprise edge — not on the core AI feature.</p>
+    </div>
+  </section>
+
+  <!-- ================= VERDICT ================= -->
+  <section id="verdict">
+    <h2>11 · Final verdict &amp; recommendation</h2>
+    <div class="card verdict">
+      <p style="margin-top:0"><strong>The market is not done — it's in an early growth phase with healthy economics — but it is commoditising, so a generic clone will struggle.</strong></p>
+      <h3>If you want to build/invest in an app like this, win on ONE of these:</h3>
+      <ul class="clean">
+        <li>🎯 <strong>A sharp vertical niche</strong> — e.g. sports/marathons, religious mega-events, K-12/graduation, or a specific geography where no one has distribution yet.</li>
+        <li>🏢 <strong>Enterprise event-marketing</strong> (the Premagic lane) — higher contract value, stickier, integrates with the $14B→$26B event-management software market.</li>
+        <li>💰 <strong>Deeper monetisation</strong> — marketplace take-rate, print/merch, sponsor-branded galleries, creator payouts.</li>
+        <li>🔐 <strong>Privacy-first / compliance-by-design</strong> — turn the regulatory threat into your selling point.</li>
+        <li>🌍 <strong>Distribution engine</strong> — own the photographer/organiser channel; that, not the AI, is the moat.</li>
+      </ul>
+      <p style="margin-bottom:0"><strong>Avoid:</strong> launching yet another "upload photos + face recognition + QR gallery" app with no distribution or monetisation edge — that segment is already a price war.</p>
+    </div>
+  </section>
+
+  <!-- ================= KERALA PAGE ================= -->
+  <section id="kerala">
+    <div style="height:2px;background:linear-gradient(90deg,transparent,var(--accent2),transparent);margin:56px 0 0"></div>
+    <header class="hero" style="margin-top:34px;background:radial-gradient(1000px 380px at 0% -10%,rgba(126,240,194,.28),transparent),radial-gradient(800px 380px at 100% 0%,rgba(255,184,107,.16),transparent),var(--card)">
+      <h1>🌴 Kerala Deep-Dive — Market, Customer Mindset &amp; App Roadmaps</h1>
+      <p>Kerala is the <strong>spiritual home of this category</strong> — Premagic was born in Thrissur out of a "wedding album" problem, and Kerala's booming, Instagram-driven wedding culture makes it a perfect testbed. This page covers the Kerala market value, customer psychology, each app's current plans, and where it's all heading.</p>
+      <div class="tagpills">
+        <span class="pill">₹1,500 Cr Kerala wedding economy</span>
+        <span class="pill">Premagic = 1st Kerala startup at GITEX Global</span>
+        <span class="pill">Backed by Kerala Startup Mission (KSUM)</span>
+      </div>
+    </header>
+
+    <!-- Kerala market value -->
+    <h2>13 · Kerala market value</h2>
+    <p class="lead">Kerala punches far above its size in weddings &amp; events — grand, multi-day, destination-style celebrations with heavy spend on visuals.</p>
+    <div class="grid g4">
+      <div class="card kpi"><span class="num">₹1,500 Cr</span><span class="lbl">Kerala wedding industry turnover / yr</span><span class="sub">~$180M · The New Indian Express '24</span></div>
+      <div class="card kpi"><span class="num">₹150–200 Cr</span><span class="lbl">Photography/video segment (Kerala)</span><span class="sub">~$18–24M · ≈10% of wedding budgets</span></div>
+      <div class="card kpi"><span class="num">₹36–58 L</span><span class="lbl">Avg Kerala wedding budget</span><span class="sub">Regular → destination-style</span></div>
+      <div class="card kpi"><span class="num">$4B</span><span class="lbl">Pan-India wedding photography (2025)</span><span class="sub">Kerala is a fast-growing slice</span></div>
+    </div>
+
+    <div class="grid g2" style="margin-top:18px">
+      <div class="chartbox">
+        <h3>Kerala wedding &amp; photography spend (₹ Crore)</h3>
+        <p class="cap">Photography/video ≈ 8–15% of a ₹1,500 Cr wedding economy. Segment modelled as a growing share as celebrations become more visual/social.</p>
+        <canvas id="chKerala"></canvas>
+      </div>
+      <div class="chartbox">
+        <h3>Where the SaaS opportunity sits (SOM funnel, Kerala)</h3>
+        <p class="cap">Illustrative TAM→SAM→SOM: from total wedding economy down to realistic AI photo-sharing software revenue.</p>
+        <canvas id="chKeralaFunnel"></canvas>
+      </div>
+    </div>
+    <div class="note"><strong>Why Kerala matters strategically:</strong> High disposable income, world-leading literacy/smartphone penetration, huge NRI (Gulf) diaspora funding lavish weddings, and destination-wedding tourism (Munnar, Kochi, backwaters). It's a dense, digitally-native, high-ARPU test market — ideal to prove a product before global expansion.</div>
+
+    <!-- Customer mindset -->
+    <h2>14 · Customer mindset (who buys &amp; why)</h2>
+    <p class="lead">Three distinct buyers, three different psychologies. Winning here means speaking to all three.</p>
+    <div class="grid g3">
+      <div class="card">
+        <h3>💑 Couples / Guests <span class="badge">B2C</span></h3>
+        <ul class="clean">
+          <li><strong>"I want my photos NOW"</strong> — instant WhatsApp delivery beats waiting weeks for an album.</li>
+          <li><strong>Social-first:</strong> photos are for Instagram/status the same night; shareability &gt; archival.</li>
+          <li><strong>"Find photos of just me"</strong> — face-search is the magic moment that converts guests into users.</li>
+          <li>Low direct willingness-to-pay; they expect it free (photographer/host pays).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>📷 Photographers <span class="badge">Prosumer</span></h3>
+        <ul class="clean">
+          <li><strong>Time = money:</strong> culling/sorting/delivery is painful manual labour; AI that saves 10–15 hrs/week sells itself.</li>
+          <li><strong>New revenue:</strong> sell prints/downloads to guests → turn one gig into recurring income.</li>
+          <li><strong>Brand &amp; leads:</strong> branded galleries win them the next booking.</li>
+          <li>Price-sensitive but ROI-driven — will pay if it clearly earns/saves more.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>🏢 Event / Corporate organisers <span class="badge">B2B</span></h3>
+        <ul class="clean">
+          <li><strong>Engagement &amp; reach:</strong> want attendees to become organic marketers (Premagic's core pitch).</li>
+          <li><strong>Sponsor ROI:</strong> branded galleries + measurable analytics replace vague "logo placement".</li>
+          <li><strong>Contactless check-in</strong> via face recognition.</li>
+          <li>Highest willingness-to-pay ($5.6K–$30K contracts); stickiest, least seasonal.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="note"><strong>Cultural shift driving demand:</strong> Kerala weddings moved from minimal single-day events to <strong>themed, 3–4 day, mehndi/haldi/sangeet, drone-captured, candid-documentary</strong> productions. Every function is a content opportunity — and guests now <em>expect</em> real-time sharing. This "everything must be shareable instantly" mindset is exactly the wave these apps ride.</div>
+
+    <!-- Current plans of each app -->
+    <h2>15 · Current plans &amp; roadmaps — app by app</h2>
+    <div class="chartbox" style="padding:0;overflow:hidden">
+      <table style="margin:0">
+        <thead><tr><th>App</th><th>Strategic direction</th><th>Flagship / new features (2025–26)</th><th>Roadmap bets</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>FotoOwl</strong><br><span class="muted">Pune · bootstrapped</span></td>
+            <td>Smarter asset management + guest personalisation + direct monetisation for photographers.</td>
+            <td><strong>ReelIt</strong> (AI personalised reels per guest), AI name-search, <strong>Beam</strong> camera-to-cloud FTP upload, photo-selling e-commerce, live photo walls/slideshows, sponsor branding &amp; analytics.</td>
+            <td>DPDP-Act privacy compliance, deeper recurring-revenue tools for pros, expansion into <strong>sports / schools / festivals / corporate</strong>.</td>
+          </tr>
+          <tr>
+            <td><strong>Premagic</strong><br><span class="muted">Thrissur/Bengaluru · $1.48M</span></td>
+            <td>Own the <strong>AI event-marketing</strong> lane — turn every attendee into a marketer &amp; give sponsors measurable ROI.</td>
+            <td>AI advocacy avatars/posters ("I'm attending"), instant branded WhatsApp delivery, per-attendee <strong>sponsor-branded galleries</strong>, facial check-in, sponsor measurement &amp; analytics dashboards.</td>
+            <td>Global expansion via <strong>GITEX / Expand North Star</strong> (MENA), multi-day/multi-brand activations, corporate/expo modules, speaker/exhibitor co-creation tools.</td>
+          </tr>
+          <tr>
+            <td><strong>Kamero</strong><br><span class="muted">Mumbai/Ahmedabad · bootstrapped</span></td>
+            <td>AI <strong>editing/culling assistant</strong> — save pro photographers 10–15 hrs/week without losing creative control.</td>
+            <td>AI culling (best-shot selection), <strong>AI style-learning</strong> (mimics photographer's edit style), auto color-grading, bulk delivery, in-event photo marketplace, face-recognition delivery.</td>
+            <td>Automated album design, smart proofing/review, printing-partner integrations, deeper personalisation; grant-backed (DPIIT, NVIDIA Inception).</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><strong>How they diverge:</strong> They started as clones but are now splitting lanes — <strong>FotoOwl</strong> = photographer monetisation + guest delight, <strong>Premagic</strong> = enterprise event-marketing &amp; sponsor ROI (moving <em>up-market</em> and global), <strong>Kamero</strong> = AI editing/production efficiency. This divergence is healthy: it reduces head-to-head price war and expands the total pie.</p></div>
+
+    <!-- Kerala ecosystem + future -->
+    <h2>16 · Kerala ecosystem &amp; future outlook</h2>
+    <div class="grid g2">
+      <div class="card">
+        <h3>🚀 Ecosystem tailwind — KSUM</h3>
+        <ul class="clean">
+          <li><strong>Kerala Startup Mission</strong> backs event/deep-tech with grants, seed funding, accelerators &amp; global exposure (Huddle Global, Kerala Innovation Festival).</li>
+          <li>Premagic is the case study — <strong>first Kerala startup as GITEX Global media partner</strong>, taking a Thrissur product global.</li>
+          <li>KSUM's 2035 vision: 10 startups at ₹1,000 Cr revenue each + 100 deep-tech firms — event/media-tech is an explicit focus.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>🔮 Kerala future outlook (3–5 yrs)</h3>
+        <ul class="clean">
+          <li><span class="good">▲</span> Destination-wedding boom + NRI money → rising high-ARPU demand.</li>
+          <li><span class="good">▲</span> Real-time AI sharing becoming the <em>default</em> at every function.</li>
+          <li><span class="good">▲</span> Kerala as a launch-and-prove market before MENA/global rollout.</li>
+          <li><span class="warn">▲▼</span> Corporate/expo events (Kochi, Trivandrum) open a stickier B2B lane.</li>
+          <li><span class="bad">▼</span> Watch: DPDP Act biometric-consent rules; seasonality (wedding-heavy months).</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="chartbox" style="margin-top:18px">
+      <h3>Kerala opportunity scorecard</h3>
+      <p class="cap">Author's assessment (0–100) of the Kerala market specifically for an AI event-photo app.</p>
+      <div class="grid g2">
+        <div>
+          <p class="muted" style="margin:8px 0 2px">Demand / spending power <span class="good">86</span></p><div class="scorebar"><span style="width:86%;background:var(--good)"></span></div>
+          <p class="muted" style="margin:14px 0 2px">Digital-native customers <span class="good">88</span></p><div class="scorebar"><span style="width:88%;background:var(--good)"></span></div>
+          <p class="muted" style="margin:14px 0 2px">Ecosystem support (KSUM) <span class="good">80</span></p><div class="scorebar"><span style="width:80%;background:var(--good)"></span></div>
+        </div>
+        <div>
+          <p class="muted" style="margin:8px 0 2px">Market size (absolute) <span class="warn">58</span></p><div class="scorebar"><span style="width:58%;background:var(--warn)"></span></div>
+          <p class="muted" style="margin:14px 0 2px">Seasonality risk (lower=worse) <span class="warn">52</span></p><div class="scorebar"><span style="width:52%;background:var(--warn)"></span></div>
+          <p class="muted" style="margin:14px 0 2px">Competitive intensity (lower=worse) <span class="bad">42</span></p><div class="scorebar"><span style="width:42%;background:var(--bad)"></span></div>
+        </div>
+      </div>
+      <p class="note" style="margin-top:16px"><strong>Composite: ~68/100 — "High-quality launch market."</strong> Kerala is smaller in absolute size than a national play, but its wealthy, digital, socially-driven, ecosystem-supported profile makes it an ideal place to <em>prove and refine</em> a product — then export it globally, exactly as Premagic is doing.</p>
+    </div>
+  </section>
+
+  <!-- ================= PRICING / SERVICE PLANS ================= -->
+  <section id="pricing">
+    <div style="height:2px;background:linear-gradient(90deg,transparent,var(--accent3),transparent);margin:56px 0 0"></div>
+    <h2 style="border-color:var(--accent3)">17 · Service plans &amp; rates (app by app)</h2>
+    <p class="lead">Actual published pricing as of 2025–26. Note the structural difference: <strong>FotoOwl</strong> = fixed SaaS tiers (storage-based), <strong>Kamero</strong> = pay-per-event or subscription (quote-based), <strong>Premagic</strong> = usage/attendee-based, enterprise custom. ₹ figures use ~₹83/$.</p>
+
+    <div class="grid g3">
+      <div class="card kpi"><span class="num">$0 → $31<span style="font-size:.8rem">/mo</span></span><span class="lbl">FotoOwl — fixed tiers (billed yearly)</span><span class="sub">Free plan + 4 paid tiers</span></div>
+      <div class="card kpi"><span class="num">Quote<span style="font-size:.8rem"> / event</span></span><span class="lbl">Kamero — pay-per-event or sub</span><span class="sub">1 free event (45 days) to start</span></div>
+      <div class="card kpi"><span class="num">$42<span style="font-size:.8rem">/mo</span> → $30K</span><span class="lbl">Premagic — usage/attendee-based</span><span class="sub">SMB start → enterprise custom</span></div>
+    </div>
+
+    <!-- FotoOwl -->
+    <h3 style="margin-top:30px">📸 FotoOwl — subscription tiers <span class="badge">billed annually</span></h3>
+    <div class="chartbox" style="padding:0;overflow:hidden">
+      <table style="margin:0">
+        <thead><tr><th>Plan</th><th>Price (USD/mo)</th><th>Price (₹/mo est.)</th><th>Storage</th><th>Best for</th></tr></thead>
+        <tbody>
+          <tr><td><strong>RIDER</strong> <span class="badge">Free</span></td><td class="good">$0</td><td>₹0</td><td>1,000 images</td><td>Trial / occasional small events</td></tr>
+          <tr><td><strong>SKATER Small</strong></td><td>$16</td><td>~₹1,330</td><td>50 GB</td><td>Solo photographers starting out</td></tr>
+          <tr><td><strong>SKATER</strong></td><td>$16</td><td>~₹1,330</td><td>100 GB</td><td>Regular event shooters</td></tr>
+          <tr><td><strong>BIKER</strong></td><td>$24</td><td>~₹2,000</td><td>700 GB</td><td>Busy pros / higher volume</td></tr>
+          <tr><td><strong>PILOT</strong></td><td>$31</td><td>~₹2,570</td><td>1.3 TB (1TB active + 300GB passive)</td><td>Studios / heavy workload</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" style="font-size:.85rem;margin-top:8px">All paid tiers include: AI face recognition &amp; auto-tagging, branded galleries, WhatsApp delivery credits, integrated photo-selling, engagement analytics. Annual cost ≈ ₹16K / ₹24K / ₹30.8K. No pure pay-per-event plan (free RIDER covers one-offs).</p>
+
+    <div class="chartbox" style="margin-top:16px">
+      <h3>FotoOwl price ladder vs storage</h3>
+      <p class="cap">Price scales with storage, not per-event — favours high-frequency photographers.</p>
+      <canvas id="chFotoowlTiers"></canvas>
+    </div>
+
+    <!-- Kamero + Premagic -->
+    <div class="grid g2" style="margin-top:22px">
+      <div class="card">
+        <h3>🤖 Kamero — flexible / quote-based</h3>
+        <table style="margin-top:6px">
+          <thead><tr><th>Option</th><th>Model</th><th>Best for</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Free trial</strong></td><td>1 event free · 45 days · no card</td><td>Risk-free evaluation</td></tr>
+            <tr><td><strong>Pay-per-event</strong></td><td>Pay only when you create an event</td><td>Occasional / one-off shoots</td></tr>
+            <tr><td><strong>Subscription</strong></td><td>Monthly / yearly · unlimited events</td><td>Studios &amp; regular organisers</td></tr>
+          </tbody>
+        </table>
+        <p class="muted" style="font-size:.85rem;margin-top:8px">Exact rates <strong>not public</strong> — quoted by event size, uploads &amp; storage. All plans: AI face recognition, live uploads, guest downloads, watermarking, custom branding/QR, no guest limits, sell downloads/prints.</p>
+      </div>
+      <div class="card">
+        <h3>🏢 Premagic — usage / attendee-based</h3>
+        <table style="margin-top:6px">
+          <thead><tr><th>Tier</th><th>Price</th><th>Scope</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Free trial</strong></td><td class="good">$0</td><td>Test before commit</td></tr>
+            <tr><td><strong>SMB / entry</strong></td><td>from ~$42/mo</td><td>Usage-based, small events</td></tr>
+            <tr><td><strong>Per-event / annual</strong></td><td>~$5,600 – $30,400</td><td>Charged by attendee or annual sub</td></tr>
+            <tr><td><strong>Enterprise</strong></td><td>Custom quote</td><td>100 → 100,000+ attendees</td></tr>
+          </tbody>
+        </table>
+        <p class="muted" style="font-size:.85rem;margin-top:8px">Highest-value model of the three (B2B). Payments: card, netbanking, UPI (India), PayPal (intl). Clients incl. Nas Daily, Legrand, Accel.</p>
+      </div>
+    </div>
+
+    <div class="chartbox" style="margin-top:22px">
+      <h3>Entry price comparison (USD / month)</h3>
+      <p class="cap">Lowest paid entry point per app. Kamero shown as quote-based (no public entry price). Premagic's enterprise deals run far higher (into thousands/event).</p>
+      <canvas id="chPricing"></canvas>
+    </div>
+
+    <div class="note">
+      <strong>How to read the pricing:</strong> These serve different wallets. <strong>FotoOwl</strong> is the cheapest, most transparent — great for individual photographers ($16–31/mo flat). <strong>Kamero</strong>'s pay-per-event suits occasional users who don't want a subscription. <strong>Premagic</strong> is the premium B2B play — an SMB can start ~$42/mo, but real value (and revenue) is in $5.6K–$30K+ enterprise/event contracts. This price spread is <em>why</em> they can co-exist without a pure race-to-the-bottom.
+    </div>
+  </section>
+
+  <!-- ================= SOURCES ================= -->
+  <section>
+    <h2>18 · Sources &amp; method</h2>
+    <ul class="clean">
+      <li>Company financials: Tracxn, GetLatka, Tofler, PitchBook, CB Insights, Inc42, YourStory profiles (FotoOwl, Premagic, Kamero).</li>
+      <li>Market size: event photography market reports (~$38B'25 → ~$50B'30); Grand View Research (event-management software, image recognition); IndustryARC / GMI / Technavio (facial recognition).</li>
+      <li>Competitive landscape: Fotify, Turtlepic, AccioPix, Samaro comparison indexes.</li>
+      <li>Kerala focus: The New Indian Express (Kerala wedding market), WedMeGood Wedding Industry Report 2024–25, Onmanorama &amp; Premagic blog (Premagic/Thrissur, GITEX), Kerala Startup Mission (KSUM) profiles &amp; roadmap, company product pages (FotoOwl, Kamero, Premagic).</li>
+      <li>Pricing/service plans: fotoowl.ai/pricing &amp; Toolify (FotoOwl tiers), kamero.ai/pricing &amp; FAQ (Kamero pay-per-event/subscription), GetApp / G2 / Capterra / Onmanorama (Premagic usage &amp; attendee-based pricing). Some rates (esp. Kamero &amp; Premagic enterprise) are quote-based and were not fully public — ranges shown.</li>
+    </ul>
+    <div class="note">
+      <strong>Methodology &amp; caveats:</strong> These are small, <em>private</em> companies — most have only 1–2 years of filed financials, so several data points are third-party <em>estimates</em> and pre-2024 revenue is <em>modelled</em> from growth rates for illustration, not audited. "Filed" figures are statutory annual revenue; "ARR/run-rate" are current-run estimates and can differ substantially. Market figures blend multiple research houses (ranges shown where they disagree). Charts are for directional analysis, not investment advice. Currency: ₹→$ at ~₹83/$.
+    </div>
+  </section>
+
+  <footer>
+    <p>Report generated for market/business analysis of AI event photo-sharing apps (FotoOwl, Premagic, Kamero &amp; peers). Data window FY2021–FY2025, outlook to 2030. Figures are best-available public estimates as of mid-2026 and should be independently verified before any commercial or investment decision.</p>
+  </footer>
+
+</div>
+
+<script>
+Chart.defaults.color = '#9aa6c7';
+Chart.defaults.font.family = "'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+const grid = 'rgba(40,52,92,.6)';
+const money = (v)=> '$'+v;
+
+// 3.1 Event photography market 2021-2030
+new Chart(document.getElementById('chMarket'), {
+  type:'bar',
+  data:{
+    labels:['2021','2022','2023','2024','2025','2026','2027','2028','2029','2030'],
+    datasets:[
+      {type:'line',label:'Market size ($B)',data:[30.2,32.0,34.0,36.0,37.96,40.2,42.5,45.0,47.6,50.48],
+        borderColor:'#7ef0c2',backgroundColor:'rgba(126,240,194,.15)',fill:true,tension:.35,pointRadius:4,pointBackgroundColor:'#7ef0c2',borderWidth:3},
+    ]
+  },
+  options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' $'+c.parsed.y+'B'}}},
+    scales:{y:{grid:{color:grid},title:{display:true,text:'US$ Billion'}},x:{grid:{color:grid}}}}
+});
+
+// 3.2 Adjacent markets 2025 vs 2030
+new Chart(document.getElementById('chAdjacent'), {
+  type:'bar',
+  data:{
+    labels:['Event photography','Event mgmt software','Image recognition','Facial recognition'],
+    datasets:[
+      {label:'2025 ($B)',data:[38.0,14.5,60.0,10.0],backgroundColor:'#6ea8fe'},
+      {label:'2030 ($B)',data:[50.5,23.0,128.3,30.0],backgroundColor:'#7ef0c2'}
+    ]
+  },
+  options:{responsive:true,plugins:{tooltip:{callbacks:{label:c=>c.dataset.label+': $'+c.parsed.y+'B'}}},
+    scales:{y:{grid:{color:grid},title:{display:true,text:'US$ Billion'}},x:{grid:{color:grid}}}}
+});
+
+// 3.3 CAGR by segment
+new Chart(document.getElementById('chCagr'), {
+  type:'bar',
+  data:{
+    labels:['Event photography','Event mgmt software','Image recognition','Facial recognition'],
+    datasets:[{label:'CAGR %',data:[5.8,11.5,12.8,15.0],
+      backgroundColor:['#6ea8fe','#c58bff','#ffb86b','#ff7b9c']}]
+  },
+  options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.x+'% CAGR'}}},
+    scales:{x:{grid:{color:grid},title:{display:true,text:'CAGR % (to 2030)'}},y:{grid:{color:grid}}}}
+});
+
+// 5.1 5-year revenue (US$K) - solid=reported, modelled early
+new Chart(document.getElementById('chRevenue'), {
+  type:'line',
+  data:{
+    labels:['FY2021','FY2022','FY2023','FY2024','FY2025'],
+    datasets:[
+      {label:'FotoOwl (filed)',data:[null,null,5,52,230],borderColor:'#7ef0c2',backgroundColor:'rgba(126,240,194,.1)',tension:.3,pointRadius:4,borderWidth:3,spanGaps:true},
+      {label:'Premagic (filed/est.)',data:[60,150,320,470,670],borderColor:'#6ea8fe',backgroundColor:'rgba(110,168,254,.1)',tension:.3,pointRadius:4,borderWidth:3,borderDash:[0]},
+      {label:'Kamero (est.)',data:[null,null,null,150,1100],borderColor:'#ffb86b',backgroundColor:'rgba(255,184,107,.1)',tension:.3,pointRadius:4,borderWidth:3,borderDash:[6,4],spanGaps:true}
+    ]
+  },
+  options:{responsive:true,plugins:{tooltip:{callbacks:{label:c=>c.dataset.label+': $'+(c.parsed.y)+'K'}}},
+    scales:{y:{grid:{color:grid},title:{display:true,text:'Revenue (US$ thousand)'}},x:{grid:{color:grid}}}}
+});
+
+// 5.2 FotoOwl hypergrowth
+new Chart(document.getElementById('chFotoowl'), {
+  type:'bar',
+  data:{
+    labels:['FY24 filed','FY25 filed','Run-rate est. (ARR)'],
+    datasets:[{label:'US$K',data:[52,230,4400],
+      backgroundColor:['#28345c','#7ef0c2','#39d98a']}]
+  },
+  options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+c.parsed.y+'K'}}},
+    scales:{y:{type:'logarithmic',grid:{color:grid},title:{display:true,text:'US$K (log scale)'}},x:{grid:{color:grid}}}}
+});
+
+// 5.3 Projection to 2028
+new Chart(document.getElementById('chProjection'), {
+  type:'line',
+  data:{
+    labels:['2025','2026','2027','2028'],
+    datasets:[
+      {label:'FotoOwl (scenario)',data:[230,600,1300,2400],borderColor:'#7ef0c2',tension:.35,borderWidth:3,pointRadius:4},
+      {label:'Premagic (scenario)',data:[670,1000,1500,2100],borderColor:'#6ea8fe',tension:.35,borderWidth:3,pointRadius:4},
+      {label:'Kamero (scenario)',data:[1100,1900,3000,4500],borderColor:'#ffb86b',tension:.35,borderWidth:3,pointRadius:4,borderDash:[6,4]}
+    ]
+  },
+  options:{responsive:true,plugins:{tooltip:{callbacks:{label:c=>c.dataset.label+': $'+c.parsed.y+'K'}}},
+    scales:{y:{grid:{color:grid},title:{display:true,text:'Revenue (US$K) — illustrative'}},x:{grid:{color:grid}}}}
+});
+
+// 7 Funding
+new Chart(document.getElementById('chFunding'), {
+  type:'bar',
+  data:{
+    labels:['FotoOwl','Premagic','Kamero'],
+    datasets:[{label:'Total raised ($M)',data:[0,1.48,0],
+      backgroundColor:['#7ef0c2','#6ea8fe','#ffb86b']}]
+  },
+  options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false},
+    tooltip:{callbacks:{label:c=> c.parsed.x===0 ? ' Bootstrapped ($0 external)' : ' $'+c.parsed.x+'M raised'}}},
+    scales:{x:{grid:{color:grid},title:{display:true,text:'US$ Million'}},y:{grid:{color:grid}}}}
+});
+
+// 13 Kerala wedding & photography spend (₹ Crore)
+new Chart(document.getElementById('chKerala'), {
+  type:'bar',
+  data:{
+    labels:['2022','2023','2024','2025','2026(e)'],
+    datasets:[
+      {label:'Wedding economy (₹Cr)',data:[1150,1300,1500,1700,1950],backgroundColor:'#6ea8fe',yAxisID:'y'},
+      {type:'line',label:'Photography/video segment (₹Cr)',data:[120,140,170,205,250],borderColor:'#7ef0c2',backgroundColor:'rgba(126,240,194,.15)',fill:true,tension:.35,pointRadius:4,borderWidth:3,yAxisID:'y1'}
+    ]
+  },
+  options:{responsive:true,plugins:{tooltip:{callbacks:{label:c=>c.dataset.label+': ₹'+c.parsed.y+' Cr'}}},
+    scales:{
+      y:{position:'left',grid:{color:grid},title:{display:true,text:'Wedding economy (₹Cr)'}},
+      y1:{position:'right',grid:{drawOnChartArea:false},title:{display:true,text:'Photography (₹Cr)'}},
+      x:{grid:{color:grid}}}}
+});
+
+// 13b Kerala TAM/SAM/SOM funnel
+new Chart(document.getElementById('chKeralaFunnel'), {
+  type:'bar',
+  data:{
+    labels:['TAM · Wedding economy','SAM · Photo/video spend','Serviceable · Digital-ready','SOM · AI photo-SaaS revenue'],
+    datasets:[{label:'₹ Crore',data:[1500,180,70,12],
+      backgroundColor:['#6ea8fe','#c58bff','#ffb86b','#7ef0c2']}]
+  },
+  options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false},
+    tooltip:{callbacks:{label:c=>'₹'+c.parsed.x+' Cr'}}},
+    scales:{x:{type:'logarithmic',grid:{color:grid},title:{display:true,text:'₹ Crore (log scale) — illustrative'}},y:{grid:{color:grid}}}}
+});
+
+// 17a FotoOwl tiers: price vs storage
+new Chart(document.getElementById('chFotoowlTiers'), {
+  type:'bar',
+  data:{
+    labels:['RIDER (Free)','SKATER Small','SKATER','BIKER','PILOT'],
+    datasets:[
+      {label:'Price (USD/mo)',data:[0,16,16,24,31],backgroundColor:'#ffb86b',yAxisID:'y'},
+      {type:'line',label:'Storage (GB)',data:[0.5,50,100,700,1300],borderColor:'#7ef0c2',backgroundColor:'rgba(126,240,194,.12)',tension:.3,pointRadius:4,borderWidth:3,yAxisID:'y1'}
+    ]
+  },
+  options:{responsive:true,plugins:{tooltip:{callbacks:{label:c=> c.dataset.label==='Price (USD/mo)' ? ' $'+c.parsed.y+'/mo' : ' '+c.parsed.y+' GB'}}},
+    scales:{
+      y:{position:'left',grid:{color:grid},title:{display:true,text:'Price (USD/mo)'}},
+      y1:{position:'right',type:'logarithmic',grid:{drawOnChartArea:false},title:{display:true,text:'Storage (GB, log)'}},
+      x:{grid:{color:grid}}}}
+});
+
+// 17b Entry price comparison
+new Chart(document.getElementById('chPricing'), {
+  type:'bar',
+  data:{
+    labels:['FotoOwl (Skater)','Kamero (quote)','Premagic (entry)'],
+    datasets:[{label:'Entry price (USD/mo)',data:[16,null,42],
+      backgroundColor:['#7ef0c2','#28345c','#6ea8fe']}]
+  },
+  options:{responsive:true,plugins:{legend:{display:false},
+    tooltip:{callbacks:{label:c=> c.parsed.y==null ? ' Quote-based (no public entry price)' : ' $'+c.parsed.y+'/mo'}}},
+    scales:{y:{grid:{color:grid},title:{display:true,text:'Lowest paid entry (USD/mo)'}},x:{grid:{color:grid}}}}
+});
+</script>
+</body>
+</html>
