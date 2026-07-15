@@ -426,9 +426,16 @@ function toast(msg,kind="info",ms=3800){
 }
 function busy(btn,on,label){
   if(!btn)return;
-  if(on){btn.dataset.orig=btn.innerHTML;btn.disabled=true;
+  if(on){
+    // Capture the real label only on the first busy() of a cycle — repeated
+    // calls (e.g. "Uploading…" then "Finding…") must not overwrite it, or the
+    // spinner markup gets restored instead of the original button text.
+    if(!btn.dataset.busy){btn.dataset.orig=btn.innerHTML;btn.dataset.busy="1";}
+    btn.disabled=true;
     btn.innerHTML=`<span class="spin"></span> ${label||"Working…"}`;}
-  else{btn.disabled=false;btn.innerHTML=btn.dataset.orig||btn.innerHTML;}
+  else{btn.disabled=false;
+    if(btn.dataset.busy){btn.innerHTML=btn.dataset.orig||btn.innerHTML;
+      delete btn.dataset.orig;delete btn.dataset.busy;}}
 }
 
 // ---------------------------------------------------------------- nav
@@ -2604,13 +2611,35 @@ async function refreshShareBox(){
 async function pollGuests(){
   const list=$("#guestList");if(!list)return;   // stop if box replaced
   let d;try{d=await api("share/guests",{});}catch(e){return;}
-  const cn=$("#guestCount");if(cn)cn.textContent=d.count?`(${num(d.count)})`:"";
-  if(d.guests&&d.guests.length){
-    list.innerHTML=d.guests.map(g=>`<div class="histrow">
-      <span class="hl">🙂 <b>${esc(g.name)}</b> <span class="ht">· ${esc(new Date(g.ts*1000).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))}</span></span>
-      <span style="color:var(--mut)">${g.done?(g.count!=null?num(g.count)+" photo(s)":"—"):"<span class='spin'></span> searching"}</span></div>`).join("");
-  }else{list.innerHTML=`<div class="subhint">No one yet — share the link to get started.</div>`;}
+  renderGuestList(d);
   if($("#guestList"))setTimeout(pollGuests,4000);
+}
+let GUEST_OPEN=new Set();   // job ids whose photo preview is expanded
+function renderGuestList(d){
+  const list=$("#guestList");if(!list)return;
+  const cn=$("#guestCount");if(cn)cn.textContent=d.count?`(${num(d.count)})`:"";
+  if(!(d.guests&&d.guests.length)){
+    list.innerHTML=`<div class="subhint">No one yet — share the link to get started.</div>`;return;}
+  list.innerHTML=d.guests.map(g=>{
+    const time=esc(new Date(g.ts*1000).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}));
+    const canPrev=g.done&&g.count>0&&g.matches&&g.matches.length;
+    const open=canPrev&&GUEST_OPEN.has(g.job);
+    let right;
+    if(!g.done)right="<span class='spin'></span> searching";
+    else if(g.count==null)right="—";
+    else right=`${num(g.count)} photo(s)${g.scanned?` <span style="opacity:.7">/ ${num(g.scanned)} scanned</span>`:""}`;
+    const prevBtn=canPrev?`<button class="btn ghost sm gPrevBtn" data-job="${esc(g.job)}">${open?"✕ Hide":"👁 Preview"}</button>`:"";
+    const grid=open?`<div class="thumbgrid" style="margin-top:10px">${g.matches.map(p=>`<a class="thumb" href="/api/download?path=${encodeURIComponent(p)}" download>
+      <img loading="lazy" src="/api/thumb?size=300&path=${encodeURIComponent(p)}" alt=""/><div class="nm">⬇️ download</div></a>`).join("")}</div>`:"";
+    return `<div class="histrow" style="display:block">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <span class="hl">🙂 <b>${esc(g.name)}</b> <span class="ht">· ${time}</span></span>
+        <span style="color:var(--mut);display:flex;gap:10px;align-items:center">${right}${prevBtn}</span>
+      </div>${grid}</div>`;
+  }).join("");
+  list.querySelectorAll(".gPrevBtn").forEach(b=>b.onclick=()=>{
+    const j=b.dataset.job;GUEST_OPEN.has(j)?GUEST_OPEN.delete(j):GUEST_OPEN.add(j);
+    renderGuestList(d);});
 }
 // ---- guest portal (opened via ?g=<token> on a phone) ----
 async function initGuestPortal(token){
@@ -2745,8 +2774,8 @@ async function guestPoll(btn){
   const res=d.result||{};
   if(res.error==="no_face_in_selfie"){$("#gOut").innerHTML=`<div class="callout warn" style="margin-top:14px">😕 No face found in your selfie. Try a clearer, front-facing photo.</div>`;return;}
   const m=(res.matches||[]);
-  if(!m.length){$("#gOut").innerHTML=`<div class="callout info" style="margin-top:14px">No photos found yet. Try a clearer selfie.</div>`;return;}
-  $("#gOut").innerHTML=`<div class="callout safe" style="margin-top:14px">✅ Found <b>${num(m.length)}</b> photo(s) you're in — tap any to download, or grab them all.</div>
+  if(!m.length){$("#gOut").innerHTML=`<div class="callout info" style="margin-top:14px">No photos found${res.scanned?` in <b>${num(res.scanned)}</b> scanned`:""} yet. Try a clearer selfie.</div>`;return;}
+  $("#gOut").innerHTML=`<div class="callout safe" style="margin-top:14px">✅ Found <b>${num(m.length)}</b> photo(s) you're in${res.scanned?` out of <b>${num(res.scanned)}</b> scanned`:""} — tap any to download, or grab them all.</div>
     <div class="btn-row"><a class="btn" href="/api/download/zip?job=${encodeURIComponent(S.gJob)}&token=${encodeURIComponent(S.guestToken)}" download>⬇️ Download all (${num(m.length)})</a></div>
     <div class="thumbgrid">${m.map(x=>`<a class="thumb" href="/api/download?path=${encodeURIComponent(x.path)}" download>
       <img loading="lazy" src="/api/thumb?size=400&path=${encodeURIComponent(x.path)}" alt=""/>

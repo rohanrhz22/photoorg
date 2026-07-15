@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>phorg · Making the FIRST "Find my photos" search fast (cold-start speed-ups)</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a30; --panel2:#0f1728; --bd:#22304f;
+    --ink:#e8eefc; --mut:#93a4c8; --acc:#4f8cff; --acc2:#7c5cff;
+    --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --teal:#14b8a6;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#182648 0,transparent 60%),var(--bg);
+    color:var(--ink);font:15px/1.6 "Segoe UI",system-ui,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 90px}
+  header.hero{padding:34px 30px;border:1px solid var(--bd);border-radius:20px;
+    background:linear-gradient(135deg,#14224400,#1a2c55 120%),var(--panel);position:relative;overflow:hidden}
+  header.hero:before{content:"";position:absolute;inset:-2px;background:
+    radial-gradient(600px 200px at 10% 0,#4f8cff22,transparent 60%);pointer-events:none}
+  .badge{display:inline-block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--acc);background:#4f8cff18;border:1px solid #4f8cff44;padding:4px 10px;border-radius:999px}
+  h1{margin:14px 0 6px;font-size:30px;letter-spacing:-.02em}
+  h1 .g{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--mut);max-width:820px;font-size:15.5px}
+  nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  nav.toc a{font-size:13px;color:var(--mut);text-decoration:none;border:1px solid var(--bd);
+    padding:6px 12px;border-radius:10px;background:var(--panel2);transition:.15s}
+  nav.toc a:hover{color:var(--ink);border-color:var(--acc);background:#4f8cff14}
+  section{margin-top:40px}
+  h2{font-size:22px;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  h2 .n{font-size:13px;color:#0b1020;background:linear-gradient(90deg,var(--acc),var(--acc2));
+    width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:700}
+  .lead{color:var(--mut);margin:0 0 16px}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:16px;padding:20px 22px;margin:14px 0}
+  .diagram{background:var(--panel2);border:1px solid var(--bd);border-radius:16px;padding:18px;overflow-x:auto;margin:14px 0}
+  .diagram .mermaid{display:flex;justify-content:center}
+  .grid{display:grid;gap:14px}
+  @media(min-width:720px){.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:1fr 1fr 1fr}}
+  .tile{background:var(--panel2);border:1px solid var(--bd);border-radius:14px;padding:16px}
+  .tile h4{margin:0 0 6px;font-size:15px}
+  .tile p{margin:0;color:var(--mut);font-size:13.5px}
+  .pill{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--bd);color:var(--mut);margin:0 4px 4px 0}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:6px 0}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--bd);vertical-align:top}
+  th{color:var(--mut);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em}
+  td code,.mono{font-family:"Cascadia Code",Consolas,monospace;font-size:12.5px;color:#a9c4ff}
+  .callout{border-left:3px solid var(--acc);background:#4f8cff10;padding:12px 16px;border-radius:0 12px 12px 0;margin:12px 0;color:#cfe0ff;font-size:13.5px}
+  .callout.warn{border-color:var(--warn);background:#f59e0b12;color:#ffe7c2}
+  .callout.good{border-color:var(--good);background:#22c55e12;color:#c8f5d6}
+  .callout.bad{border-color:var(--bad);background:#ef444412;color:#ffd4d4}
+  .stepnote h3{margin:0 0 8px;font-size:17px}
+  ul.clean{margin:6px 0 0;padding-left:18px;color:var(--mut);font-size:14px}
+  ul.clean li{margin:5px 0}
+  ul.clean li b{color:var(--ink)}
+  .kpi{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0}
+  .kpi .box{flex:1;min-width:150px;background:var(--panel2);border:1px solid var(--bd);border-radius:14px;padding:14px 16px}
+  .kpi .box .big{font-size:26px;font-weight:700}
+  .kpi .box .lbl{font-size:12px;color:var(--mut)}
+  .kpi .box.bad .big{color:var(--bad)}
+  .kpi .box.good .big{color:var(--good)}
+  .kpi .box.warn .big{color:var(--warn)}
+  .num{font-family:"Cascadia Code",Consolas,monospace;color:#a9c4ff}
+  .win{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:#22c55e18;border:1px solid #22c55e55;color:var(--good);margin-left:8px}
+  .cost0{color:var(--good);font-weight:700}
+  footer{margin-top:56px;color:var(--mut);font-size:12.5px;text-align:center;border-top:1px solid var(--bd);padding-top:20px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);margin-top:6px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <span class="badge">Cold-start Speed Analysis</span>
+  <h1>Making the <span class="g">first "Find my photos"</span> search fast</h1>
+  <p class="sub">Caching (Fix&nbsp;A) makes <b>repeat</b> searches instant — but the <b>very first</b> search over a
+  fresh event folder still has to open and analyse every photo once. This page explains why that first pass is slow
+  and the cheapest ways to cut its time, based on the real code in
+  <span class="mono">phorg/vision.py</span>.</p>
+  <nav class="toc">
+    <a href="#why">1 · Why the first search is slow</a>
+    <a href="#budget">2 · Where the time goes</a>
+    <a href="#fixes">3 · Cheap speed-ups</a>
+    <a href="#warm">4 · Pre-warm while sharing</a>
+    <a href="#plan">5 · Recommended plan</a>
+  </nav>
+</header>
+
+<!-- 1 -->
+<section id="why">
+  <h2><span class="n">1</span> Why the first search takes time</h2>
+  <p class="lead">On a cold cache, <span class="mono">facefind()</span> walks the photo list
+  <b>one photo at a time, on a single CPU core</b>. For each photo it does the full pipeline:</p>
+
+  <div class="diagram"><div class="mermaid">
+flowchart LR
+  A[Open photo file] --> B[Decode full-res JPEG<br/>into memory]
+  B --> C[Resize to &le;1600px]
+  C --> D[YuNet: find faces]
+  D --> E[SFace: fingerprint each face]
+  E --> F[Compare to selfie]
+  F --> A
+  </div></div>
+
+  <div class="callout warn">Two lines in the code set the cold-start cost:
+  <br/>• <span class="mono">img = cv2.imread(path)</span> — decodes the <b>entire full-resolution</b> photo.
+  <br/>• the <span class="mono">for p in native_paths:</span> loop runs <b>sequentially</b> — only one core is
+  used, no matter how many the PC has.</div>
+</section>
+
+<!-- 2 -->
+<section id="budget">
+  <h2><span class="n">2</span> Where the time actually goes</h2>
+  <table>
+    <thead><tr><th>Step</th><th>Roughly</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Decode full-res JPEG</td><td>🟠 30–45%</td><td>A 12&nbsp;MP photo is decoded in full, then thrown away after shrinking.</td></tr>
+      <tr><td>Detect faces (YuNet)</td><td>🟠 25–35%</td><td>Cost scales with image size fed to the detector.</td></tr>
+      <tr><td>Fingerprint faces (SFace)</td><td>🟡 15–25%</td><td>Once per face; cheap unless a big group shot.</td></tr>
+      <tr><td>Disk read + overhead</td><td>🟢 5–10%</td><td>Reading bytes off disk.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout"><b>Takeaway:</b> most of the first-pass time is <b>decoding full-size photos</b> and
+  <b>running the detector</b> — and all of it on a <b>single core</b>. Those are exactly the three cheap levers
+  below.</div>
+</section>
+
+<!-- 3 -->
+<section id="fixes">
+  <h2><span class="n">3</span> Cheap ways to make the first pass faster</h2>
+  <p class="lead">All free code changes, ordered by impact-for-effort. They stack — doing all three can cut a cold
+  search to a fraction of today's time.</p>
+
+  <!-- Fix 1 -->
+  <div class="card">
+    <h3 class="stepnote">1 · Use all CPU cores (parallel embedding) <span class="win">BIGGEST WIN · $0</span></h3>
+    <p class="lead">The photo loop is single-threaded today. OpenCV releases Python's lock while it decodes and runs
+    the models, so a small <b>thread pool</b> can process several photos at the same time. On a 4-core PC this is
+    roughly a <b>3–4× speed-up</b> for free.</p>
+    <div class="kpi">
+      <div class="box bad"><div class="big">1 core</div><div class="lbl">used today</div></div>
+      <div class="box good"><div class="big">all cores</div><div class="lbl">with a thread pool</div></div>
+      <div class="box good"><div class="big">~3–4×</div><div class="lbl">faster first pass (4-core PC)</div></div>
+    </div>
+    <div class="callout">Keep the pool size ≈ number of cores, and reuse <b>one</b> model set (see the low-RAM doc,
+    Fix&nbsp;B) so memory stays flat. Pair it with a bounded queue so 20 guests don't each spawn their own pool.</div>
+  </div>
+
+  <!-- Fix 2 -->
+  <div class="card">
+    <h3 class="stepnote">2 · Decode photos at reduced resolution <span class="win">$0</span></h3>
+    <p class="lead">Right now the full photo is decoded, then shrunk to 1600&nbsp;px and thrown away — wasted work.
+    OpenCV can decode a JPEG at <b>half or quarter size directly</b> using
+    <span class="mono">cv2.IMREAD_REDUCED_COLOR_2</span> / <span class="mono">_4</span>. Faces are still easily
+    detected at that size, but decoding is far cheaper and uses much less memory.</p>
+    <div class="kpi">
+      <div class="box warn"><div class="big">full</div><div class="lbl">decoded today, then discarded</div></div>
+      <div class="box good"><div class="big">½ – ¼</div><div class="lbl">decode straight away</div></div>
+      <div class="box good"><div class="big">2–4×</div><div class="lbl">faster decode + less RAM</div></div>
+    </div>
+    <div class="callout good">Bonus: this also lowers the peak memory per photo — directly helping the low-RAM
+    scenario, not just speed.</div>
+  </div>
+
+  <!-- Fix 3 -->
+  <div class="card">
+    <h3 class="stepnote">3 · Detect on a smaller image <span class="win">$0</span></h3>
+    <p class="lead">The detector cost grows with image size. Feeding YuNet an image capped at ~<b>800–1024&nbsp;px</b>
+    (instead of 1600) speeds detection with little effect on match quality for normal event photos, where faces are
+    a decent size.</p>
+  </div>
+
+  <!-- Fix 4 -->
+  <div class="card">
+    <h3 class="stepnote">4 · Show results as they arrive (feels instant) <span class="win">$0</span></h3>
+    <p class="lead">The job already reports <span class="mono">progress(done, total, matches)</span>. Streaming each
+    match to the guest <b>the moment it's found</b> — instead of waiting for the whole folder — makes the search
+    <i>feel</i> fast even before it fully finishes. Perceived speed matters as much as raw speed.</p>
+  </div>
+</section>
+
+<!-- 4 -->
+<section id="warm">
+  <h2><span class="n">4</span> The trick that hides the wait entirely</h2>
+  <div class="card">
+    <h3 class="stepnote">Pre-warm the cache when the host starts sharing <span class="win">$0</span></h3>
+    <p class="lead">The first search is only slow because the cache is empty. So <b>don't wait for a guest</b> —
+    the moment the host enables the share (<span class="mono">api_share_enable</span>), kick off a background pass
+    that embeds every photo into the Fix&nbsp;A cache.</p>
+    <ul class="clean">
+      <li>Guests usually arrive minutes later — by then the folder is <b>already analysed</b>.</li>
+      <li>The <b>first</b> guest's search is then as instant as everyone else's.</li>
+      <li>It reuses the exact same cache and code path as Fix&nbsp;A — no new machinery.</li>
+    </ul>
+  </div>
+
+  <div class="diagram"><div class="mermaid">
+flowchart LR
+  H[Host enables share] --> W[Background pre-warm:<br/>embed all photos once]
+  W --> Z[(faces.db cache)]
+  G[Guest searches later] --> Z
+  Z --> R[Instant match]
+  </div></div>
+
+  <div class="callout good"><b>Net effect:</b> parallel + reduced-resolution decode make the one-time pass fast,
+  and pre-warming moves that pass to <b>before</b> anyone is waiting — so the first "Find my photos" feels
+  instant.</div>
+</section>
+
+<!-- 5 -->
+<section id="plan">
+  <h2><span class="n">5</span> Recommended plan (in order)</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>#</th><th>Change</th><th>Effort</th><th>Cost</th><th>Impact on first search</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Parallel embedding across cores</td><td>Medium</td><td class="cost0">$0</td><td>🟢 Huge — 3–4× on a 4-core PC</td></tr>
+        <tr><td>2</td><td>Reduced-resolution JPEG decode</td><td>Low</td><td class="cost0">$0</td><td>🟢 2–4× faster decode + less RAM</td></tr>
+        <tr><td>3</td><td>Smaller detect size (~800–1024px)</td><td>Low</td><td class="cost0">$0</td><td>🟡 Faster detection</td></tr>
+        <tr><td>4</td><td>Stream matches as found</td><td>Low</td><td class="cost0">$0</td><td>🟡 Feels instant (perceived)</td></tr>
+        <tr><td>5</td><td>Pre-warm cache at share time</td><td>Low</td><td class="cost0">$0</td><td>🟢 Hides the wait completely</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout good"><b>Bottom line:</b> the first search is slow only because it does full-resolution,
+  single-core work with an empty cache. <b>Use every core, decode smaller, and warm the cache before guests
+  arrive</b> — all free — and even the very first "Find my photos" returns quickly.</div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:var(--good)"></span> Big free win</span>
+    <span><span class="dot" style="background:var(--warn)"></span> Free, smaller gain</span>
+  </div>
+</section>
+
+<footer>
+  phorg · FaceFind cold-start speed analysis · companion to the low-RAM &amp; scaling doc · runs 100% locally
+</footer>
+
+</div>
+<script>mermaid.initialize({startOnLoad:true,theme:"dark",themeVariables:{
+  primaryColor:"#121a30",primaryBorderColor:"#22304f",primaryTextColor:"#e8eefc",
+  lineColor:"#4f8cff",secondaryColor:"#0f1728",tertiaryColor:"#0f1728",fontSize:"13px"}});</script>
+</body>
+</html>

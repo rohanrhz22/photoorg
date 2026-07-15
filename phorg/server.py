@@ -1401,7 +1401,9 @@ def _start_facefind_job(root, selfie, threshold, recursive=True):
                 return job["cancel"]
 
             res = vision.facefind(native, selfie, threshold=threshold,
-                                  progress=prog, cancel=cancelled)
+                                  progress=prog, cancel=cancelled,
+                                  cache_dir=os.path.join(os.path.abspath(be.root),
+                                                         ".phorg"))
             res["scanned"] = len(native)
             res["cancelled"] = job["cancel"]
             res["root"] = be.root
@@ -1521,20 +1523,28 @@ def api_share_find_start(p):
 
 
 def api_share_guests(_p):
-    """Host-only: who has searched, and how many photos each found."""
+    """Host-only: who has searched, how many photos each found, and the matched
+    photo paths so the host can preview them."""
     with _SHARE_LOCK:
         guests = list(_SHARE.get("guests") or [])
     out = []
     for g in guests:
         cnt = None
         done = False
+        scanned = None
+        paths = []
         with _JOBS_LOCK:
             job = _JOBS.get(g.get("job"))
         if job and job.get("finished"):
             done = True
-            cnt = (job.get("result") or {}).get("count")
-        out.append({"name": g["name"], "ts": g["ts"],
-                    "count": cnt, "done": done})
+            res = job.get("result") or {}
+            cnt = res.get("count")
+            scanned = res.get("scanned")
+            paths = [m.get("path") for m in (res.get("matches") or [])
+                     if m.get("path")]
+        out.append({"name": g["name"], "ts": g["ts"], "count": cnt,
+                    "done": done, "scanned": scanned, "job": g.get("job"),
+                    "matches": paths})
     out.reverse()
     return {"guests": out, "count": len(out)}
 

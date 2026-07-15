@@ -847,33 +847,125 @@ class FaceEmbedder:
         return out
 
 
+def _thread_local_embedder(local):
+    """Return this worker thread's own FaceEmbedder, creating it on first use.
+
+    Each thread needs its own detector/recognizer: ``FaceDetectorYN`` keeps
+    mutable state (``setInputSize``), so a single instance can't be shared
+    safely across threads.  Reusing one embedder per thread means the models
+    are loaded ``workers`` times, not once per photo.
+    """
+    emb = getattr(local, "emb", None)
+    if emb is None:
+        emb = FaceEmbedder()
+        local.emb = emb
+    return emb
+
+
 def facefind(native_paths, selfie_path, threshold=0.40,
-             progress=None, cancel=None):
+             progress=None, cancel=None, cache_dir=None, workers=None):
     """Find every photo in *native_paths* containing the face in *selfie_path*.
+
+    When ``cache_dir`` is given, each photo's face embeddings are cached there
+    by (path, size, mtime), so repeated searches over the same event folder
+    (e.g. many guests) analyse every photo only once.
+
+    The one-time (cache-miss) embedding pass runs across multiple CPU cores:
+    OpenCV releases the GIL while decoding and running the models, so a small
+    thread pool processes several photos at once.  Cache reads/writes and score
+    bookkeeping stay on the calling thread (the SQLite cache and result lists
+    are single-threaded), so only the heavy per-photo work is parallelised.
 
     Returns {"matches": [{"path", "score"}], "count"} or {"error": ...}.
     """
     import numpy as np
-    emb = FaceEmbedder()
-    ref = emb.embed(selfie_path)
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    ref = FaceEmbedder().embed(selfie_path)
     if ref is None:
         return {"error": "no_face_in_selfie", "matches": [], "count": 0}
+
+    cache = None
+    if cache_dir:
+        try:
+            from .hashcache import MetaCache
+            cache = MetaCache(cache_dir, name="faces.db")
+        except Exception:
+            cache = None
+
+    if workers is None:
+        workers = max(1, min(8, os.cpu_count() or 2))
+
     matches = []
     total = len(native_paths)
     done = 0
-    for p in native_paths:
-        if cancel and cancel():
-            break
-        done += 1
+
+    def best_score(vecs):
         best = -1.0
-        for v in emb.embed_all(p):
+        for v in vecs:
             s = float(np.dot(v, ref))
             if s > best:
                 best = s
+        return best
+
+    def record(path, vecs):
+        """Score a photo's faces and keep it if it matches (main thread only)."""
+        nonlocal done
+        done += 1
+        best = best_score(vecs)
+        if best >= threshold:
+            matches.append({"path": path, "score": round(best, 3)})
         if progress:
             progress(done, total, len(matches))
-        if best >= threshold:
-            matches.append({"path": p, "score": round(best, 3)})
+
+    local = threading.local()
+
+    def embed_one(path):
+        return path, _thread_local_embedder(local).embed_all(path)
+
+    try:
+        # Pass 1: serve cache hits inline (cheap) and collect the misses.
+        pending = []          # (path, stat_key) needing a fresh embedding
+        for p in native_paths:
+            if cancel and cancel():
+                break
+            key = cache.stat_key(p) if cache is not None else None
+            hit = None
+            if key is not None:
+                rec = cache.get(p, key[0], key[1])
+                if rec is not None and "fe" in rec:
+                    hit = [np.asarray(v, dtype="float32") for v in rec["fe"]]
+            if hit is not None:
+                record(p, hit)
+            else:
+                pending.append((p, key))
+
+        # Pass 2: compute the missing embeddings in parallel across cores.
+        if pending and not (cancel and cancel()):
+            pool = ThreadPoolExecutor(max_workers=workers)
+            try:
+                futs = {pool.submit(embed_one, p): key for (p, key) in pending}
+                for fut in as_completed(futs):
+                    key = futs[fut]
+                    try:
+                        path, vecs = fut.result()
+                    except Exception:
+                        continue
+                    if cache is not None and key is not None:
+                        try:
+                            cache.put(path, key[0], key[1],
+                                      {"fe": [v.tolist() for v in vecs]})
+                        except Exception:
+                            pass
+                    record(path, vecs)
+                    if cancel and cancel():
+                        break
+            finally:
+                pool.shutdown(wait=False, cancel_futures=True)
+    finally:
+        if cache is not None:
+            cache.close()
     matches.sort(key=lambda m: -m["score"])
     return {"matches": matches, "count": len(matches)}
 
