@@ -81,7 +81,7 @@ def _under_allowed(path):
 # --------------------------------------------------------------------------
 _SHARE = {"enabled": False, "root": None, "event": "", "token": None,
           "guests": [], "online": False, "public_url": None,
-          "public_host": None}
+          "public_host": None, "threshold": 0.45}
 _SHARE_LOCK = threading.Lock()
 _SERVER_PORT = 8765
 
@@ -1457,11 +1457,17 @@ def api_share_enable(p):
         public_url = info["url"]
         public_host = info["host"]
     token = uuid.uuid4().hex[:10]
+    try:
+        thr = float(p.get("threshold"))
+    except (TypeError, ValueError):
+        thr = 0.45
+    thr = min(0.60, max(0.30, thr))
     with _SHARE_LOCK:
         _SHARE.update({"enabled": True, "root": os.path.abspath(root),
                        "event": (p.get("event") or "Our Event").strip()[:80],
                        "token": token, "guests": [], "online": online,
-                       "public_url": public_url, "public_host": public_host})
+                       "public_url": public_url, "public_host": public_host,
+                       "threshold": thr})
         event = _SHARE["event"]
     ips = _lan_ips()
     return {"ok": True, "token": token, "event": event, "port": _SERVER_PORT,
@@ -1474,7 +1480,8 @@ def api_share_disable(_p):
         was_online = _SHARE.get("online")
         _SHARE.update({"enabled": False, "root": None, "event": "",
                        "token": None, "guests": [], "online": False,
-                       "public_url": None, "public_host": None})
+                       "public_url": None, "public_host": None,
+                       "threshold": 0.45})
     if was_online:
         try:
             from . import tunnel
@@ -1482,6 +1489,19 @@ def api_share_disable(_p):
         except Exception:
             pass
     return {"ok": True, "enabled": False}
+
+
+def api_share_threshold(p):
+    """Host-only: adjust how strict guest face matching is (higher = stricter,
+    fewer false matches). Applies to every guest search from now on."""
+    try:
+        thr = float(p.get("threshold"))
+    except (TypeError, ValueError):
+        raise ValueError("Invalid strictness value.")
+    thr = min(0.60, max(0.30, thr))
+    with _SHARE_LOCK:
+        _SHARE["threshold"] = thr
+    return {"ok": True, "threshold": thr}
 
 
 def api_share_status(p):
@@ -1492,6 +1512,7 @@ def api_share_status(p):
         cur = _SHARE["token"]
         online = _SHARE.get("online")
         public_url = _SHARE.get("public_url")
+        threshold = _SHARE.get("threshold", 0.45)
     if not enabled:
         return {"enabled": False}
     if token is not None:                     # a guest checking their link
@@ -1500,7 +1521,8 @@ def api_share_status(p):
     ips = _lan_ips()                          # host asking for the link
     return {"enabled": True, "event": event, "token": cur,
             "port": _SERVER_PORT, "ips": ips, "urls": _share_urls(cur),
-            "online": bool(online), "public_url": public_url}
+            "online": bool(online), "public_url": public_url,
+            "threshold": threshold}
 
 
 def api_share_find_start(p):
@@ -1512,13 +1534,30 @@ def api_share_find_start(p):
     selfie = p.get("selfie")
     if not selfie or not os.path.isfile(selfie):
         raise ValueError("Please add a clear selfie first.")
-    r = _start_facefind_job(root, selfie, float(p.get("threshold") or 0.40),
-                            True)
+    with _SHARE_LOCK:
+        thr = _SHARE.get("threshold", 0.45)
+    cid = (p.get("cid") or "").strip()[:64]
+    # A guest who reloads or searches again from the same browser replaces their
+    # previous search: cancel the old (still-running) job so it doesn't keep
+    # burning CPU on the host or linger forever as a stuck "searching" row.
+    if cid:
+        with _SHARE_LOCK:
+            prev_jobs = [g.get("job") for g in (_SHARE.get("guests") or [])
+                         if g.get("cid") == cid]
+        for jid in prev_jobs:
+            with _JOBS_LOCK:
+                job = _JOBS.get(jid)
+            if job and not job.get("finished"):
+                job["cancel"] = True
+    r = _start_facefind_job(root, selfie, thr, True)
     name = (p.get("name") or "").strip()[:60] or "Guest"
     with _SHARE_LOCK:
-        _SHARE.setdefault("guests", []).append(
-            {"name": name, "ts": int(time.time()), "job": r["jobId"]})
-        _SHARE["guests"] = _SHARE["guests"][-200:]
+        guests = _SHARE.setdefault("guests", [])
+        if cid:                         # drop this browser's old entry
+            guests[:] = [g for g in guests if g.get("cid") != cid]
+        guests.append({"name": name, "ts": int(time.time()),
+                       "job": r["jobId"], "cid": cid})
+        _SHARE["guests"] = guests[-200:]
     return r
 
 
@@ -2676,6 +2715,7 @@ ROUTES = {
     "/api/share/enable": api_share_enable,
     "/api/share/disable": api_share_disable,
     "/api/share/status": api_share_status,
+    "/api/share/threshold": api_share_threshold,
     "/api/share/find/start": api_share_find_start,
     "/api/share/guests": api_share_guests,
 }

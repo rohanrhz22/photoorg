@@ -763,19 +763,11 @@ class FaceEmbedder:
 
     def _read(self, path):
         cv2 = self.cv2
-        # Decode large photos at half resolution straight from the JPEG (much
-        # faster + far less memory). Faces stay big enough to detect/recognise,
-        # and the working image is capped again below anyway. Only kicks in for
-        # big images (>=2600px) so small photos keep full detail.
-        flag = cv2.IMREAD_COLOR
-        try:
-            from PIL import Image
-            with Image.open(path) as im:
-                if max(im.size) >= 2600:
-                    flag = cv2.IMREAD_REDUCED_COLOR_2
-        except Exception:
-            pass
-        img = cv2.imread(path, flag)
+        # Always decode at full resolution: face-recognition accuracy depends on
+        # having enough pixels on each face (especially small faces in group
+        # shots), so we do not down-sample here. Speed comes from caching and
+        # cross-image parallelism instead, which don't affect the result.
+        img = cv2.imread(path)
         if img is None:
             try:
                 from PIL import Image

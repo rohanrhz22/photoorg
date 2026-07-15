@@ -2567,6 +2567,12 @@ async function refreshShareBox(){
           <button class="btn ghost sm" id="wifiGen">Make Wi-Fi QR</button></div>
         <div id="wifiQr" style="text-align:center;margin-top:10px"></div></details>`}
       <div class="subhint">Paste it into WhatsApp/email too. Sharing stops when you close the app or click below.</div>
+      <div class="slider" style="margin-top:12px">
+        <label><span>🎯 Match strictness</span><span id="shareStrictVal">${ffStrictLabel(Math.round((st.threshold||0.45)*100))}</span></label>
+        <input type="range" id="shareStrict" min="30" max="60" step="1" value="${Math.round((st.threshold||0.45)*100)}"/>
+        <div class="ends"><span>Looser — more photos</span><span>Stricter — only sure matches</span></div>
+        <div class="subhint">Guests getting other people's photos? Slide toward <b>Stricter</b>. Applies to new searches.</div>
+      </div>
       <div class="sect-t" style="margin-top:12px">👥 Guests who’ve searched <span id="guestCount" style="color:var(--mut)"></span></div>
       <div id="guestList"><div class="subhint">No one yet — share the link to get started.</div></div>
       <div class="btn-row"><button class="btn warn" id="shareStop">⏹️ Stop sharing</button></div>`;
@@ -2585,6 +2591,12 @@ async function refreshShareBox(){
     $("#shareStop").onclick=async e=>{busy(e.target,true,"Stopping…");
       try{await api("share/disable",{});toast("Sharing stopped","good");}catch(err){toast(err.message,"bad");}
       refreshShareBox();};
+    const ss=$("#shareStrict");
+    if(ss){
+      ss.oninput=e=>{$("#shareStrictVal").textContent=ffStrictLabel(+e.target.value);};
+      ss.onchange=async e=>{try{await api("share/threshold",{threshold:(+e.target.value)/100});
+        toast("Strictness updated","good");}catch(err){toast(err.message,"bad");}};
+    }
     pollGuests();
   }else{
     box.innerHTML=`<div class="subhint">Turn on a portal for <b>this folder</b>. Guests on the same Wi-Fi open the link,
@@ -2650,7 +2662,25 @@ async function initGuestPortal(token){
       <div class="callout warn">🔗 This photo link isn't active right now. Please ask the host to turn sharing on.</div></div></div>`;
     return;}
   S.guestToken=token;S.guestEvent=st.event||"the event";
+  // Stop a guest's search on the host when they close or reload the tab, so it
+  // doesn't keep running orphaned. Registered once per page.
+  if(!S._guestUnloadHook){
+    S._guestUnloadHook=true;
+    window.addEventListener("pagehide",()=>{
+      if(S.gJob){try{navigator.sendBeacon("/api/cluster/cancel",
+        JSON.stringify({jobId:S.gJob}));}catch(e){}}
+    });
+  }
   renderGuestPortal();
+}
+// A stable per-browser id so repeated searches from the same phone replace the
+// previous one instead of stacking duplicate "searching" rows on the host.
+function guestCid(){
+  try{let c=localStorage.getItem("phorgGuestCid");
+    if(!c){c=Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+      localStorage.setItem("phorgGuestCid",c);}
+    return c;}
+  catch(e){return S._cid||(S._cid=Math.random().toString(36).slice(2,12));}
 }
 function renderGuestPortal(){
   const main=$("#main");
@@ -2752,7 +2782,7 @@ async function guestFind(e){
   const prog=$("#gProgress");$("#gOut").innerHTML="";
   try{
     const d=await api("share/find/start",{token:S.guestToken,selfie:S.guestSelfie,
-      name:($("#gName")?$("#gName").value:""),threshold:0.40});
+      name:($("#gName")?$("#gName").value:""),threshold:0.40,cid:guestCid()});
     S.gJob=d.jobId;
     prog.innerHTML=`<div class="preview" style="margin-top:14px"><div class="ph"><div class="chips" id="gTally"><span class="chip">Starting…</span></div></div>
       <div style="padding:14px 18px"><div class="track" style="display:block;height:14px;border-radius:8px;background:#0d1424;border:1px solid #23324e;overflow:hidden">
