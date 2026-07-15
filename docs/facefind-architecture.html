@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>phorg · FaceFind (Face ID) — Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a30; --panel2:#0f1728; --bd:#22304f;
+    --ink:#e8eefc; --mut:#93a4c8; --acc:#4f8cff; --acc2:#7c5cff;
+    --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --teal:#14b8a6;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#182648 0,transparent 60%),var(--bg);
+    color:var(--ink);font:15px/1.6 "Segoe UI",system-ui,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 90px}
+  header.hero{padding:34px 30px;border:1px solid var(--bd);border-radius:20px;
+    background:linear-gradient(135deg,#14224400,#1a2c55 120%),var(--panel);position:relative;overflow:hidden}
+  header.hero:before{content:"";position:absolute;inset:-2px;background:
+    radial-gradient(600px 200px at 10% 0,#4f8cff22,transparent 60%);pointer-events:none}
+  .badge{display:inline-block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--acc);background:#4f8cff18;border:1px solid #4f8cff44;padding:4px 10px;border-radius:999px}
+  h1{margin:14px 0 6px;font-size:30px;letter-spacing:-.02em}
+  h1 .g{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--mut);max-width:760px;font-size:15.5px}
+  nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  nav.toc a{font-size:13px;color:var(--mut);text-decoration:none;border:1px solid var(--bd);
+    padding:6px 12px;border-radius:10px;background:var(--panel2);transition:.15s}
+  nav.toc a:hover{color:var(--ink);border-color:var(--acc);background:#4f8cff14}
+  section{margin-top:38px}
+  h2{font-size:22px;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  h2 .n{font-size:13px;color:#0b1020;background:linear-gradient(90deg,var(--acc),var(--acc2));
+    width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:700}
+  .lead{color:var(--mut);margin:0 0 16px}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:16px;padding:20px 22px;margin:14px 0}
+  .diagram{background:var(--panel2);border:1px solid var(--bd);border-radius:16px;padding:18px;overflow-x:auto;margin:14px 0}
+  .diagram .mermaid{display:flex;justify-content:center}
+  .grid{display:grid;gap:14px}
+  @media(min-width:720px){.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:1fr 1fr 1fr}}
+  .tile{background:var(--panel2);border:1px solid var(--bd);border-radius:14px;padding:16px}
+  .tile h4{margin:0 0 6px;font-size:15px}
+  .tile p{margin:0;color:var(--mut);font-size:13.5px}
+  .pill{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--bd);color:var(--mut);margin:0 4px 4px 0}
+  .pill.local{color:var(--good);border-color:#22c55e55;background:#22c55e12}
+  .pill.opt{color:var(--warn);border-color:#f59e0b55;background:#f59e0b12}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:6px 0}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--bd);vertical-align:top}
+  th{color:var(--mut);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em}
+  td code,.mono{font-family:"Cascadia Code",Consolas,monospace;font-size:12.5px;color:#a9c4ff}
+  .kv{display:flex;gap:10px;flex-wrap:wrap}
+  .kv .pill{font-size:12px}
+  .callout{border-left:3px solid var(--acc);background:#4f8cff10;padding:12px 16px;border-radius:0 12px 12px 0;margin:12px 0;color:#cfe0ff;font-size:13.5px}
+  .callout.warn{border-color:var(--warn);background:#f59e0b12;color:#ffe7c2}
+  .callout.good{border-color:var(--good);background:#22c55e12;color:#c8f5d6}
+  .step{display:flex;gap:14px;padding:10px 0;border-bottom:1px dashed var(--bd)}
+  .step:last-child{border-bottom:0}
+  .step .i{flex:0 0 34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:700;
+    background:#4f8cff18;border:1px solid #4f8cff44;color:var(--acc)}
+  .step b{display:block}
+  .step small{color:var(--mut)}
+  .imp{border:1px solid var(--bd);border-radius:14px;overflow:hidden}
+  .imp .row{display:grid;grid-template-columns:170px 1fr;gap:0}
+  .imp .row>div{padding:12px 14px;border-bottom:1px solid var(--bd)}
+  .imp .row>div:first-child{background:var(--panel2);font-weight:600;font-size:13.5px}
+  .imp .row:last-child>div{border-bottom:0}
+  @media(max-width:640px){.imp .row{grid-template-columns:1fr}.imp .row>div:first-child{border-bottom:0}}
+  footer{margin-top:50px;color:var(--mut);font-size:12.5px;text-align:center;border-top:1px solid var(--bd);padding-top:20px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);margin-top:6px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="badge">Architecture · Deep Dive</span>
+    <h1>FaceFind <span class="g">(Face ID)</span> — how it works, end to end</h1>
+    <p class="sub">A privacy-first face-matching feature: point it at an event folder, a guest submits a selfie,
+    and every photo they appear in — including group shots — is found <b>locally on the host PC</b> and offered as a download.
+    Nothing is uploaded to any cloud for the matching itself.</p>
+    <nav class="toc">
+      <a href="#overview">Overview</a>
+      <a href="#stack">Services &amp; stack</a>
+      <a href="#components">Component map</a>
+      <a href="#flow">End-to-end flow</a>
+      <a href="#pipeline">Matching pipeline</a>
+      <a href="#security">Security</a>
+      <a href="#limits">Limits</a>
+      <a href="#improve">What to improve</a>
+      <a href="#roadmap">Roadmap</a>
+      <a href="#costs">Service costs</a>
+      <a href="#capacity">Capacity &amp; cost / phase</a>
+      <a href="#online">Fully online, cheaply</a>
+    </nav>
+  </header>
+
+  <!-- OVERVIEW -->
+  <section id="overview">
+    <h2><span class="n">1</span> What it is</h2>
+    <p class="lead">Two personas share one local web app served by Python's standard-library HTTP server.</p>
+    <div class="grid two">
+      <div class="tile">
+        <h4>👤 Host (event owner)</h4>
+        <p>Runs phorg on their PC, picks the event folder, and turns on a <b>guest portal</b>.
+        Optionally exposes it to the internet via a Cloudflare quick tunnel.</p>
+      </div>
+      <div class="tile">
+        <h4>🙋 Guest</h4>
+        <p>Opens a link (with a secret token), submits a selfie from a phone camera or file,
+        and downloads the photos they appear in — one by one or as a ZIP.</p>
+      </div>
+    </div>
+    <div class="callout good"><b>Privacy stance:</b> face detection &amp; recognition run entirely on the host machine using
+    on-device ONNX models. The guest's selfie is used transiently for matching and the event photos never leave the host except
+    as direct downloads the guest requests.</div>
+  </section>
+
+  <!-- STACK -->
+  <section id="stack">
+    <h2><span class="n">2</span> Services, libraries &amp; models</h2>
+    <p class="lead">Everything below runs on the host. Only the optional tunnel touches a third party.</p>
+    <table>
+      <thead><tr><th>Layer</th><th>Technology</th><th>Role</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td>Web server</td><td><code>http.server.ThreadingHTTPServer</code> (stdlib)</td><td>Serves the UI + JSON API on <code>0.0.0.0:8765</code></td><td><span class="pill local">On device</span></td></tr>
+        <tr><td>Face detector</td><td><b>YuNet</b> · <code>face_detection_yunet_2023mar.onnx</code> (~230 KB)</td><td>Finds face boxes via <code>cv2.FaceDetectorYN</code></td><td><span class="pill local">On device</span></td></tr>
+        <tr><td>Face recognizer</td><td><b>SFace</b> · <code>face_recognition_sface_2021dec.onnx</code> (~37 MB)</td><td>128-D embedding via <code>cv2.FaceRecognizerSF</code></td><td><span class="pill local">On device</span></td></tr>
+        <tr><td>CV runtime</td><td><b>OpenCV</b> (opencv-contrib-python), <b>NumPy</b></td><td>Decode, align-crop, embed, cosine math</td><td><span class="pill local">On device</span></td></tr>
+        <tr><td>Image I/O</td><td><b>Pillow</b> + <b>pillow-heif</b></td><td>Fallback decode, HEIC/HEIF, thumbnails</td><td><span class="pill local">On device</span></td></tr>
+        <tr><td>Concurrency</td><td><code>threading</code> + in-memory <code>_JOBS</code> map</td><td>Background match jobs, progress polling</td><td><span class="pill local">On device</span></td></tr>
+        <tr><td>Front-end</td><td>Vanilla JS single-page <code>ui.html</code></td><td>Host console + guest portal (<code>?g=token</code>)</td><td><span class="pill local">Browser</span></td></tr>
+        <tr><td>QR codes</td><td><b>qrcode-generator</b> · <code>qrcode.min.js</code> (vendored, offline)</td><td>Served by the host at <code>/qrcode.min.js</code> (no CDN); generates the scannable share link + Wi-Fi-join QR in-browser</td><td><span class="pill local">On device + Browser</span></td></tr>
+        <tr><td>Model hosting</td><td>OpenCV Zoo (GitHub)</td><td>One-time model download to <code>~/.phorg/models</code></td><td><span class="pill opt">First run only</span></td></tr>
+        <tr><td>Internet link</td><td><b>Cloudflare Quick Tunnel</b> · <code>cloudflared</code></td><td>Optional public HTTPS URL (<code>*.trycloudflare.com</code>)</td><td><span class="pill opt">Opt-in</span></td></tr>
+      </tbody>
+    </table>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--good)"></i> Runs 100% locally</span>
+      <span><i class="dot" style="background:var(--warn)"></i> Optional / one-time external</span>
+    </div>
+  </section>
+
+  <!-- COMPONENTS -->
+  <section id="components">
+    <h2><span class="n">3</span> Component &amp; deployment map</h2>
+    <p class="lead">How the pieces connect. The Cloudflare tunnel is the only path that leaves the LAN — and only when the host opts in.</p>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart LR
+  subgraph GUEST["🙋 Guest device (phone / laptop)"]
+    B["Browser<br/>guest portal ?g=token"]
+    CAM["Camera / file picker"]
+  end
+
+  subgraph NET["🌐 Reach path"]
+    direction TB
+    LAN["Same Wi-Fi<br/>http://192.168.x.x:8765"]
+    CF["Cloudflare Quick Tunnel<br/>https://*.trycloudflare.com"]
+  end
+
+  subgraph HOST["💻 Host PC (phorg)"]
+    direction TB
+    HS["ThreadingHTTPServer :8765<br/>Host-header + token guard"]
+    API["Guest API whitelist"]
+    JOBS["Background job threads (_JOBS)"]
+    VIS["vision.py<br/>YuNet + SFace (OpenCV)"]
+    FS[("Event folder<br/>original photos")]
+    MODELS[("~/.phorg/models")]
+    TMP[("%TEMP%/phorg_facefind<br/>guest selfie")]
+  end
+
+  CAM --> B
+  B -->|"same Wi-Fi"| LAN
+  B -->|"internet (opt-in)"| CF
+  LAN --> HS
+  CF -->|"tunnels to localhost"| HS
+  HS --> API
+  API --> JOBS
+  JOBS --> VIS
+  VIS --> MODELS
+  VIS --> FS
+  API --> TMP
+  JOBS -->|"matches + thumbnails + zip"| HS
+      </pre>
+    </div>
+    <div class="callout"><b>Key guard:</b> the server distinguishes <span class="mono">local</span> vs <span class="mono">guest</span> by the HTTP <code>Host</code> header.
+    Guests (LAN IP or the known tunnel host) may only call a small whitelist; all host-only actions stay blocked.</div>
+  </section>
+
+  <!-- FLOW -->
+  <section id="flow">
+    <h2><span class="n">4</span> Complete flow, start to end</h2>
+    <p class="lead">A full round trip: host enables sharing → guest matches a selfie → guest downloads their album.</p>
+
+    <div class="diagram">
+      <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor H as 👤 Host
+  participant UI as Host console
+  participant S as phorg server
+  participant T as cloudflared
+  actor G as 🙋 Guest
+  participant P as Guest portal
+  participant V as vision (YuNet+SFace)
+  participant FS as Event folder
+
+  H->>UI: Connect event folder, open FaceFind
+  H->>UI: Enable portal (optionally "Share online")
+  UI->>S: POST /api/share/enable {root, event, online}
+  alt online sharing
+    S->>T: start quick tunnel to localhost:8765
+    T-->>S: https://xxxx.trycloudflare.com
+  end
+  S-->>UI: token + link(s) + QR
+  H->>G: Send link / show QR
+
+  G->>P: Open link ?g=token
+  P->>S: POST /api/share/status {token}
+  S-->>P: {enabled, event}
+  G->>P: Enter name + selfie (camera/file)
+  P->>S: POST /api/facefind/selfie (dataURL)
+  S->>FS: save selfie to %TEMP%
+  P->>S: POST /api/share/find/start {token, name}
+  S->>V: start job: embed selfie = reference vector
+  loop every image in folder
+    V->>FS: read image
+    V->>V: detect faces, embed all, cosine vs reference
+  end
+  P->>S: poll /api/cluster/progress
+  S-->>P: done/total, then matches[]
+  P->>S: GET /api/thumb?path=... (previews)
+  G->>P: Download one / Download all
+  P->>S: GET /api/download or /api/download/zip
+  S->>FS: stream original bytes / build zip in RAM
+  S-->>G: photo(s)
+      </pre>
+    </div>
+
+    <div class="card">
+      <div class="step"><div class="i">1</div><div><b>Host setup</b><small>Connect folder → FaceFind tab → <code>/api/share/enable</code>. A 10-char token is minted; LAN URLs (and, if online, the HTTPS tunnel URL) are returned with a QR.</small></div></div>
+      <div class="step"><div class="i">2</div><div><b>Guest opens link</b><small>The SPA sees <code>?g=token</code>, switches to guest mode, calls <code>/api/share/status</code> to confirm the link is live and shows the event name.</small></div></div>
+      <div class="step"><div class="i">3</div><div><b>Selfie capture</b><small>File picker or native camera (works over HTTPS). The image is sent as a data-URL to <code>/api/facefind/selfie</code> and stored transiently in <code>%TEMP%/phorg_facefind</code>.</small></div></div>
+      <div class="step"><div class="i">4</div><div><b>Match job</b><small><code>/api/share/find/start</code> records the guest and launches a background thread: the selfie becomes a <b>reference embedding</b>; every event photo is scanned.</small></div></div>
+      <div class="step"><div class="i">5</div><div><b>Progress + results</b><small>The portal polls <code>/api/cluster/progress</code> for <code>done/total</code>, then renders matches (sorted by score) with thumbnails from <code>/api/thumb</code>.</small></div></div>
+      <div class="step"><div class="i">6</div><div><b>Download</b><small>Per-photo <code>/api/download</code> streams the original; “Download all” builds a ZIP in memory via <code>/api/download/zip</code>. Originals never move.</small></div></div>
+    </div>
+  </section>
+
+  <!-- PIPELINE -->
+  <section id="pipeline">
+    <h2><span class="n">5</span> The matching pipeline (the actual "Face ID")</h2>
+    <p class="lead">How a selfie becomes a set of matches. Similarity is cosine distance between L2-normalised 128-D SFace embeddings.</p>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TB
+  A["Selfie image"] --> B["Decode (OpenCV, Pillow fallback)"]
+  B --> C["Downscale to max 1600px"]
+  C --> D["YuNet: detect faces"]
+  D --> E{"Face found?"}
+  E -- no --> X["Error: no_face_in_selfie"]
+  E -- yes --> F["Pick largest face → alignCrop → SFace feature<br/>= reference vector (unit-norm)"]
+
+  subgraph SCAN["For every event photo"]
+    G["Decode + downscale"] --> H["YuNet: detect ALL faces (max 12)"]
+    H --> I["SFace embed each face (unit-norm)"]
+    I --> J["cosine = dot(face, reference)"]
+    J --> K["keep best score for the photo"]
+  end
+
+  F --> SCAN
+  K --> L{"best ≥ threshold<br/>(default 0.40)?"}
+  L -- yes --> M["Add to matches with score"]
+  L -- no --> N["Skip"]
+  M --> O["Sort matches by score desc → return"]
+      </pre>
+    </div>
+    <div class="grid three">
+      <div class="tile"><h4>Why "all faces"?</h4><p>Group photos: the guest may be a tiny face in the back. <code>embed_all()</code> embeds up to 12 faces per image so small faces still match.</p></div>
+      <div class="tile"><h4>Threshold</h4><p>Guest "Match strictness" slider maps to the cosine threshold (default <code>0.40</code>). Higher = stricter, fewer false positives.</p></div>
+      <div class="tile"><h4>Cost</h4><p>O(images × faces) embeddings <b>per guest</b>. No caching today — each guest re-embeds the whole folder.</p></div>
+    </div>
+  </section>
+
+  <!-- SECURITY -->
+  <section id="security">
+    <h2><span class="n">6</span> Security model</h2>
+    <div class="grid two">
+      <div class="tile"><h4>🔒 Local-first default</h4><p>Bound on all interfaces so LAN phones can reach it, but non-local requests are refused unless sharing is explicitly on.</p></div>
+      <div class="tile"><h4>🎫 Token-gated</h4><p>Every link carries a per-session token (<code>?g=…</code>). The guest whitelist and downloads validate it.</p></div>
+      <div class="tile"><h4>🚧 Route whitelist</h4><p>Guests can only hit <code>share/status</code>, <code>facefind/selfie</code>, <code>share/find/start</code>, <code>cluster/progress|cancel</code>, thumbs &amp; downloads. Scan/plan/apply/undo stay host-only.</p></div>
+      <div class="tile"><h4>📁 Path confinement</h4><p><code>_guest_can_access()</code> allows reading only files inside the shared event folder — never elsewhere on disk.</p></div>
+      <div class="tile"><h4>🛡️ DNS-rebind guard</h4><p><code>Host</code>-header checks accept only localhost, private IPs, or the app's own tunnel hostname.</p></div>
+      <div class="tile"><h4>🌐 HTTPS when online</h4><p>The Cloudflare tunnel terminates TLS, so guest traffic is encrypted end-to-end and phone cameras are unlocked.</p></div>
+    </div>
+  </section>
+
+  <!-- LIMITS -->
+  <section id="limits">
+    <h2><span class="n">7</span> Current limitations</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Limitation</th><th>Impact</th></tr></thead>
+      <tbody>
+        <tr><td>Accuracy</td><td>SFace is a solid but older recognizer (~99.6% LFW); struggles with big pose/age/occlusion variance.</td><td>Missed or false matches in hard shots.</td></tr>
+        <tr><td>Scale</td><td>Every guest re-embeds the <b>entire</b> folder; matching is a linear scan with no vector index or embedding cache.</td><td>Slow &amp; CPU-heavy for large events / many guests.</td></tr>
+        <tr><td>Compute</td><td>CPU-only OpenCV inference; no GPU path.</td><td>Thousands of photos take minutes.</td></tr>
+        <tr><td>Downloads</td><td>ZIP is assembled fully in RAM (uncompressed); single files read wholly into memory.</td><td>Large albums bounded by host RAM.</td></tr>
+        <tr><td>Delivery</td><td>Cloudflare quick tunnel is ephemeral, throttled, and has a ~100s per-request window.</td><td>Random URL each time; huge zips may time out.</td></tr>
+        <tr><td>Abuse</td><td>No rate limiting; a 40-bit token; anyone with the link can submit any selfie.</td><td>Someone with the link could fish for others' photos.</td></tr>
+        <tr><td>Robustness</td><td>No face-quality / liveness / duplicate-embedding checks.</td><td>Blurry or spoofed selfies degrade results.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- IMPROVE -->
+  <section id="improve">
+    <h2><span class="n">8</span> What to improve — and which services would help</h2>
+    <p class="lead">Grouped by goal. Choices preserve the local-first stance unless noted <span class="pill opt">cloud</span>.</p>
+
+    <div class="imp">
+      <div class="row"><div>🎯 Better accuracy</div><div>
+        Swap SFace for a modern <b>ArcFace</b>/<b>InsightFace</b> model (e.g. <code>buffalo_l</code>) run via <b>ONNX Runtime</b>, or use <b>DeepFace</b>.
+        Add face-quality gating (pose, blur, size) before embedding. Optionally ensemble two models.
+        <div class="kv" style="margin-top:8px"><span class="pill local">InsightFace</span><span class="pill local">ONNX Runtime</span><span class="pill local">DeepFace</span></div>
+      </div></div>
+      <div class="row"><div>⚡ Speed &amp; scale</div><div>
+        <b>Index once, reuse forever:</b> pre-compute every photo's face embeddings when the folder is shared, store them in a
+        <b>vector database</b>, and answer each guest with an approximate-nearest-neighbour (ANN) query instead of a full re-scan.
+        This turns per-guest cost from O(all photos) into O(1) lookup.
+        <div class="kv" style="margin-top:8px"><span class="pill local">FAISS</span><span class="pill local">Qdrant</span><span class="pill local">Milvus</span><span class="pill local">pgvector</span></div>
+      </div></div>
+      <div class="row"><div>🖥️ Hardware accel</div><div>
+        Use <b>onnxruntime-gpu</b> / CUDA or DirectML for detection + embedding; batch images through the model.
+        <div class="kv" style="margin-top:8px"><span class="pill local">CUDA</span><span class="pill local">onnxruntime-gpu</span><span class="pill local">DirectML</span></div>
+      </div></div>
+      <div class="row"><div>🧵 Concurrency</div><div>
+        Replace ad-hoc threads with a real <b>job queue</b> so many guests can be served fairly with retries and back-pressure.
+        <div class="kv" style="margin-top:8px"><span class="pill local">Redis + RQ</span><span class="pill local">Celery</span></div>
+      </div></div>
+      <div class="row"><div>⬇️ Downloads</div><div>
+        <b>Stream the ZIP in chunks</b> (remove the RAM ceiling &amp; timeout risk), or offload delivery to object storage with
+        short-lived <b>presigned URLs</b> served over a CDN — guests download straight from the edge.
+        <div class="kv" style="margin-top:8px"><span class="pill opt">Cloudflare R2</span><span class="pill opt">Amazon S3 + CloudFront</span><span class="pill local">chunked zip</span></div>
+      </div></div>
+      <div class="row"><div>🔗 Stable public link</div><div>
+        Move from a quick tunnel to a <b>named Cloudflare Tunnel</b> (fixed subdomain) or <b>ngrok</b> reserved domain; add
+        <b>Cloudflare Access</b> for an auth gate in front of the portal.
+        <div class="kv" style="margin-top:8px"><span class="pill opt">Cloudflare Tunnel</span><span class="pill opt">Cloudflare Access</span><span class="pill opt">ngrok</span></div>
+      </div></div>
+      <div class="row"><div>🛡️ Safety &amp; abuse</div><div>
+        Per-link expiry &amp; longer tokens, request <b>rate limiting</b>, optional PIN, and <b>anti-spoof / liveness</b> on selfies.
+        Keep an audit log of who searched and downloaded.
+        <div class="kv" style="margin-top:8px"><span class="pill local">Silent-Face-Anti-Spoofing</span><span class="pill local">rate limiter</span></div>
+      </div></div>
+      <div class="row"><div>📤 Auto-delivery UX</div><div>
+        Let guests receive their album by <b>WhatsApp / email</b> instead of manual download.
+        <div class="kv" style="margin-top:8px"><span class="pill opt">Twilio / WhatsApp Business API</span><span class="pill opt">SendGrid</span></div>
+      </div></div>
+      <div class="row"><div>☁️ Managed face APIs</div><div>
+        For maximum accuracy without maintaining models — <b>AWS Rekognition</b>, <b>Azure Face</b>, <b>Google Vision</b>.
+        <b>Trade-off:</b> photos/selfies would be uploaded to a cloud provider, breaking the current on-device privacy promise. Offer as an explicit opt-in only.
+        <div class="kv" style="margin-top:8px"><span class="pill opt">AWS Rekognition</span><span class="pill opt">Azure Face</span><span class="pill opt">Google Vision</span></div>
+      </div></div>
+      <div class="row"><div>📈 Observability</div><div>
+        Structured logs + metrics (match latency, queue depth, error rates) for tuning and support.
+        <div class="kv" style="margin-top:8px"><span class="pill local">Prometheus</span><span class="pill local">Grafana</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ROADMAP -->
+  <section id="roadmap">
+    <h2><span class="n">9</span> Suggested roadmap</h2>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart LR
+  P1["Phase 1 · Quick wins<br/>chunked zip · rate limit · longer token · face-quality gate"]
+  P2["Phase 2 · Scale<br/>embedding cache + FAISS index · ONNX Runtime · GPU"]
+  P3["Phase 3 · Accuracy<br/>InsightFace/ArcFace · liveness"]
+  P4["Phase 4 · Delivery<br/>named tunnel/Access · R2 presigned URLs · WhatsApp/email"]
+  P1 --> P2 --> P3 --> P4
+      </pre>
+    </div>
+    <div class="grid two">
+      <div class="tile"><h4>Highest impact, lowest effort</h4><p>Chunked ZIP streaming + an embedding cache/index. Together they remove the two biggest pain points (RAM-bound downloads and per-guest full re-scan).</p></div>
+      <div class="tile"><h4>Biggest quality jump</h4><p>Replacing SFace with an InsightFace ArcFace model via ONNX Runtime — same local-first design, markedly better recognition.</p></div>
+    </div>
+  </section>
+
+  <!-- COSTS -->
+  <section id="costs">
+    <h2><span class="n">10</span> Cost of services (if you scale up)</h2>
+    <p class="lead">Approximate list prices, 2025 (USD). Free tiers noted. The big lever for a photo app is <b>egress bandwidth</b> —
+    which is why zero-egress storage (Cloudflare R2) dominates the "cheap online" design below.</p>
+    <div class="callout warn"><b>Estimates only.</b> Prices change and vary by region/commit. Treat these as planning ballparks, not quotes.</div>
+    <table>
+      <thead><tr><th>Category</th><th>Service</th><th>Free tier</th><th>Paid (approx.)</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="3">Object storage<br/>(photos)</td><td><b>Cloudflare R2</b> ⭐</td><td>10 GB, 1M writes, 10M reads / mo</td><td>$0.015 /GB-mo · <b>$0 egress</b> · $4.50/M writes</td></tr>
+        <tr><td>Backblaze B2</td><td>10 GB</td><td>$0.006 /GB-mo · egress free ≤3× storage</td></tr>
+        <tr><td>Amazon S3</td><td>5 GB (12 mo)</td><td>$0.023 /GB-mo · <b>egress $0.09 /GB</b> (pricey)</td></tr>
+        <tr><td>CDN delivery</td><td>Cloudflare CDN / R2</td><td>Generous; R2 egress free</td><td>Effectively $0 egress via R2+CDN</td></tr>
+        <tr><td rowspan="2">Compute<br/>(API + models)</td><td><b>Hetzner VPS</b> ⭐ (CX22: 2 vCPU/4 GB)</td><td>—</td><td>≈ $4 /mo · CPX31 (4 vCPU/8 GB) ≈ $14 /mo</td></tr>
+        <tr><td>Fly.io / Railway / Render</td><td>Small always-on allowance</td><td>≈ $5–30 /mo per always-on instance</td></tr>
+        <tr><td>GPU (optional)</td><td>RunPod / Vast.ai (spot)</td><td>—</td><td>≈ $0.20–0.50 /GPU-hr · AWS g4dn ≈ $0.53 /hr</td></tr>
+        <tr><td>Vector DB</td><td>Qdrant (self-host) ⭐ / Qdrant Cloud</td><td>Self-host $0 · Cloud 1 GB free</td><td>Cloud from ≈ $25 /mo</td></tr>
+        <tr><td>Queue / cache</td><td>Redis (self-host) / Upstash</td><td>Self-host $0 · Upstash 10k cmd/day</td><td>Pay-as-you-go, cents</td></tr>
+        <tr><td>Static frontend</td><td>Cloudflare Pages / Netlify / Vercel</td><td>Free for hobby/SPA</td><td>$0 typical</td></tr>
+        <tr><td rowspan="2">Public link</td><td>Cloudflare Tunnel + Access</td><td>Tunnel free · Access free ≤ 50 users</td><td>$0 for small events</td></tr>
+        <tr><td>ngrok</td><td>1 static domain</td><td>Paid plans $8–20 /mo</td></tr>
+        <tr><td rowspan="3">Managed face API<br/><span class="pill opt">cloud upload</span></td><td>AWS Rekognition</td><td>5k images/mo (12 mo)</td><td>≈ $1 per 1,000 images</td></tr>
+        <tr><td>Azure Face</td><td>30k tx/mo (S0 trial)</td><td>≈ $1 per 1,000 transactions</td></tr>
+        <tr><td>Google Vision</td><td>1k units/mo</td><td>≈ $1.50 per 1,000 (face detection)</td></tr>
+        <tr><td rowspan="2">Delivery</td><td>SendGrid (email)</td><td>100 emails/day</td><td>From ≈ $20 /mo</td></tr>
+        <tr><td>Twilio WhatsApp</td><td>Sandbox</td><td>≈ $0.005 /msg + conversation fees</td></tr>
+      </tbody>
+    </table>
+    <div class="callout good">⭐ = the low-cost picks used in the "fully online, cheaply" blueprint below.</div>
+  </section>
+
+  <!-- CAPACITY -->
+  <section id="capacity">
+    <h2><span class="n">11</span> Capacity &amp; cost per phase — how many customers each tier serves</h2>
+    <p class="lead">"Customers" here = concurrent <b>guests</b> searching/downloading, and the number of <b>events</b> (host folders) you can run.
+    Numbers are realistic planning figures, not hard limits.</p>
+
+    <div class="grid two">
+      <div class="tile">
+        <h4>Phase 0 · Today (laptop + quick tunnel)</h4>
+        <p><span class="pill">Cost: $0</span><span class="pill">1 event at a time</span></p>
+        <p style="margin-top:8px">CPU-bound, in-RAM zip, per-guest full re-scan. Comfortable for <b>~5–10 concurrent guests</b> and a few hundred to ~2–3k photos.
+        Beyond that, matching queues up and big zips risk the ~100 s tunnel window.</p>
+      </div>
+      <div class="tile">
+        <h4>Phase 1 · Quick wins (still on the host PC)</h4>
+        <p><span class="pill">Cost: $0</span><span class="pill">1 event</span></p>
+        <p style="margin-top:8px">Chunked-zip streaming + an embedding cache remove the two worst bottlenecks. Same machine now handles
+        <b>~20–30 concurrent guests</b> and 10k+ photos, because each photo is embedded <b>once</b>, not per guest.</p>
+      </div>
+      <div class="tile">
+        <h4>Phase 2 · Scale (small VPS + vector index)</h4>
+        <p><span class="pill">≈ $10–30 /mo</span><span class="pill">many events</span></p>
+        <p style="margin-top:8px">FAISS/Qdrant ANN turns each search into a millisecond lookup. A single 4-vCPU box serves
+        <b>~50–100 concurrent guests</b> and comfortably <b>1,000–3,000 guests / month</b> across multiple events.
+        Photos on R2 → downloads no longer touch your server.</p>
+      </div>
+      <div class="tile">
+        <h4>Phase 3 · Accuracy / burst (add GPU on demand)</h4>
+        <p><span class="pill">≈ $50–300 /mo</span><span class="pill">large events</span></p>
+        <p style="margin-top:8px">GPU only when indexing big folders (spin up spot GPU, index, spin down). Handles <b>50k–100k photos</b> per event and
+        indexing bursts; steady-state serving stays on the cheap CPU box. Good for <b>5,000–15,000 guests / month</b>.</p>
+      </div>
+      <div class="tile">
+        <h4>Phase 4 · SaaS (multi-tenant, autoscale)</h4>
+        <p><span class="pill">scales with usage</span><span class="pill">unlimited events</span></p>
+        <p style="margin-top:8px">Stateless API behind a load balancer + queue workers + object storage. Capacity becomes "how many workers you run".
+        <b>Tens of thousands of guests / month</b>; cost tracks storage + worker hours, with R2 keeping bandwidth ~free.</p>
+      </div>
+      <div class="tile">
+        <h4>Managed-API variant <span class="pill opt">cloud</span></h4>
+        <p><span class="pill">≈ $1 / 1,000 imgs</span></p>
+        <p style="margin-top:8px">If you use Rekognition/Azure/Google instead of self-hosted models, capacity is "unlimited" but cost is per-image.
+        A 10k-photo event ≈ $10 to index; 100 events/mo ≈ $1,000. Trades privacy + money for zero model ops.</p>
+      </div>
+    </div>
+
+    <table style="margin-top:16px">
+      <thead><tr><th>Phase</th><th>Where it runs</th><th>Concurrent guests</th><th>Guests / month</th><th>Photos / event</th><th>Monthly cost</th></tr></thead>
+      <tbody>
+        <tr><td>0 · Today</td><td>Laptop + quick tunnel</td><td>~5–10</td><td>a few hundred</td><td>~2–3k</td><td><b>$0</b></td></tr>
+        <tr><td>1 · Quick wins</td><td>Laptop (optimized)</td><td>~20–30</td><td>~1k</td><td>10k+</td><td><b>$0</b></td></tr>
+        <tr><td>2 · Scale</td><td>1 small VPS + R2</td><td>~50–100</td><td>1k–3k</td><td>10k–30k</td><td><b>$10–30</b></td></tr>
+        <tr><td>3 · Accuracy/burst</td><td>VPS + on-demand GPU</td><td>~100</td><td>5k–15k</td><td>50k–100k</td><td><b>$50–300</b></td></tr>
+        <tr><td>4 · SaaS</td><td>Autoscale workers</td><td>100s</td><td>10k+</td><td>100k+</td><td><b>usage-based</b></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ONLINE -->
+  <section id="online">
+    <h2><span class="n">12</span> Making it fully online — at the lowest running cost</h2>
+    <p class="lead">Goal: no host PC required, works for anyone on the internet, and costs a few dollars a month at small scale.
+    The trick is <b>zero-egress storage</b> for photo delivery and a single small always-on box for the API.</p>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart LR
+  subgraph EDGE["Free edge"]
+    FE["Static SPA<br/>Cloudflare Pages (free)"]
+  end
+  subgraph BOX["1 small VPS · ~$4-14/mo"]
+    API["FastAPI / phorg API"]
+    Q["Redis queue"]
+    W["Worker: YuNet+SFace<br/>ONNX Runtime (CPU)"]
+    VDB["Qdrant vector index<br/>self-hosted ($0)"]
+  end
+  subgraph STORE["Cloudflare R2 · $0 egress"]
+    OBJ[("Event photos")]
+    ZIP[("Prebuilt albums")]
+  end
+  U["Guest browser"] --> FE
+  FE -->|"HTTPS API calls"| API
+  API --> Q --> W
+  W --> VDB
+  W -->|"read/write"| OBJ
+  API -->|"presigned URL"| U
+  U -->|"download direct from edge"| OBJ
+  U -->|"album zip"| ZIP
+      </pre>
+    </div>
+
+    <div class="grid two">
+      <div class="tile"><h4>1 · Frontend on free static hosting</h4><p>Ship the SPA to <b>Cloudflare Pages</b> / Netlify / Vercel (free). No server cost for the UI.</p></div>
+      <div class="tile"><h4>2 · One small always-on API box</h4><p>A <b>Hetzner CX22 (~$4/mo)</b> or Fly.io instance runs the FastAPI backend, a Redis queue, and CPU ONNX-Runtime workers. No GPU needed at small scale.</p></div>
+      <div class="tile"><h4>3 · Photos on Cloudflare R2</h4><p>Upload once. Guests download <b>directly from R2</b> via short-lived presigned URLs — <b>$0 egress</b> means downloads don't cost you bandwidth or hit your server.</p></div>
+      <div class="tile"><h4>4 · Index once, search fast</h4><p>On upload, compute embeddings and store them in <b>Qdrant</b> (self-hosted on the same box). Each guest search is a millisecond ANN query, not a re-scan.</p></div>
+      <div class="tile"><h4>5 · Prebuild album zips</h4><p>Generate a guest's zip in a worker and drop it in R2; hand back a presigned link. Removes the in-RAM zip limit and any tunnel timeout.</p></div>
+      <div class="tile"><h4>6 · Auth &amp; abuse control</h4><p>Signed, expiring links; per-event rate limits; optional <b>Cloudflare Access</b> (free ≤ 50 users) or a PIN in front of the portal.</p></div>
+    </div>
+
+    <div class="card">
+      <h4 style="margin:0 0 10px">Example monthly bill — small operator</h4>
+      <table>
+        <tbody>
+          <tr><td>Cloudflare Pages (frontend)</td><td class="mono">$0</td></tr>
+          <tr><td>Hetzner CX22 VPS (API + workers + Qdrant + Redis)</td><td class="mono">~$4</td></tr>
+          <tr><td>Cloudflare R2 — 50 GB photos, all downloads</td><td class="mono">~$0.75 storage · $0 egress</td></tr>
+          <tr><td>Domain (optional)</td><td class="mono">~$1 (amortized)</td></tr>
+          <tr><td><b>Total</b></td><td class="mono"><b>≈ $5–6 / month</b> for ~1–3k guests</td></tr>
+        </tbody>
+      </table>
+      <div class="callout good" style="margin-top:12px"><b>Why it's cheap:</b> the two things that normally blow up a photo app —
+      <b>egress bandwidth</b> and <b>GPU</b> — are avoided. R2 has no egress fees, and CPU ONNX Runtime + a vector index is fast enough
+      because each photo is embedded only once.</div>
+    </div>
+
+    <div class="callout warn"><b>When costs rise:</b> heavy indexing bursts (add spot GPU by the hour), &gt;10k concurrent guests
+    (add worker boxes behind a load balancer), or switching to a managed face API (per-image pricing). Scale these only when volume justifies it.</div>
+  </section>
+
+  <footer>
+    phorg · FaceFind architecture reference · generated for the phone_organizer workspace.<br/>
+    Local components run entirely on the host; the Cloudflare tunnel and one-time model download are the only external touchpoints, both opt-in.
+  </footer>
+
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad:true,
+    theme:"base",
+    themeVariables:{
+      background:"#0f1728",
+      primaryColor:"#16233f",
+      primaryTextColor:"#e8eefc",
+      primaryBorderColor:"#3a5a9c",
+      lineColor:"#5b74a8",
+      secondaryColor:"#182a4d",
+      tertiaryColor:"#122036",
+      fontFamily:"Segoe UI, system-ui, sans-serif",
+      fontSize:"14px",
+      actorBkg:"#16233f",
+      actorBorder:"#4f8cff",
+      actorTextColor:"#e8eefc",
+      signalColor:"#93a4c8",
+      signalTextColor:"#cfe0ff",
+      noteBkgColor:"#1b2c52",
+      noteTextColor:"#e8eefc"
+    }
+  });
+</script>
+</body>
+</html>

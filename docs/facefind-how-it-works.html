@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>phorg · How FaceFind (Face ID) works — architecture &amp; step-by-step</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a30; --panel2:#0f1728; --bd:#22304f;
+    --ink:#e8eefc; --mut:#93a4c8; --acc:#4f8cff; --acc2:#7c5cff;
+    --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --teal:#14b8a6;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#182648 0,transparent 60%),var(--bg);
+    color:var(--ink);font:15px/1.6 "Segoe UI",system-ui,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 90px}
+  header.hero{padding:34px 30px;border:1px solid var(--bd);border-radius:20px;
+    background:linear-gradient(135deg,#14224400,#1a2c55 120%),var(--panel);position:relative;overflow:hidden}
+  header.hero:before{content:"";position:absolute;inset:-2px;background:
+    radial-gradient(600px 200px at 10% 0,#4f8cff22,transparent 60%);pointer-events:none}
+  .badge{display:inline-block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--acc);background:#4f8cff18;border:1px solid #4f8cff44;padding:4px 10px;border-radius:999px}
+  h1{margin:14px 0 6px;font-size:30px;letter-spacing:-.02em}
+  h1 .g{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--mut);max-width:780px;font-size:15.5px}
+  nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  nav.toc a{font-size:13px;color:var(--mut);text-decoration:none;border:1px solid var(--bd);
+    padding:6px 12px;border-radius:10px;background:var(--panel2);transition:.15s}
+  nav.toc a:hover{color:var(--ink);border-color:var(--acc);background:#4f8cff14}
+  section{margin-top:40px}
+  h2{font-size:22px;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  h2 .n{font-size:13px;color:#0b1020;background:linear-gradient(90deg,var(--acc),var(--acc2));
+    width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:700}
+  .lead{color:var(--mut);margin:0 0 16px}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:16px;padding:20px 22px;margin:14px 0}
+  .diagram{background:var(--panel2);border:1px solid var(--bd);border-radius:16px;padding:18px;overflow-x:auto;margin:14px 0}
+  .diagram .mermaid{display:flex;justify-content:center}
+  .grid{display:grid;gap:14px}
+  @media(min-width:720px){.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:1fr 1fr 1fr}}
+  .tile{background:var(--panel2);border:1px solid var(--bd);border-radius:14px;padding:16px}
+  .tile h4{margin:0 0 6px;font-size:15px}
+  .tile p{margin:0;color:var(--mut);font-size:13.5px}
+  .pill{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--bd);color:var(--mut);margin:0 4px 4px 0}
+  .pill.local{color:var(--good);border-color:#22c55e55;background:#22c55e12}
+  .pill.opt{color:var(--warn);border-color:#f59e0b55;background:#f59e0b12}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:6px 0}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--bd);vertical-align:top}
+  th{color:var(--mut);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em}
+  td code,.mono{font-family:"Cascadia Code",Consolas,monospace;font-size:12.5px;color:#a9c4ff}
+  .callout{border-left:3px solid var(--acc);background:#4f8cff10;padding:12px 16px;border-radius:0 12px 12px 0;margin:12px 0;color:#cfe0ff;font-size:13.5px}
+  .callout.warn{border-color:var(--warn);background:#f59e0b12;color:#ffe7c2}
+  .callout.good{border-color:var(--good);background:#22c55e12;color:#c8f5d6}
+
+  /* ---- step layout ---- */
+  .steprow{display:grid;gap:20px;align-items:start;margin:22px 0}
+  @media(min-width:820px){.steprow{grid-template-columns:1fr 1fr}.steprow.rev .shot{order:2}}
+  .stepnote h3{margin:0 0 8px;font-size:17px;display:flex;align-items:center;gap:10px}
+  .stepnote h3 .sn{flex:0 0 30px;height:30px;border-radius:9px;display:grid;place-items:center;font-weight:700;
+    background:linear-gradient(90deg,var(--acc),var(--acc2));color:#0b1020;font-size:14px}
+  .stepnote p{margin:0 0 8px;color:var(--mut);font-size:13.8px}
+  .stepnote ul{margin:6px 0 0;padding-left:18px;color:var(--mut);font-size:13.4px}
+  .stepnote ul li{margin:3px 0}
+
+  /* ---- fake screenshot chrome ---- */
+  .shot{border:1px solid var(--bd);border-radius:14px;overflow:hidden;background:var(--panel2);
+    box-shadow:0 18px 40px -22px #000;position:relative}
+  .shot .bar{display:flex;align-items:center;gap:7px;padding:9px 12px;background:#0c1424;border-bottom:1px solid var(--bd)}
+  .shot .bar i{width:11px;height:11px;border-radius:50%;display:inline-block}
+  .shot .bar .u{margin-left:10px;font-size:11.5px;color:var(--mut);font-family:"Cascadia Code",Consolas,monospace;
+    background:#0b1020;border:1px solid var(--bd);border-radius:7px;padding:3px 10px;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .shot .scr{padding:16px}
+  .cap{font-size:11.5px;color:var(--mut);text-align:center;margin-top:8px;font-style:italic}
+
+  /* mini app widgets used inside screenshots */
+  .m-h1{font-size:17px;margin:0 0 4px;font-weight:700}
+  .m-lead{font-size:12.5px;color:var(--mut);margin:0 0 12px}
+  .m-card{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:13px 14px;margin:10px 0}
+  .m-h4{font-size:13px;margin:0 0 9px;font-weight:600}
+  .m-lbl{font-size:11.5px;color:var(--mut);margin:8px 0 4px}
+  .m-inp{background:#0b1020;border:1px solid var(--bd);border-radius:8px;padding:8px 10px;font-size:12.5px;color:var(--ink)}
+  .m-inp.ph{color:#5c6b8c}
+  .m-row{display:flex;gap:8px;align-items:center}
+  .m-btn{background:linear-gradient(90deg,var(--acc),var(--acc2));color:#fff;border:none;border-radius:8px;
+    padding:9px 14px;font-size:12.5px;font-weight:600;display:inline-flex;gap:6px;align-items:center}
+  .m-btn.ghost{background:#131c33;border:1px solid var(--bd);color:var(--ink);font-weight:500}
+  .m-btn.warn{background:#3a2410;border:1px solid #f59e0b55;color:#ffcf8f}
+  .m-cal{border-left:3px solid var(--teal);background:#14b8a612;color:#bff0e6;padding:9px 12px;border-radius:0 10px 10px 0;font-size:11.8px;margin:8px 0}
+  .m-cal.info{border-color:var(--acc);background:#4f8cff12;color:#cfe0ff}
+  .m-cal.safe{border-color:var(--good);background:#22c55e12;color:#c8f5d6}
+  .m-cal.warn{border-color:var(--warn);background:#f59e0b12;color:#ffe7c2}
+  .m-prev{width:64px;height:64px;border-radius:12px;border:1px dashed var(--bd);display:grid;place-items:center;
+    font-size:26px;background:#0b1020;overflow:hidden;flex:0 0 64px}
+  .m-prev img{width:100%;height:100%;object-fit:cover}
+  .m-slider{height:6px;border-radius:6px;background:linear-gradient(90deg,var(--acc),#2a3a5e);position:relative;margin:12px 0 6px}
+  .m-slider .knob{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid var(--acc)}
+  .m-ends{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut)}
+  .m-qr{width:120px;height:120px;margin:6px auto;border-radius:10px;background:
+    conic-gradient(#000 0 0) padding-box,#fff;display:grid;place-items:center;padding:8px}
+  .m-qr svg{width:100%;height:100%}
+  .m-track{height:12px;border-radius:7px;background:#0b1020;border:1px solid var(--bd);overflow:hidden;margin:8px 0 6px}
+  .m-fill{height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2))}
+  .m-chip{display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:999px;background:#0b1020;border:1px solid var(--bd);color:var(--mut)}
+  .m-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+  .m-thumb{aspect-ratio:1;border-radius:8px;position:relative;overflow:hidden;border:1px solid var(--bd);
+    display:grid;place-items:end center;font-size:9px;color:#cfe0ff;padding-bottom:3px}
+  .m-thumb .dl{background:#0009;border-radius:5px;padding:1px 5px}
+  .m-toggle{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--ink);margin:8px 0}
+  .m-tk{width:34px;height:19px;border-radius:99px;background:var(--acc);position:relative;flex:0 0 34px}
+  .m-tk:after{content:"";position:absolute;top:2px;right:2px;width:15px;height:15px;border-radius:50%;background:#fff}
+  .m-tk.off{background:#2a3a5e}
+  .m-tk.off:after{right:auto;left:2px}
+  .swatch{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .swatch b{font-size:11px}
+  footer{margin-top:56px;color:var(--mut);font-size:12.5px;text-align:center;border-top:1px solid var(--bd);padding-top:20px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);margin-top:6px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .filerow{font-family:"Cascadia Code",Consolas,monospace;font-size:11.5px;color:#a9c4ff;padding:2px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="badge">Feature Guide · Architecture + Steps</span>
+    <h1>How <span class="g">FaceFind (Face ID)</span> works</h1>
+    <p class="sub">FaceFind lets anyone find every photo they appear in — even inside big group shots — from a single
+    selfie. All face detection and matching runs <b>100% on the host PC</b> using on-device ONNX models; no photo
+    and no selfie is ever uploaded to a cloud service for the matching itself. This page walks the full architecture,
+    the matching pipeline, and every screen the host and guest see.</p>
+    <nav class="toc">
+      <a href="#idea">The idea</a>
+      <a href="#arch">Architecture</a>
+      <a href="#pipeline">Matching pipeline</a>
+      <a href="#steps-host">Host steps</a>
+      <a href="#steps-guest">Guest steps</a>
+      <a href="#security">Privacy &amp; security</a>
+      <a href="#files">Code map</a>
+    </nav>
+  </header>
+
+  <!-- IDEA -->
+  <section id="idea">
+    <h2><span class="n">1</span> The idea in one minute</h2>
+    <p class="lead">Two people, one local web app served straight from the host's machine.</p>
+    <div class="grid two">
+      <div class="tile">
+        <h4>👤 Host (event owner)</h4>
+        <p>Runs phorg, points it at the event folder, and turns on a <b>guest portal</b>. Shares a link or QR code —
+        on the same Wi-Fi, or over a secure internet tunnel. Can also run FaceFind directly for a named guest.</p>
+      </div>
+      <div class="tile">
+        <h4>🙋 Guest</h4>
+        <p>Opens the link on a phone, snaps or picks a <b>selfie</b>, taps <b>Find my photos</b>, and downloads every
+        picture they're in — one at a time or as a ZIP. Their originals stay on the host; only copies are downloaded.</p>
+      </div>
+    </div>
+    <div class="callout good"><b>Privacy first:</b> the selfie is matched transiently on the host and the event photos
+    never leave the machine except as the direct downloads a guest explicitly requests.</div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section id="arch">
+    <h2><span class="n">2</span> Architecture at a glance</h2>
+    <p class="lead">A tiny Python standard-library web server, OpenCV face models, and a single-page front-end.
+    The only path that can leave the LAN is the optional Cloudflare tunnel — and only when the host opts in.</p>
+
+    <table>
+      <thead><tr><th>Layer</th><th>Technology</th><th>Role</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td>Web server</td><td><code>http.server.ThreadingHTTPServer</code></td><td>Serves the UI + JSON API on <code>:8765</code></td><td><span class="pill local">On device</span></td></tr>
+        <tr><td>Face detector</td><td><b>YuNet</b> · <code>face_detection_yunet_2023mar.onnx</code></td><td>Finds face boxes (<code>cv2.FaceDetectorYN</code>)</td><td><span class="pill local">On device</span></td></tr>
+        <tr><td>Face recognizer</td><td><b>SFace</b> · <code>face_recognition_sface_2021dec.onnx</code></td><td>128-D embedding per face (<code>cv2.FaceRecognizerSF</code>)</td><td><span class="pill local">On device</span></td></tr>
+        <tr><td>CV runtime</td><td><b>OpenCV</b> (opencv-contrib-python) + <b>NumPy</b></td><td>Decode, align-crop, embed, cosine math</td><td><span class="pill local">On device</span></td></tr>
+        <tr><td>Image I/O</td><td><b>Pillow</b> + <b>pillow-heif</b></td><td>Fallback decode, HEIC/HEIF, thumbnails</td><td><span class="pill local">On device</span></td></tr>
+        <tr><td>Jobs</td><td><code>threading</code> + in-memory <code>_JOBS</code></td><td>Background match jobs + progress polling</td><td><span class="pill local">On device</span></td></tr>
+        <tr><td>Front-end</td><td>Vanilla-JS single page <code>ui.html</code></td><td>Host console + guest portal (<code>?g=token</code>)</td><td><span class="pill local">Browser</span></td></tr>
+        <tr><td>Models</td><td>OpenCV Zoo (GitHub)</td><td>One-time download to <code>~/.phorg/models</code></td><td><span class="pill opt">First run</span></td></tr>
+        <tr><td>Internet link</td><td><b>Cloudflare Quick Tunnel</b></td><td>Optional public HTTPS URL</td><td><span class="pill opt">Opt-in</span></td></tr>
+      </tbody>
+    </table>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--good)"></i> Runs 100% locally</span>
+      <span><i class="dot" style="background:var(--warn)"></i> Optional / one-time external</span>
+    </div>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart LR
+  subgraph GUEST["🙋 Guest device"]
+    B["Browser<br/>guest portal ?g=token"]
+    CAM["Camera / file picker"]
+  end
+  subgraph NET["🌐 Reach path"]
+    LAN["Same Wi-Fi<br/>http://192.168.x.x:8765"]
+    CF["Cloudflare Tunnel<br/>https://*.trycloudflare.com"]
+  end
+  subgraph HOST["💻 Host PC (phorg)"]
+    HS["ThreadingHTTPServer :8765<br/>Host-header + token guard"]
+    API["Guest API whitelist"]
+    JOBS["Background job threads (_JOBS)"]
+    VIS["vision.py<br/>YuNet + SFace (OpenCV)"]
+    FS[("Event folder<br/>original photos")]
+    MODELS[("~/.phorg/models")]
+    TMP[("%TEMP%/phorg_facefind<br/>guest selfie")]
+  end
+  CAM --> B
+  B -->|same Wi-Fi| LAN
+  B -->|internet opt-in| CF
+  LAN --> HS
+  CF -->|tunnels to localhost| HS
+  HS --> API --> JOBS --> VIS
+  VIS --> MODELS
+  VIS --> FS
+  API --> TMP
+  JOBS -->|matches + thumbnails + zip| HS
+      </pre>
+    </div>
+  </section>
+
+  <!-- PIPELINE -->
+  <section id="pipeline">
+    <h2><span class="n">3</span> The matching pipeline</h2>
+    <p class="lead">What happens between "Find my photos" and the results grid. This is the core of
+    <code>vision.facefind()</code>.</p>
+
+    <div class="diagram">
+      <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant G as 🙋 Guest browser
+  participant S as 💻 Server (:8765)
+  participant J as 🧵 Job thread
+  participant V as 🧠 vision.py (YuNet+SFace)
+  participant F as 🗂️ Event folder
+
+  G->>S: POST /api/facefind/selfie (data URL)
+  S->>S: decode → save to %TEMP%/phorg_facefind
+  S-->>G: { path }
+  G->>S: POST /api/share/find/start (token, selfie, threshold)
+  S->>J: spawn background job (_JOBS[id])
+  S-->>G: { jobId }
+  Note over J,V: if models missing → download YuNet+SFace once
+  J->>V: embed(selfie) → reference vector (128-D)
+  loop every image in folder
+    J->>F: read photo
+    V->>V: YuNet detects all faces
+    V->>V: SFace embeds each face
+    V->>V: cosine(face, reference) ≥ threshold?
+  end
+  V-->>J: matches (sorted by score)
+  loop poll
+    G->>S: GET /api/cluster/progress (jobId)
+    S-->>G: { done, total, phase, clusters }
+  end
+  G->>S: GET /api/download/zip?job=... (or per-photo)
+  S-->>G: ZIP of matched photos
+      </pre>
+    </div>
+
+    <div class="grid three">
+      <div class="tile">
+        <h4>① Detect — YuNet</h4>
+        <p>Every photo is scanned for <b>all</b> face boxes (not just the biggest one), so a guest who's a small face in
+        a crowd still matches. Big images are downscaled to ≤1600px first for speed.</p>
+      </div>
+      <div class="tile">
+        <h4>② Embed — SFace</h4>
+        <p>Each detected face is align-cropped and turned into a <b>128-D unit vector</b>. The selfie becomes one
+        reference vector via <code>embed()</code> (its largest face).</p>
+      </div>
+      <div class="tile">
+        <h4>③ Compare — cosine</h4>
+        <p>For each photo, the best <code>dot(face, reference)</code> across its faces is the score. If it clears the
+        <b>threshold</b> (default 0.40) the photo is a match. Results are sorted high→low.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="m-h4">🎯 The strictness slider maps straight to the cosine threshold</div>
+      <table>
+        <thead><tr><th>UI label</th><th>Slider</th><th>Threshold</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td>Looser</td><td>30–36</td><td>0.30–0.36</td><td>More photos, more false positives</td></tr>
+          <tr><td>Balanced <span class="pill">default</span></td><td>~40</td><td>0.40</td><td>Good recall vs. precision</td></tr>
+          <tr><td>Strict</td><td>46–52</td><td>0.46–0.52</td><td>Only very confident matches</td></tr>
+        </tbody>
+      </table>
+      <div class="callout"><b>Why "all faces"?</b> <code>facefind()</code> calls <code>embed_all()</code> per photo, embedding
+      up to 12 faces, so group shots are covered — unlike single-face <code>embed()</code> used for the reference selfie.</div>
+    </div>
+  </section>
+
+  <!-- HOST STEPS -->
+  <section id="steps-host">
+    <h2><span class="n">4</span> Host walkthrough — screen by screen</h2>
+    <p class="lead">These mockups reproduce the real phorg screens (dark theme, exact controls) for the host flow.</p>
+
+    <!-- H1 -->
+    <div class="steprow">
+      <div class="stepnote">
+        <h3><span class="sn">1</span> Open the FaceFind page</h3>
+        <p>In the phorg sidebar, click <b>🙋 FaceFind</b> (enabled once a local folder is connected). The page confirms
+        the privacy stance and offers two routes: run it yourself, or open a guest self-service portal.</p>
+        <ul>
+          <li>Requires the AI tools (<code>opencv-contrib-python</code>, NumPy, Pillow).</li>
+          <li>Works on a <b>local folder</b> only — copy event photos to the PC first.</li>
+        </ul>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+            <span class="u">localhost:8765 · phorg</span></div>
+          <div class="scr">
+            <div class="m-h1">FaceFind <span style="font-size:11px;color:var(--mut);font-weight:400">· find your photos</span></div>
+            <div class="m-lead">Point it at a big event folder, add a selfie, and it finds every photo that person appears in.</div>
+            <div class="m-cal info">🔒 Runs 100% on your PC. Faces are matched locally; nothing is uploaded. Matched photos are <b>copied</b> into an album — your originals are never moved.</div>
+          </div>
+        </div>
+        <div class="cap">Step 1 — the FaceFind landing card</div>
+      </div>
+    </div>
+
+    <!-- H2 -->
+    <div class="steprow rev">
+      <div class="stepnote">
+        <h3><span class="sn">2</span> Enable the guest portal</h3>
+        <p>Give the event a name and choose reach. Leave it off for a <b>same-Wi-Fi</b> link, or tick
+        <b>🌐 Share over the internet</b> to spin up a secure Cloudflare HTTPS link so guests can join from anywhere.</p>
+        <ul>
+          <li>Generates a secret <code>token</code> baked into the share URL.</li>
+          <li>Internet mode downloads a small <code>cloudflared</code> helper the first time.</li>
+        </ul>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+            <span class="u">localhost:8765 · phorg</span></div>
+          <div class="scr">
+            <div class="m-card">
+              <div class="m-h4">🔗 Guest self-service portal</div>
+              <div class="m-lbl">Event name (shown to guests)</div>
+              <div class="m-inp" style="width:100%">Priya &amp; Arjun's Wedding</div>
+              <div class="m-toggle" style="margin-top:12px"><span class="m-tk"></span><span>🌐 Share over the internet — guests don't need your Wi-Fi (secure HTTPS)</span></div>
+              <div style="margin-top:12px"><span class="m-btn">🔗 Enable guest portal</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Step 2 — turn a folder into a shareable portal</div>
+      </div>
+    </div>
+
+    <!-- H3 -->
+    <div class="steprow">
+      <div class="stepnote">
+        <h3><span class="sn">3</span> Share the link / QR</h3>
+        <p>Once live, the portal shows a copyable link and a scannable <b>QR code</b>. On Wi-Fi mode there's also a
+        Wi-Fi-join QR so guests can hop onto the network first. A live guest list shows who has searched.</p>
+        <ul>
+          <li>QR + link both carry <code>?g=&lt;token&gt;</code>.</li>
+          <li>Sharing stops when the app closes or you click <b>Stop sharing</b>.</li>
+        </ul>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+            <span class="u">localhost:8765 · phorg</span></div>
+          <div class="scr">
+            <div class="m-card">
+              <div class="m-cal safe">🟢 Sharing <b>"Priya &amp; Arjun's Wedding"</b> is live. Send the link to your guests.</div>
+              <div class="m-lbl">Your share link</div>
+              <div class="m-row"><div class="m-inp" style="flex:1">http://192.168.1.24:8765/?g=a3f9c1b7d2</div><span class="m-btn ghost">📋 Copy</span></div>
+              <div class="m-qr">
+                <svg viewBox="0 0 29 29" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+                  <rect width="29" height="29" fill="#fff"/>
+                  <g fill="#000">
+                    <rect x="0" y="0" width="7" height="7"/><rect x="2" y="2" width="3" height="3" fill="#fff"/><rect x="2" y="2" width="3" height="3"/>
+                    <rect x="22" y="0" width="7" height="7"/><rect x="24" y="2" width="3" height="3" fill="#fff"/>
+                    <rect x="0" y="22" width="7" height="7"/><rect x="2" y="24" width="3" height="3" fill="#fff"/>
+                    <rect x="9" y="1" width="1" height="1"/><rect x="11" y="1" width="1" height="1"/><rect x="13" y="2" width="1" height="1"/>
+                    <rect x="10" y="4" width="1" height="1"/><rect x="12" y="5" width="1" height="1"/><rect x="14" y="4" width="1" height="1"/>
+                    <rect x="9" y="9" width="1" height="1"/><rect x="11" y="10" width="1" height="1"/><rect x="13" y="11" width="1" height="1"/><rect x="15" y="9" width="1" height="1"/>
+                    <rect x="17" y="12" width="1" height="1"/><rect x="19" y="10" width="1" height="1"/><rect x="21" y="13" width="1" height="1"/>
+                    <rect x="24" y="9" width="1" height="1"/><rect x="26" y="11" width="1" height="1"/><rect x="23" y="12" width="1" height="1"/>
+                    <rect x="10" y="15" width="1" height="1"/><rect x="12" y="17" width="1" height="1"/><rect x="14" y="15" width="1" height="1"/><rect x="16" y="18" width="1" height="1"/>
+                    <rect x="18" y="16" width="1" height="1"/><rect x="20" y="19" width="1" height="1"/><rect x="22" y="17" width="1" height="1"/><rect x="24" y="20" width="1" height="1"/>
+                    <rect x="9" y="22" width="1" height="1"/><rect x="11" y="24" width="1" height="1"/><rect x="13" y="26" width="1" height="1"/>
+                    <rect x="17" y="23" width="1" height="1"/><rect x="19" y="25" width="1" height="1"/><rect x="21" y="27" width="1" height="1"/>
+                    <rect x="24" y="24" width="1" height="1"/><rect x="26" y="26" width="1" height="1"/><rect x="23" y="27" width="1" height="1"/>
+                  </g>
+                </svg>
+              </div>
+              <div style="font-size:10.5px;color:var(--mut);text-align:center">📷 Point a phone camera at this to open the link.</div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Step 3 — link + QR guests can scan (illustrative QR)</div>
+      </div>
+    </div>
+
+    <!-- H4 -->
+    <div class="steprow rev">
+      <div class="stepnote">
+        <h3><span class="sn">4</span> (Optional) Run it yourself for a named guest</h3>
+        <p>Below the portal, the host can run FaceFind directly: type the guest's name, drop in a selfie, tune
+        <b>match strictness</b>, and hit <b>Find their photos</b>. Matches are copied into a personal album.</p>
+        <ul>
+          <li>Selfie via file picker, drag-drop, or camera.</li>
+          <li>"Include sub-folders" scans the whole event tree.</li>
+        </ul>
+      </div>
+      <div>
+        <div class="shot">
+          <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+            <span class="u">localhost:8765 · phorg</span></div>
+          <div class="scr">
+            <div class="m-card">
+              <div class="m-h4">1 · Who are we finding?</div>
+              <div class="m-lbl">Guest name</div>
+              <div class="m-inp" style="width:100%">Anjali</div>
+              <div class="m-lbl">A clear selfie of them</div>
+              <div class="m-row">
+                <div class="m-prev">🙂</div>
+                <div style="flex:1">
+                  <div class="m-row"><span class="m-btn ghost">📁 Choose photo</span><span class="m-btn ghost">📷 Use camera</span></div>
+                  <div style="font-size:10.5px;color:var(--mut);margin-top:6px">One clear, front-facing face works best.</div>
+                </div>
+              </div>
+            </div>
+            <div class="m-card">
+              <div class="m-h4">2 · Options</div>
+              <div class="m-toggle"><span class="m-tk"></span><span>Include sub-folders — scan the whole event tree</span></div>
+              <div class="m-row" style="justify-content:space-between;font-size:11.5px;margin-top:8px"><span>🎯 Match strictness</span><span style="color:var(--acc)">Balanced</span></div>
+              <div class="m-slider"><span class="knob"></span></div>
+              <div class="m-ends"><span>Looser — more photos</span><span>Stricter — only sure matches</span></div>
+            </div>
+            <div><span class="m-btn">🔎 Find their photos</span></div>
+          </div>
+        </div>
+        <div class="cap">Step 4 — host-driven FaceFind with strictness control</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GUEST STEPS -->
+  <section id="steps-guest">
+    <h2><span class="n">5</span> Guest walkthrough — on a phone</h2>
+    <p class="lead">What a guest sees after opening the shared link (<code>?g=token</code>). These mockups use the
+    phone-width guest portal.</p>
+
+    <div class="grid three">
+      <!-- G1 -->
+      <div>
+        <div class="shot">
+          <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+            <span class="u">…trycloudflare.com/?g=…</span></div>
+          <div class="scr">
+            <div class="m-h1">📸 Priya &amp; Arjun's Wedding</div>
+            <div class="m-lead">Find every photo you're in. Add a selfie — matched privately on the host's PC, never uploaded.</div>
+            <div class="m-card">
+              <div class="m-lbl">Your name (optional)</div>
+              <div class="m-inp ph" style="width:100%">e.g. Anjali</div>
+              <div class="m-lbl">Your selfie</div>
+              <div class="m-row"><div class="m-prev">🙂</div>
+                <div style="flex:1"><div class="m-row"><span class="m-btn ghost">📁 Choose</span><span class="m-btn ghost">📷 Camera</span></div></div></div>
+              <div style="margin-top:10px"><span class="m-btn">🔎 Find my photos</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Step 1 — open link, add a selfie</div>
+      </div>
+
+      <!-- G2 -->
+      <div>
+        <div class="shot">
+          <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+            <span class="u">…trycloudflare.com/?g=…</span></div>
+          <div class="scr">
+            <div class="m-h1">📸 Priya &amp; Arjun's Wedding</div>
+            <div class="m-card">
+              <div class="m-row"><div class="m-prev"><div style="width:100%;height:100%;background:linear-gradient(135deg,#3a4a6e,#7c5cff)"></div></div>
+                <div style="flex:1"><span class="m-chip">🙂 3 so far</span></div></div>
+              <div class="m-track"><div class="m-fill" style="width:62%"></div></div>
+              <div style="font-size:11px;color:var(--mut)">Checked 248 of 400 (62%)</div>
+            </div>
+            <div style="font-size:10.5px;color:var(--mut);text-align:center">Matching runs on the host — the phone just polls progress.</div>
+          </div>
+        </div>
+        <div class="cap">Step 2 — live progress while the host matches</div>
+      </div>
+
+      <!-- G3 -->
+      <div>
+        <div class="shot">
+          <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+            <span class="u">…trycloudflare.com/?g=…</span></div>
+          <div class="scr">
+            <div class="m-cal safe">✅ Found <b>7</b> photo(s) you're in — tap any to download, or grab them all.</div>
+            <div><span class="m-btn">⬇️ Download all (7)</span></div>
+            <div class="m-grid">
+              <div class="m-thumb" style="background:linear-gradient(135deg,#5a6e8e,#c58a5a)"><span class="dl">⬇️</span></div>
+              <div class="m-thumb" style="background:linear-gradient(135deg,#4a6e5a,#8a5ac5)"><span class="dl">⬇️</span></div>
+              <div class="m-thumb" style="background:linear-gradient(135deg,#6e5a8e,#5ac5a8)"><span class="dl">⬇️</span></div>
+              <div class="m-thumb" style="background:linear-gradient(135deg,#8e5a6e,#5a8ac5)"><span class="dl">⬇️</span></div>
+              <div class="m-thumb" style="background:linear-gradient(135deg,#5a8e6e,#c55a8a)"><span class="dl">⬇️</span></div>
+              <div class="m-thumb" style="background:linear-gradient(135deg,#6e6e5a,#5a5ac5)"><span class="dl">⬇️</span></div>
+              <div class="m-thumb" style="background:linear-gradient(135deg,#5a6e6e,#c5a85a)"><span class="dl">⬇️</span></div>
+              <div class="m-thumb" style="background:linear-gradient(135deg,#8e6e5a,#5ac5c5)"><span class="dl">⬇️</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Step 3 — results grid + one-tap ZIP</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECURITY -->
+  <section id="security">
+    <h2><span class="n">6</span> Privacy &amp; security model</h2>
+    <div class="grid two">
+      <div class="tile">
+        <h4>🔑 Host-header + token guard</h4>
+        <p>The server tells <span class="mono">local</span> apart from <span class="mono">guest</span> by the HTTP
+        <code>Host</code> header. Guests may only call a small whitelist of endpoints; every host-only action is blocked.
+        The secret <code>token</code> in the link gates access, and it dies when sharing stops.</p>
+      </div>
+      <div class="tile">
+        <h4>🧹 Transient selfie</h4>
+        <p>The selfie is saved to <code>%TEMP%/phorg_facefind</code> only to run the match, then used as a reference
+        vector. Uploads are capped (25&nbsp;MB) and validated.</p>
+      </div>
+      <div class="tile">
+        <h4>🏠 Originals never move</h4>
+        <p>Matches are <b>copied</b> for download; your source photos stay exactly where they are.</p>
+      </div>
+      <div class="tile">
+        <h4>🌐 Opt-in internet only</h4>
+        <p>Nothing is exposed publicly unless the host ticks "Share over the internet", which routes an HTTPS
+        Cloudflare tunnel to <code>localhost</code> — the matching still runs on-device.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FILES -->
+  <section id="files">
+    <h2><span class="n">7</span> Where it lives in the code</h2>
+    <div class="card">
+      <div class="filerow">phorg/vision.py      → FaceEmbedder, facefind(), embed()/embed_all(), model download</div>
+      <div class="filerow">phorg/server.py      → /api/facefind/selfie, /api/facefind/start, share/* endpoints, _JOBS</div>
+      <div class="filerow">phorg/ui.html        → pageFaceFind(), renderGuestPortal(), guestFind()/guestPoll()</div>
+      <div class="filerow">phorg/peopledb.py    → remember/refs — persistent named faces (~/.phorg/people.json)</div>
+      <div class="filerow">phorg/tunnel.py      → optional Cloudflare quick tunnel</div>
+      <div class="filerow">~/.phorg/models/     → YuNet + SFace ONNX (downloaded once)</div>
+    </div>
+    <div class="callout"><b>Entry point:</b> the guest's <code>Find my photos</code> → <code>api_share_find_start()</code> →
+    <code>_start_facefind_job()</code> → <code>vision.facefind()</code>, polled via <code>/api/cluster/progress</code>.</div>
+  </section>
+
+  <footer>
+    phorg · FaceFind (Face ID) — architecture &amp; step-by-step. All matching runs locally on the host PC.
+    <br/>Screens are faithful mockups of the live phorg UI; QR code shown is illustrative.
+  </footer>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad:true, theme:"dark",
+    themeVariables:{
+      primaryColor:"#121a30", primaryBorderColor:"#22304f", primaryTextColor:"#e8eefc",
+      lineColor:"#4f8cff", fontSize:"13px", fontFamily:"Segoe UI, system-ui, Arial"
+    }
+  });
+</script>
+</body>
+</html>

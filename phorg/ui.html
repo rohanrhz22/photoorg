@@ -2649,12 +2649,28 @@ function renderGuestPortal(){
   $("#gCam").onclick=guestCamera;
   $("#gFind").onclick=guestFind;
 }
+// Upload the selfie to the host, tracking the in-flight request so that
+// "Find my photos" can wait for a slow upload instead of failing early.
+function uploadGuestSelfie(dataPromise){
+  S.guestSelfie=null;
+  const p=(async()=>{
+    const data=await dataPromise;
+    const d=await api("facefind/selfie",{data});
+    S.guestSelfie=d.path;toast("Selfie added","good");
+    return d.path;
+  })();
+  S.guestUpload=p;
+  p.catch(err=>toast(err.message,"bad")).finally(()=>{if(S.guestUpload===p)S.guestUpload=null;});
+  return p;
+}
 async function guestSelfie(f){
   try{$("#gPrev").innerHTML=`<img src="${URL.createObjectURL(f)}"/>`;}catch(e){}
-  const rd=new FileReader();
-  rd.onload=async()=>{try{const d=await api("facefind/selfie",{data:rd.result});S.guestSelfie=d.path;toast("Selfie added","good");}
-    catch(err){toast(err.message,"bad");}};
-  rd.readAsDataURL(f);
+  uploadGuestSelfie(new Promise((res,rej)=>{
+    const rd=new FileReader();
+    rd.onload=()=>res(rd.result);
+    rd.onerror=()=>rej(new Error("Couldn't read that photo — try another."));
+    rd.readAsDataURL(f);
+  }));
 }
 // -- open the phone's native camera (fallback when live camera is blocked) ---
 function openNativeCamera(cb){
@@ -2690,12 +2706,19 @@ async function guestCamera(){
   $("#gcamSnap").onclick=async()=>{
     const v=$("#gcamV"),c=$("#gcamC");c.width=v.videoWidth;c.height=v.videoHeight;c.getContext("2d").drawImage(v,0,0);
     const data=c.toDataURL("image/png");$("#gPrev").innerHTML=`<img src="${data}"/>`;close();
-    try{const d=await api("facefind/selfie",{data});S.guestSelfie=d.path;toast("Selfie added","good");}catch(err){toast(err.message,"bad");}
+    uploadGuestSelfie(Promise.resolve(data));
   };
 }
 async function guestFind(e){
-  if(!S.guestSelfie){toast("Add a selfie first","bad");return;}
-  const btn=e.target;busy(btn,true,"Finding…");
+  const btn=e.target;
+  if(!S.guestSelfie && !S.guestUpload){toast("Add a selfie first","bad");return;}
+  // Selfie chosen but still uploading — wait for it instead of failing.
+  if(!S.guestSelfie && S.guestUpload){
+    busy(btn,true,"Uploading selfie…");
+    try{await S.guestUpload;}catch(_){}
+    if(!S.guestSelfie){toast("Selfie didn't upload — please try again","bad");busy(btn,false);return;}
+  }
+  busy(btn,true,"Finding…");
   const prog=$("#gProgress");$("#gOut").innerHTML="";
   try{
     const d=await api("share/find/start",{token:S.guestToken,selfie:S.guestSelfie,

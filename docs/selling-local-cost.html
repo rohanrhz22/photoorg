@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>phorg · Selling the app — your cost when customers process locally</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a30; --panel2:#0f1728; --bd:#22304f;
+    --ink:#e8eefc; --mut:#93a4c8; --acc:#4f8cff; --acc2:#7c5cff;
+    --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --teal:#14b8a6;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#182648 0,transparent 60%),var(--bg);
+    color:var(--ink);font:15px/1.6 "Segoe UI",system-ui,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:40px 24px 90px}
+  header.hero{padding:34px 30px;border:1px solid var(--bd);border-radius:20px;
+    background:linear-gradient(135deg,#14224400,#1a2c55 120%),var(--panel);position:relative;overflow:hidden}
+  header.hero:before{content:"";position:absolute;inset:-2px;background:
+    radial-gradient(600px 200px at 10% 0,#4f8cff22,transparent 60%);pointer-events:none}
+  .badge{display:inline-block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--acc);background:#4f8cff18;border:1px solid #4f8cff44;padding:4px 10px;border-radius:999px}
+  h1{margin:14px 0 6px;font-size:29px;letter-spacing:-.02em}
+  h1 .g{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--mut);max-width:780px;font-size:15.5px}
+  nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  nav.toc a{font-size:13px;color:var(--mut);text-decoration:none;border:1px solid var(--bd);
+    padding:6px 12px;border-radius:10px;background:var(--panel2);transition:.15s}
+  nav.toc a:hover{color:var(--ink);border-color:var(--acc);background:#4f8cff14}
+  section{margin-top:38px}
+  h2{font-size:22px;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  h2 .n{font-size:13px;color:#0b1020;background:linear-gradient(90deg,var(--acc),var(--acc2));
+    width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:700}
+  .lead{color:var(--mut);margin:0 0 16px}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:16px;padding:20px 22px;margin:14px 0}
+  .diagram{background:var(--panel2);border:1px solid var(--bd);border-radius:16px;padding:18px;overflow-x:auto;margin:14px 0}
+  .diagram .mermaid{display:flex;justify-content:center}
+  .grid{display:grid;gap:14px}
+  @media(min-width:720px){.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:1fr 1fr 1fr}}
+  .tile{background:var(--panel2);border:1px solid var(--bd);border-radius:14px;padding:16px}
+  .tile h4{margin:0 0 6px;font-size:15px}
+  .tile p{margin:0;color:var(--mut);font-size:13.5px}
+  .pill{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--bd);color:var(--mut);margin:0 4px 4px 0}
+  .pill.must{color:var(--warn);border-color:#f59e0b55;background:#f59e0b12}
+  .pill.free{color:var(--good);border-color:#22c55e55;background:#22c55e12}
+  .pill.opt{color:var(--acc);border-color:#4f8cff55;background:#4f8cff12}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:6px 0}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--bd);vertical-align:top}
+  th{color:var(--mut);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em}
+  td code,.mono{font-family:"Cascadia Code",Consolas,monospace;font-size:12.5px;color:#a9c4ff}
+  .callout{border-left:3px solid var(--acc);background:#4f8cff10;padding:12px 16px;border-radius:0 12px 12px 0;margin:12px 0;color:#cfe0ff;font-size:13.5px}
+  .callout.warn{border-color:var(--warn);background:#f59e0b12;color:#ffe7c2}
+  .callout.good{border-color:var(--good);background:#22c55e12;color:#c8f5d6}
+  .big{display:flex;gap:20px;flex-wrap:wrap;margin:6px 0}
+  .stat{flex:1;min-width:180px;background:var(--panel2);border:1px solid var(--bd);border-radius:14px;padding:16px 18px}
+  .stat .v{font-size:26px;font-weight:700;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .stat .k{color:var(--mut);font-size:12.5px;margin-top:2px}
+  footer{margin-top:50px;color:var(--mut);font-size:12.5px;text-align:center;border-top:1px solid var(--bd);padding-top:20px}
+  .tag{font-size:11px;color:var(--good)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="badge">Business model · Cost sheet</span>
+    <h1>Selling phorg when <span class="g">customers process everything locally</span></h1>
+    <p class="sub">If the face matching, organizing and sharing all run on the <b>customer's own computer</b>, you (the vendor) pay
+    <b>almost nothing per customer</b> — no servers, no GPUs, no bandwidth. This page lists exactly which services you'd still pay for,
+    what they cost, and how to keep it as close to $0 as possible.</p>
+    <nav class="toc">
+      <a href="#idea">The idea</a>
+      <a href="#model">Distribution model</a>
+      <a href="#pay">What you pay for</a>
+      <a href="#free">What stays free</a>
+      <a href="#sharing">Online-sharing cost</a>
+      <a href="#budget">Example budgets</a>
+      <a href="#cheapest">Cheapest setup</a>
+      <a href="#risks">Risks &amp; limitations</a>
+      <a href="#exposure">Is my code exposed?</a>
+      <a href="#protect">How to protect it</a>
+      <a href="#examples">Who sells like this?</a>
+      <a href="#licensing">Licensing &amp; trial</a>
+    </nav>
+  </header>
+
+  <!-- IDEA -->
+  <section id="idea">
+    <h2><span class="n">1</span> The key idea: per-customer cost ≈ $0</h2>
+    <p class="lead">Because all the heavy work happens on the buyer's PC, your infrastructure cost does <b>not grow</b> with the number of customers.
+    Selling to 10 people or 10,000 people costs you the same in servers: nothing.</p>
+    <div class="big">
+      <div class="stat"><div class="v">$0</div><div class="k">Compute per customer (runs on their PC)</div></div>
+      <div class="stat"><div class="v">$0</div><div class="k">Storage per customer (their photos, their disk)</div></div>
+      <div class="stat"><div class="v">$0</div><div class="k">Bandwidth per download (peer/local, or free tunnel)</div></div>
+      <div class="stat"><div class="v">~$10–40</div><div class="k">Your fixed cost per MONTH (mostly code signing)</div></div>
+    </div>
+    <div class="callout good"><b>What you actually sell:</b> a signed installer + a licence key. Your only recurring bills are for
+    <i>looking trustworthy</i> (code signing, a domain) and <i>taking payment</i> (a % per sale). Everything else can be free tiers.</div>
+  </section>
+
+  <!-- MODEL -->
+  <section id="model">
+    <h2><span class="n">2</span> How distribution works</h2>
+    <p class="lead">You host a small website + an installer file + a licence check. The app itself does all the work on the customer's machine.</p>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart LR
+  subgraph YOU["🧑‍💻 You (vendor) — fixed low cost"]
+    SITE["Landing page<br/>Cloudflare Pages (free)"]
+    STORE["Checkout + licence<br/>Lemon Squeezy / Gumroad (% per sale)"]
+    REL["Installer + models + update feed<br/>GitHub Releases / R2 (free-ish)"]
+    SIGN["Code-signing cert<br/>(the main recurring cost)"]
+  end
+  subgraph CUST["💻 Customer's own PC — does ALL processing"]
+    APP["phorg app<br/>YuNet + SFace (local)"]
+    PHOTOS[("Their photos")]
+    TUN["Optional free Cloudflare<br/>quick tunnel for guest sharing"]
+  end
+  SITE --> STORE
+  STORE -->|"licence key"| APP
+  REL -->|"download installer"| APP
+  SIGN -.->|"signs"| REL
+  APP --> PHOTOS
+  APP --> TUN
+      </pre>
+    </div>
+    <div class="callout"><b>Licence check:</b> at most a tiny API call to your payment provider's licence endpoint (free with Lemon Squeezy/Gumroad),
+    or fully offline signed keys. No always-on server of your own required.</div>
+  </section>
+
+  <!-- PAY -->
+  <section id="pay">
+    <h2><span class="n">3</span> Services you actually pay for</h2>
+    <p class="lead">Only three things really cost money — and one of them is just a percentage of sales you already made.</p>
+    <table>
+      <thead><tr><th>Service</th><th>Why you need it</th><th>Cost (approx. 2025)</th><th>Type</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Code-signing certificate</b> <span class="pill must">main cost</span></td>
+          <td>So Windows doesn't scare users with "Unknown publisher" / SmartScreen warnings on your installer.</td>
+          <td><b>Azure Trusted Signing ≈ $10/mo</b> ⭐<br/>or OV cert $200–400/yr<br/>or EV cert $300–700/yr</td>
+          <td>Recurring</td>
+        </tr>
+        <tr>
+          <td><b>Payment + licensing</b></td>
+          <td>Take money globally, handle tax/VAT, issue &amp; validate licence keys.</td>
+          <td><b>Lemon Squeezy / Paddle ≈ 5% + 50¢ per sale</b> ⭐<br/>Gumroad ≈ 10% flat<br/>(no monthly fee)</td>
+          <td>Per sale</td>
+        </tr>
+        <tr>
+          <td><b>Domain name</b></td>
+          <td>A trustworthy home + email (e.g. <span class="mono">getphorg.com</span>).</td>
+          <td>≈ <b>$10–15 / year</b> (Cloudflare Registrar at cost)</td>
+          <td>Recurring</td>
+        </tr>
+        <tr>
+          <td>Apple notarization <span class="pill opt">only if Mac</span></td>
+          <td>Ship a Mac build without Gatekeeper blocking it.</td>
+          <td>Apple Developer ≈ <b>$99 / year</b></td>
+          <td>Recurring</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout warn"><b>Code signing is the one to plan for.</b> The cheapest legitimate route today is
+    <b>Azure Trusted Signing (~$10/month)</b> for eligible individuals/orgs; traditional OV/EV certs cost more and now require a hardware token or cloud HSM.</div>
+  </section>
+
+  <!-- FREE -->
+  <section id="free">
+    <h2><span class="n">4</span> What you can get for $0</h2>
+    <p class="lead">Everything that isn't "sign the app" or "take payment" has a solid free tier.</p>
+    <div class="grid three">
+      <div class="tile"><h4>Website / landing <span class="tag">free</span></h4><p>Cloudflare Pages, Netlify or Vercel host a static marketing + download page at no cost.</p></div>
+      <div class="tile"><h4>Installer hosting <span class="tag">free</span></h4><p>GitHub Releases (public) serves your <code>.exe</code>/<code>.msi</code> with a CDN for free. R2/B2 if you want it private.</p></div>
+      <div class="tile"><h4>Model files <span class="tag">free</span></h4><p>YuNet + SFace already download from OpenCV Zoo (GitHub) on first run, or you mirror them on R2 for pennies.</p></div>
+      <div class="tile"><h4>Auto-updates <span class="tag">free</span></h4><p>A static JSON version manifest on Pages/GitHub; the app checks it and downloads the new signed installer.</p></div>
+      <div class="tile"><h4>Support email <span class="tag">free</span></h4><p>Cloudflare Email Routing / Zoho free tier for <code>support@yourdomain</code>.</p></div>
+      <div class="tile"><h4>Crash telemetry <span class="tag">free</span></h4><p>Sentry free tier (optional) to catch errors — no server to run.</p></div>
+      <div class="tile"><h4>Guest sharing <span class="tag">free</span></h4><p>The Cloudflare <b>quick tunnel</b> runs on the customer's PC — costs <b>you</b> nothing (see next section).</p></div>
+      <div class="tile"><h4>Docs / help <span class="tag">free</span></h4><p>Same static site, or a free GitHub wiki.</p></div>
+      <div class="tile"><h4>Licence validation <span class="tag">free</span></h4><p>Reuse your payment provider's licence API — no custom backend needed.</p></div>
+    </div>
+  </section>
+
+  <!-- SHARING -->
+  <section id="sharing">
+    <h2><span class="n">5</span> Does the online-sharing feature cost you anything?</h2>
+    <p class="lead">No — as it stands today it's <b>$0 to you</b>, because it runs from the customer's machine.</p>
+    <div class="grid two">
+      <div class="tile"><h4>✅ Today: free to the vendor</h4><p>Each customer's app starts its own Cloudflare <b>quick tunnel</b> from their PC. Cloudflare bills nobody for it.
+      Photos are served from the customer's disk. You pay <b>nothing</b>, regardless of how many customers share.</p></div>
+      <div class="tile"><h4>⚠️ When it would cost</h4><p>Only if you upgrade the experience: a <b>fixed/branded URL</b> (named tunnel needs a Cloudflare account + domain),
+      or you host photos/relaying yourself. For a "sell software, they run it" model, you never need this.</p></div>
+    </div>
+    <div class="callout"><b>Trade-off to accept:</b> quick tunnels give a random URL each session and aren't guaranteed. That's fine for
+    event sharing. If a customer wants a permanent link, that's a paid add-on <i>they</i> configure — not your cost.</div>
+  </section>
+
+  <!-- BUDGET -->
+  <section id="budget">
+    <h2><span class="n">6</span> Example yearly budgets</h2>
+    <p class="lead">Notice the total barely moves as customers grow — because per-customer cost is ~$0. Payment fees scale with revenue, not headcount.</p>
+    <table>
+      <thead><tr><th>Item</th><th>10 customers</th><th>100 customers</th><th>1,000 customers</th></tr></thead>
+      <tbody>
+        <tr><td>Code signing (Azure Trusted Signing)</td><td class="mono">$120</td><td class="mono">$120</td><td class="mono">$120</td></tr>
+        <tr><td>Domain</td><td class="mono">$12</td><td class="mono">$12</td><td class="mono">$12</td></tr>
+        <tr><td>Website + installer + updates hosting</td><td class="mono">$0</td><td class="mono">$0</td><td class="mono">$0</td></tr>
+        <tr><td>Servers / compute / bandwidth</td><td class="mono">$0</td><td class="mono">$0</td><td class="mono">$0</td></tr>
+        <tr><td>Payment + licence fees (≈5% of sales)*</td><td class="mono">~$15</td><td class="mono">~$150</td><td class="mono">~$1,500</td></tr>
+        <tr><td><b>Your fixed infra cost / year</b></td><td class="mono"><b>≈ $132</b></td><td class="mono"><b>≈ $132</b></td><td class="mono"><b>≈ $132</b></td></tr>
+        <tr><td><b>Total incl. sales fees*</b></td><td class="mono"><b>≈ $147</b></td><td class="mono"><b>≈ $282</b></td><td class="mono"><b>≈ $1,632</b></td></tr>
+      </tbody>
+    </table>
+    <div class="callout"><small>* Assumes a $30 licence: 5% + 50¢ per sale via a merchant-of-record like Lemon Squeezy, which also handles global tax.
+    With Gumroad (10%) the fee roughly doubles. These are <b>fees on money you've already earned</b>, not out-of-pocket infrastructure.</small></div>
+    <div class="big" style="margin-top:8px">
+      <div class="stat"><div class="v">≈ $11/mo</div><div class="k">Fixed cost to run the whole business</div></div>
+      <div class="stat"><div class="v">~5–10%</div><div class="k">Of each sale to the payment/licence provider</div></div>
+      <div class="stat"><div class="v">$0</div><div class="k">Extra cost per additional customer</div></div>
+    </div>
+  </section>
+
+  <!-- CHEAPEST -->
+  <section id="cheapest">
+    <h2><span class="n">7</span> The absolute-cheapest setup</h2>
+    <div class="card">
+      <div class="grid two">
+        <div class="tile"><h4>1 · Sign the installer</h4><p><b>Azure Trusted Signing (~$10/mo)</b>. If you truly want $0, you can ship unsigned — but expect SmartScreen warnings that hurt trust and conversions. Signing is the one bill worth paying.</p></div>
+        <div class="tile"><h4>2 · Sell + licence</h4><p><b>Lemon Squeezy</b> (merchant of record): checkout, licence keys, and tax handled. No monthly fee — only ~5% per sale.</p></div>
+        <div class="tile"><h4>3 · Host everything free</h4><p><b>Cloudflare Pages</b> for the site + update manifest; <b>GitHub Releases</b> for the installer &amp; models.</p></div>
+        <div class="tile"><h4>4 · One domain</h4><p>~$12/yr at Cloudflare Registrar, with free email routing for support.</p></div>
+        <div class="tile"><h4>5 · Keep sharing local</h4><p>Ship the existing free quick-tunnel sharing. No vendor-side servers, ever.</p></div>
+        <div class="tile"><h4>6 · Optional $0 extras</h4><p>Sentry free tier for crash reports; a GitHub wiki for docs.</p></div>
+      </div>
+      <div class="callout good" style="margin-top:14px"><b>Bottom line:</b> roughly <b>$11/month fixed</b> (signing + domain) plus <b>~5–10% of each sale</b>.
+      No servers, no GPUs, no bandwidth bills — because the customer's computer does 100% of the work.</div>
+    </div>
+    <div class="callout warn"><b>If you skip code signing</b> to hit literal $0: your only costs become the domain (~$1/mo) and payment fees —
+    but Windows SmartScreen will warn users on download, which noticeably lowers trust and sales. Recommended: keep the ~$10/mo signing.</div>
+  </section>
+
+  <!-- RISKS -->
+  <section id="risks">
+    <h2><span class="n">8</span> The catch: issues &amp; limitations of the "runs on their PC" model</h2>
+    <p class="lead">Selling a local-processing desktop app is cheap and private, but it moves several hard problems onto you and the customer.
+    Here's the honest list.</p>
+    <table>
+      <thead><tr><th>Issue</th><th>What it means</th><th>Severity</th></tr></thead>
+      <tbody>
+        <tr><td><b>Code &amp; models are on the customer's disk</b></td><td>Anything you ship can be inspected, copied, or reverse-engineered. Python especially is easy to decompile (see next section).</td><td><span class="pill must">high</span></td></tr>
+        <tr><td><b>Licence piracy</b></td><td>Offline apps can be cracked or keys shared. You can slow this down, never fully stop it.</td><td><span class="pill must">high</span></td></tr>
+        <tr><td><b>"Works on my machine" support</b></td><td>You support every mix of Windows version, CPU, RAM, antivirus, missing codecs, HEIC, GPU drivers. Hard to reproduce bugs.</td><td><span class="pill must">high</span></td></tr>
+        <tr><td><b>Performance varies wildly</b></td><td>Face matching speed depends on the customer's CPU/RAM. A weak laptop = slow, and you can't fix it from your side.</td><td><span class="pill opt">med</span></td></tr>
+        <tr><td><b>Big install size</b></td><td>OpenCV + models + Python runtime make a 90 MB+ installer. Antivirus false-positives on unsigned PyInstaller exes are common.</td><td><span class="pill opt">med</span></td></tr>
+        <tr><td><b>Updates are pull, not push</b></td><td>A bug fix only reaches users who update. Old versions linger; you may support several at once.</td><td><span class="pill opt">med</span></td></tr>
+        <tr><td><b>No usage insight</b></td><td>Local &amp; private means little/no telemetry — hard to know what features are used or where it breaks (unless you add opt-in analytics).</td><td><span class="pill opt">med</span></td></tr>
+        <tr><td><b>You can't hide secrets</b></td><td>Any API key, licence secret, or algorithm constant shipped in the app can be extracted. Never embed a secret you can't afford to leak.</td><td><span class="pill must">high</span></td></tr>
+        <tr><td><b>Model licence terms</b></td><td>YuNet/SFace &amp; OpenCV have their own licences; redistributing them commercially means complying with those terms.</td><td><span class="pill opt">med</span></td></tr>
+        <tr><td><b>Feature ceiling</b></td><td>Anything that genuinely needs a server (cross-device sync, huge shared galleries, central admin) doesn't fit this model.</td><td><span class="pill opt">med</span></td></tr>
+        <tr><td><b>Platform trust friction</b></td><td>SmartScreen / Gatekeeper / antivirus can block first-run until reputation builds, hurting conversions.</td><td><span class="pill opt">med</span></td></tr>
+      </tbody>
+    </table>
+    <div class="callout"><b>The upside you're trading for:</b> near-zero running cost, strong privacy (nothing uploaded), works offline, and no liability for storing customers' photos. For many buyers that privacy story is the selling point.</div>
+  </section>
+
+  <!-- EXPOSURE -->
+  <section id="exposure">
+    <h2><span class="n">9</span> Will my algorithm / code get exposed?</h2>
+    <p class="lead">Straight answer: <b>yes, to a determined person — always.</b> Anything that runs on someone else's computer can be
+    reverse-engineered. The realistic goal is to make it <i>not worth their effort</i>, not to make it impossible.</p>
+
+    <div class="grid two">
+      <div class="tile"><h4>What's actually exposed today</h4><p>The current app ships as <b>Python</b> (or a PyInstaller <code>.exe</code>). PyInstaller bundles your <code>.pyc</code> byte-code, which tools like <code>pyinstxtractor</code> + a decompiler can turn back into <b>near-original readable Python</b>. So today, your source is effectively readable.</p></div>
+      <div class="tile"><h4>What's NOT your secret anyway</h4><p>The "algorithm" here is mostly <b>public</b>: YuNet, SFace and OpenCV are open-source models/libraries. Your real IP is the <b>product</b> — the UX, workflow, packaging, brand and support — not a novel face algorithm.</p></div>
+    </div>
+
+    <table style="margin-top:6px">
+      <thead><tr><th>How it ships</th><th>How hard to read your code</th></tr></thead>
+      <tbody>
+        <tr><td>Plain Python <code>.py</code></td><td><span class="pill must">trivial</span> — it's the source</td></tr>
+        <tr><td>PyInstaller <code>.exe</code> (today)</td><td><span class="pill must">easy</span> — extract + decompile <code>.pyc</code></td></tr>
+        <tr><td>Compiled with <b>Nuitka</b> / Cython → native binary</td><td><span class="pill opt">hard</span> — real machine code, no easy decompile</td></tr>
+        <tr><td>Sensitive logic rewritten in <b>C/C++/Rust</b> module</td><td><span class="pill free">very hard</span> — normal binary reverse-engineering</td></tr>
+        <tr><td>Critical checks done <b>server-side</b> (licence/validation)</td><td><span class="pill free">not on device</span> — can't be extracted</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn"><b>Golden rule:</b> never ship anything you can't afford to have read — no hardcoded API keys, no server passwords, no licence "master" secret. Treat the client as fully visible.</div>
+  </section>
+
+  <!-- PROTECT -->
+  <section id="protect">
+    <h2><span class="n">10</span> How to make copying not worth it (practical protection)</h2>
+    <p class="lead">A layered approach. Each step raises the effort to crack/copy; together they stop all but the most determined.</p>
+    <div class="grid three">
+      <div class="tile"><h4>1 · Compile, don't bundle</h4><p>Ship with <b>Nuitka</b> (compiles Python to a native binary) instead of PyInstaller. Removes the easy <code>.pyc</code> decompile path.</p></div>
+      <div class="tile"><h4>2 · Native-ify the crown jewels</h4><p>Move any genuinely secret logic into a <b>C/C++/Rust</b> extension. Even if the Python is read, the core stays opaque.</p></div>
+      <div class="tile"><h4>3 · Code-sign everything</h4><p>Signing proves authenticity and makes tampered/repackaged copies obvious and untrusted.</p></div>
+      <div class="tile"><h4>4 · Online licence activation</h4><p>Validate keys against your payment provider (Lemon Squeezy/Keygen) with device binding + periodic re-checks. Beats offline-only keys.</p></div>
+      <div class="tile"><h4>5 · Keep secret checks off-device</h4><p>If a feature must be protected, gate it behind a small server call. What isn't shipped can't be extracted.</p></div>
+      <div class="tile"><h4>6 · Watermark builds</h4><p>Embed a per-customer ID so leaked copies can be traced back to the buyer.</p></div>
+      <div class="tile"><h4>7 · Obfuscate as a speed bump</h4><p>Tools like <b>PyArmor</b> raise the bar for casual snooping — not unbreakable, but cheap deterrence.</p></div>
+      <div class="tile"><h4>8 · Lean on brand + updates</h4><p>Frequent signed updates, support and trust make the official version more valuable than a stale cracked one.</p></div>
+      <div class="tile"><h4>9 · Right licence + terms</h4><p>A clear EULA + honoring OpenCV/model licences gives you legal footing against blatant redistribution.</p></div>
+    </div>
+    <div class="callout good"><b>Realistic target:</b> Nuitka-compiled build + code signing + online licence activation stops ~95% of would-be copiers.
+    The remaining few determined crackers exist for every software product on earth — factor a little piracy in as a cost of doing business, and compete on trust, updates and support.</div>
+  </section>
+
+  <!-- EXAMPLES -->
+  <section id="examples">
+    <h2><span class="n">11</span> Popular software sold exactly like this</h2>
+    <p class="lead">This is one of the most proven models in software. Below are well-known paid apps where the heavy work — including
+    <b>local AI</b> — runs on the buyer's machine, sold as a licence with minimal vendor infrastructure. The first group is the closest analog to phorg.</p>
+
+    <div class="callout"><b>Closest analogs — local AI photo apps:</b> these prove the exact phorg model (on-device AI on the user's own photos, sold as a licence).</div>
+    <div class="grid three">
+      <div class="tile"><h4>Topaz Labs <span class="tag">closest</span></h4><p>Gigapixel / Photo AI / Video AI. <b>Neural upscaling &amp; denoise run 100% locally</b> on your GPU/CPU. Sold as one-time licence + paid upgrades. A textbook example.</p></div>
+      <div class="tile"><h4>Excire Foto <span class="tag">closest</span></h4><p>Offline AI photo organizer with <b>on-device face &amp; content search</b> — almost the same idea as FaceFind. One-time licence.</p></div>
+      <div class="tile"><h4>Luminar Neo (Skylum)</h4><p>AI photo editing (sky replacement, masking) that runs locally. Sold as licence/subscription.</p></div>
+      <div class="tile"><h4>ON1 Photo RAW</h4><p>Local AI masking, resize, NoNoise. Perpetual licence + upgrades.</p></div>
+      <div class="tile"><h4>Mylio Photos</h4><p>Local-first photo organizer with on-device face recognition; no cloud required.</p></div>
+      <div class="tile"><h4>ACDSee / DxO PhotoLab</h4><p>Photo management &amp; RAW editing with local processing, sold as licences.</p></div>
+    </div>
+
+    <p class="lead" style="margin-top:22px">The same model powers huge categories beyond photos:</p>
+    <table>
+      <thead><tr><th>Category</th><th>Examples</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Creative / photo</td><td>Affinity Photo &amp; Designer (Serif), Capture One, Adobe Lightroom (perpetual era)</td><td>All processing local; Affinity famously one-time-purchase.</td></tr>
+        <tr><td>Video (incl. local AI)</td><td>Topaz Video AI, DaVinci Resolve Studio, VideoProc</td><td>Resolve Studio is a $295 one-time licence; heavy work on your GPU.</td></tr>
+        <tr><td>Developer tools</td><td>Sublime Text, Sublime Merge, Beyond Compare, JetBrains (desktop IDEs)</td><td>Sublime/Beyond Compare = classic small-vendor licence apps.</td></tr>
+        <tr><td>File / system utilities</td><td>WinRAR, Total Commander, Directory Opus, TreeSize, Everything (voidtools)</td><td>Tiny teams, huge reach, near-zero server cost.</td></tr>
+        <tr><td>Backup / disk</td><td>Macrium Reflect, AOMEI Backupper, Beyond Compare</td><td>Local engines, sold per-licence.</td></tr>
+        <tr><td>Audio / music</td><td>Native Instruments, FabFilter, iZotope plugins &amp; hosts</td><td>DSP/AI runs locally; licence-activated.</td></tr>
+        <tr><td>Security / passwords</td><td>KeePass (free), 1Password (older standalone)</td><td>Early 1Password was a local-vault licence app.</td></tr>
+        <tr><td>Indie apps &amp; games</td><td>Thousands on Steam, itch.io, Gumroad, Mac App Store</td><td>Run locally; store handles payment + delivery.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="grid two" style="margin-top:16px">
+      <div class="tile"><h4>How they distribute</h4><p>Own website + a merchant-of-record (<b>Paddle, Lemon Squeezy, FastSpring</b>), or a store (<b>Steam, Mac App Store, Microsoft Store</b>) that handles payment, tax &amp; delivery for a cut — exactly the setup in this doc.</p></div>
+      <div class="tile"><h4>What it tells you</h4><p>Small teams (even solo devs like Sublime Text, Everything, Beyond Compare) run profitable products this way with almost no server cost. The winning edge is <b>UX, trust, updates and support</b> — not secret algorithms.</p></div>
+    </div>
+    <div class="callout good"><b>Takeaway:</b> phorg fits a well-worn, profitable category. Topaz Labs and Excire Foto in particular show that
+    "AI on the user's own photos, sold as a licence, processed entirely on their PC" is a real, successful business — not an experiment.</div>
+  </section>
+
+  <!-- LICENSING -->
+  <section id="licensing">
+    <h2><span class="n">12</span> Making it "pay to use" — licensing &amp; trial</h2>
+    <p class="lead">The recommended shape for phorg: a <b>14-day free trial</b>, after which only the <b>premium features
+    (FaceFind + online sharing)</b> lock until a licence key is entered. The rest of the app stays usable. No paid services required to start.</p>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TD
+  A["App starts"] --> B{"Valid licence key?"}
+  B -- yes --> P["Premium unlocked:<br/>FaceFind + online sharing"]
+  B -- no --> C{"Within 14-day trial?"}
+  C -- yes --> P
+  C -- no --> L["Premium locked<br/>Show 'Enter licence key'"]
+  L -->|"user pastes key"| B
+      </pre>
+    </div>
+
+    <h3 style="margin:22px 0 6px;font-size:17px">The two mechanisms</h3>
+    <div class="grid two">
+      <div class="tile"><h4>⏳ Trial (14 days)</h4><p>On first launch, store a <b>first-run timestamp</b> in <code>~/.phorg</code>. Each launch checks
+      <code>today − firstRun ≤ 14</code>. During trial everything works and the UI shows "Trial: N days left". After it expires, only premium locks.</p></div>
+      <div class="tile"><h4>🔑 Licence key (offline, signed)</h4><p>A key is a <b>digitally signed token</b> containing the buyer's name/email + plan.
+      The app has your <b>public key</b> baked in and verifies it locally — no internet needed. Only you (with the private key) can mint valid keys.</p></div>
+    </div>
+
+    <div class="card">
+      <div class="mono" style="color:#a9c4ff;font-size:12.5px;line-height:1.8">
+        PHORG-&lt;base64 payload&gt;-&lt;signature&gt;<br/>
+        &nbsp;&nbsp;payload&nbsp;&nbsp;= { name, email, plan, issued, expires? }<br/>
+        &nbsp;&nbsp;signature = sign(payload, YOUR-PRIVATE-KEY)&nbsp;&nbsp;← only you can make this
+      </div>
+      <p style="color:var(--mut);font-size:13px;margin:10px 0 0">Anyone can read a key, but changing even one character breaks the signature — so keys can't be forged or edited.</p>
+    </div>
+
+    <h3 style="margin:22px 0 6px;font-size:17px">How it plugs into phorg</h3>
+    <div class="grid two">
+      <div class="tile"><h4>UI side</h4><p>An "Activate" screen to paste a key, a "Trial: N days left" badge, and a lock overlay on the FaceFind &amp; Sharing tabs when not entitled.</p></div>
+      <div class="tile"><h4>Server side</h4><p>The <code>/api/facefind/*</code> and <code>/api/share/*</code> endpoints check an <code>is_entitled()</code> gate and refuse if unlicensed — so hiding the UI can't be bypassed by calling the API directly.</p></div>
+    </div>
+
+    <h3 style="margin:22px 0 6px;font-size:17px">What you (the vendor) do</h3>
+    <div class="grid two">
+      <div class="tile"><h4>Once</h4><p>Generate a keypair. Keep the <b>private key secret</b> (never ship it); bake the <b>public key</b> into the app.</p></div>
+      <div class="tile"><h4>Per sale</h4><p>Run a small generator to mint a key for the buyer and email it. Lemon Squeezy / Gumroad can automate this delivery.</p></div>
+    </div>
+
+    <h3 style="margin:22px 0 6px;font-size:17px">Anti-tamper &amp; honesty about limits</h3>
+    <table>
+      <thead><tr><th>Layer</th><th>Stops</th><th>Doesn't stop</th></tr></thead>
+      <tbody>
+        <tr><td>Signed key</td><td>Fake / edited keys, casual sharing</td><td>Someone re-selling their real key</td></tr>
+        <tr><td>Trial in 2–3 spots + "clock moved backwards" guard</td><td>Casual "delete the file" resets &amp; clock rollback</td><td>Determined reverse-engineers</td></tr>
+        <tr><td>API-side entitlement check</td><td>Bypassing via the hidden API</td><td>A cracked binary with the check removed</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn"><b>No offline scheme is uncrackable.</b> The goal is to make copying more effort than it's worth for ~95% of users. Combine with Nuitka compiling + code signing (see §9–10).</div>
+
+    <div class="callout good"><b>Upgrade path:</b> when sales grow, swap the offline check for <b>online activation</b> (Lemon Squeezy / Keygen) — same UI, but the key is
+    validated on their server and <b>bound to the device</b>, so one key can't run on many machines. Cost ≈ the ~5% you already pay the payment provider.</div>
+
+    <div class="callout"><b>Recommended sequence:</b> ship <b>offline signed keys + 14-day trial</b> first (zero cost, works offline) → add <b>online activation</b> once real money is flowing → keep competing on updates &amp; support so the paid build is simply the better one to run.</div>
+  </section>
+
+  <footer>
+    phorg · Vendor cost sheet for a locally-processed, sold desktop app.<br/>
+    Figures are approximate 2025 list prices for planning only. Per-customer infrastructure cost is ~$0 because all processing runs on the buyer's machine.
+  </footer>
+
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad:true,
+    theme:"base",
+    themeVariables:{
+      background:"#0f1728",
+      primaryColor:"#16233f",
+      primaryTextColor:"#e8eefc",
+      primaryBorderColor:"#3a5a9c",
+      lineColor:"#5b74a8",
+      secondaryColor:"#182a4d",
+      tertiaryColor:"#122036",
+      fontFamily:"Segoe UI, system-ui, sans-serif",
+      fontSize:"14px"
+    }
+  });
+</script>
+</body>
+</html>

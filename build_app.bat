@@ -26,6 +26,7 @@ echo   Building phorg.exe ...
 python -m PyInstaller --noconfirm --clean --onefile ^
     --name phorg ^
     --add-data "phorg\ui.html;phorg" ^
+    --add-data "phorg\qrcode.min.js;phorg" ^
     --add-data "phorg\report_template.html;phorg" ^
     --add-data "phorg\haarcascade_frontalface_default.xml;phorg" ^
     --collect-data cv2 ^
