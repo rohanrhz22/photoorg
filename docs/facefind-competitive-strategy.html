@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>phorg FaceFind — Competitive Battle Plan (vs FotoOwl, Premagic, Kamero &amp; Google Photos)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#121a33; --card:#161f3d; --card2:#1c2850;
+    --ink:#e8ecf8; --muted:#9aa6c7; --line:#28345c;
+    --accent:#6ea8fe; --accent2:#7ef0c2; --accent3:#ffb86b; --accent4:#ff7b9c; --accent5:#c58bff;
+    --good:#39d98a; --bad:#ff6b6b; --warn:#ffcf5c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b1020,#0d1226 60%,#0b0f1e);color:var(--ink);line-height:1.55}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 22px 80px}
+  header.hero{padding:46px 34px;border-radius:20px;background:radial-gradient(1200px 400px at 10% -10%,rgba(110,168,254,.25),transparent),radial-gradient(900px 400px at 100% 0%,rgba(126,240,194,.18),transparent),var(--card);border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  header.hero h1{margin:0 0 10px;font-size:2.15rem;line-height:1.2}
+  header.hero p{margin:6px 0;color:var(--muted);max-width:860px}
+  .tagpills{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px}
+  .pill{font-size:.78rem;padding:6px 12px;border-radius:999px;background:var(--card2);border:1px solid var(--line);color:var(--ink)}
+  h2{margin:46px 0 8px;font-size:1.5rem;border-left:4px solid var(--accent);padding-left:12px}
+  h3{margin:26px 0 8px;font-size:1.15rem;color:#dfe6fb}
+  p.lead{color:var(--muted)}
+  section{scroll-margin-top:20px}
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:900px){.g2,.g3,.g4{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .kpi{display:flex;flex-direction:column;gap:4px}
+  .kpi .num{font-size:1.7rem;font-weight:700}
+  .kpi .lbl{color:var(--muted);font-size:.86rem}
+  .kpi .sub{font-size:.78rem;color:var(--accent2)}
+  .chartbox{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 8px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .chartbox h3{margin-top:4px}
+  .chartbox .cap{color:var(--muted);font-size:.8rem;margin:2px 0 12px}
+  canvas{max-height:360px}
+  table{width:100%;border-collapse:collapse;font-size:.92rem;margin-top:8px;overflow:hidden;border-radius:12px}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--card2);color:#dbe4ff;font-weight:600}
+  tr:hover td{background:rgba(110,168,254,.06)}
+  .good{color:var(--good);font-weight:600}
+  .bad{color:var(--bad);font-weight:600}
+  .warn{color:var(--warn);font-weight:600}
+  .muted{color:var(--muted)}
+  ul.clean{margin:8px 0;padding-left:20px}
+  ul.clean li{margin:6px 0}
+  .swot{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:760px){.swot{grid-template-columns:1fr}}
+  .swot .box{border-radius:14px;padding:16px;border:1px solid var(--line)}
+  .swot .s{background:linear-gradient(180deg,rgba(57,217,138,.12),transparent)}
+  .swot .w{background:linear-gradient(180deg,rgba(255,107,107,.12),transparent)}
+  .swot .o{background:linear-gradient(180deg,rgba(110,168,254,.14),transparent)}
+  .swot .t{background:linear-gradient(180deg,rgba(255,207,92,.12),transparent)}
+  .verdict{background:linear-gradient(135deg,rgba(126,240,194,.14),rgba(110,168,254,.14));border:1px solid var(--line);border-radius:18px;padding:26px}
+  .scorebar{height:12px;border-radius:8px;background:var(--card2);overflow:hidden;margin:6px 0 2px}
+  .scorebar > span{display:block;height:100%}
+  .note{font-size:.82rem;color:var(--muted);background:var(--bg2);border:1px dashed var(--line);border-radius:12px;padding:14px;margin-top:14px}
+  a.src{color:var(--accent);text-decoration:none;font-size:.82rem}
+  .toc{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .toc a{font-size:.85rem;color:var(--ink);background:var(--card2);border:1px solid var(--line);padding:7px 12px;border-radius:10px;text-decoration:none}
+  .toc a:hover{border-color:var(--accent)}
+  .badge{display:inline-block;font-size:.72rem;padding:3px 8px;border-radius:6px;background:var(--card2);border:1px solid var(--line);color:var(--muted);margin-left:6px}
+  .badge.win{background:rgba(57,217,138,.14);border-color:rgba(57,217,138,.4);color:var(--good)}
+  .badge.lose{background:rgba(255,107,107,.14);border-color:rgba(255,107,107,.4);color:var(--bad)}
+  .step{display:flex;gap:14px;margin:14px 0;align-items:flex-start}
+  .step .sn{flex:0 0 34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent5));color:#0b1020}
+  .step .sc h4{margin:3px 0 4px;font-size:1.02rem}
+  .step .sc p{margin:0;color:var(--muted);font-size:.9rem}
+  .yn{font-weight:700}
+  .yn.y{color:var(--good)} .yn.n{color:var(--bad)} .yn.p{color:var(--warn)}
+  footer{margin-top:50px;color:var(--muted);font-size:.82rem;border-top:1px solid var(--line);padding-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>🧭 phorg FaceFind — Competitive Battle Plan</h1>
+    <p>How your app's <strong>photo-ID (FaceFind)</strong> feature can realistically compete against FotoOwl, Premagic, Kamero, KwikPic and the free Google Photos threat — <strong>where to start, how to start, what to charge, how to market, the pros &amp; cons, and a head-to-head comparison.</strong></p>
+    <p>Companion to the <em>Event Photo-Sharing Apps — Market &amp; Business Analysis</em>. Read that first for market size; this is the <strong>go-to-market playbook for your product specifically.</strong></p>
+    <div class="tagpills">
+      <span class="pill">Your edge: 100% on-device / private</span>
+      <span class="pill">No cloud bills = price disruptor</span>
+      <span class="pill">Wedge: Kerala weddings → photographers</span>
+      <span class="pill">Honest, execution-first plan</span>
+    </div>
+    <div class="toc">
+      <a href="#tldr">TL;DR</a>
+      <a href="#edge">Your real edge</a>
+      <a href="#compare">Head-to-head</a>
+      <a href="#proscons">Pros &amp; cons</a>
+      <a href="#where">Where to start</a>
+      <a href="#how">How to start</a>
+      <a href="#price" style="border-color:var(--accent3);background:rgba(255,184,107,.12)">💲 Pricing</a>
+      <a href="#market">Marketing</a>
+      <a href="#risks">Risks</a>
+      <a href="#verdict">Verdict</a>
+    </div>
+  </header>
+
+  <!-- ============ TL;DR ============ -->
+  <section id="tldr">
+    <h2>1 · TL;DR — can you compete, and how?</h2>
+    <div class="card verdict">
+      <p style="font-size:1.05rem;margin-top:0"><strong>Yes — but <span class="good">not</span> as "another cloud face-sharing app."</strong> The market analysis is blunt: 15+ near-identical cloud players, face recognition is now a commodity, and it's a price war. You <span class="good">cannot</span> win by copying FotoOwl. You <span class="good">can</span> win by being the thing none of them are: <strong>fully local, private, no per-event cloud cost, and radically cheaper.</strong></p>
+      <ul class="clean">
+        <li>🟢 <strong>Your structural advantage:</strong> phorg runs face-matching <strong>100% on the photographer's PC</strong>. Zero cloud/GPU bills means you can undercut every subscription competitor and still profit.</li>
+        <li>🟢 <strong>Privacy is a real wedge:</strong> "guest faces never leave your computer" answers the exact regulatory threat (DPDP/GDPR/biometric laws) the analysis flags as the sector's #1 risk.</li>
+        <li>🟠 <strong>But your gaps are real:</strong> competitors offer live cloud upload, guest galleries reachable from anywhere, WhatsApp delivery and polished mobile UX. Your FaceFind portal today works best on the <strong>same Wi-Fi</strong>. That's the gap to close.</li>
+        <li>🔴 <strong>Don't fight on their turf.</strong> Pick the local/privacy/price niche, prove it in Kerala, then decide whether to add an optional cloud tier.</li>
+      </ul>
+      <p class="muted" style="margin-bottom:0"><strong>Bottom line: compete as the "private, one-time-fee, no-subscription" alternative for cost-conscious photographers &amp; hosts — not as a VC-style cloud SaaS.</strong></p>
+    </div>
+
+    <div class="grid g4" style="margin-top:18px">
+      <div class="card kpi"><span class="num">$0 / photo</span><span class="lbl">Your cloud cost per event</span><span class="sub">vs storage-metered rivals</span></div>
+      <div class="card kpi"><span class="num">Local</span><span class="lbl">Where faces are processed</span><span class="sub">Privacy = your headline</span></div>
+      <div class="card kpi"><span class="num">₹1,500 Cr</span><span class="lbl">Kerala wedding economy</span><span class="sub">Your beachhead market</span></div>
+      <div class="card kpi"><span class="num">1 niche</span><span class="lbl">Win here first</span><span class="sub">Don't boil the ocean</span></div>
+    </div>
+  </section>
+
+  <!-- ============ EDGE ============ -->
+  <section id="edge">
+    <h2>2 · Your real edge (and where you're weak)</h2>
+    <p class="lead">Be honest about both. Competing means leaning <em>hard</em> into the three things you do that they structurally cannot — while having a plan for the three things they do that you don't.</p>
+    <div class="grid g3">
+      <div class="card"><h3>🔐 On-device &amp; private</h3><p class="muted">Faces are matched on the user's own PC — nothing uploaded. Every rival streams photos to their cloud. This is a genuine, hard-to-copy difference (their whole business model is cloud).</p></div>
+      <div class="card"><h3>💸 No cloud cost = price weapon</h3><p class="muted">Rivals pay for GPU + storage per event and pass it on ($16–31/mo, or per-event quotes). Your marginal cost is ~zero, so you can charge a small one-time fee and still win.</p></div>
+      <div class="card"><h3>🧹 Full organizer, not just a gallery</h3><p class="muted">FaceFind ships inside a whole toolkit — dedupe, compress, date/place sorting, wedding event-splitting. Rivals only do delivery; you also do the messy cleanup photographers hate.</p></div>
+    </div>
+    <div class="grid g3" style="margin-top:16px">
+      <div class="card" style="border-color:rgba(255,107,107,.3)"><h3 style="color:#ffb4b4">⚠️ Gap: anywhere-access</h3><p class="muted">Their guest galleries open on any phone, anywhere. Your portal shines on same-Wi-Fi. Close this with an optional secure share link/tunnel.</p></div>
+      <div class="card" style="border-color:rgba(255,107,107,.3)"><h3 style="color:#ffb4b4">⚠️ Gap: WhatsApp &amp; polish</h3><p class="muted">Instant WhatsApp delivery and slick mobile UX are table stakes for them. You'll need at least a clean shareable link + QR.</p></div>
+      <div class="card" style="border-color:rgba(255,107,107,.3)"><h3 style="color:#ffb4b4">⚠️ Gap: brand &amp; trust</h3><p class="muted">They have logos, case studies, KSUM backing. You start from zero — so lead with a niche and referrals, not a broad launch.</p></div>
+    </div>
+    <div class="note"><strong>Strategic framing:</strong> The analysis says the durable moats are <em>distribution, monetisation depth, enterprise integration, and privacy/trust</em>. You realistically can't out-distribute FotoOwl on day one — so <strong>privacy + price</strong> is your opening wedge, and <strong>distribution via one photographer network</strong> is the moat you build next.</div>
+  </section>
+
+  <!-- ============ COMPARISON ============ -->
+  <section id="compare">
+    <h2>3 · Head-to-head comparison</h2>
+    <p class="lead">Where phorg FaceFind genuinely wins, ties, or loses today. Green = your advantage, red = their advantage. Be ruthless — this table is how you'll pick your messaging.</p>
+    <div class="chartbox" style="padding:0;overflow:hidden">
+      <table style="margin:0">
+        <thead><tr><th>Dimension</th><th>phorg FaceFind</th><th>FotoOwl</th><th>Premagic</th><th>Kamero</th><th>Google Photos</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Face recognition</strong></td><td><span class="yn y">✔ Local</span></td><td>✔ Cloud</td><td>✔ Cloud</td><td>✔ Cloud</td><td>✔ Cloud</td></tr>
+          <tr><td><strong>Data stays on device</strong></td><td><span class="yn y">✔ Yes</span> <span class="badge win">edge</span></td><td class="bad">✗ No</td><td class="bad">✗ No</td><td class="bad">✗ No</td><td class="bad">✗ No</td></tr>
+          <tr><td><strong>Per-event cloud cost</strong></td><td><span class="yn y">₹0</span> <span class="badge win">edge</span></td><td>storage-metered</td><td>attendee-metered</td><td>per-event</td><td>free*</td></tr>
+          <tr><td><strong>Guest access anywhere</strong></td><td><span class="yn p">△ Wi-Fi / link</span></td><td class="bad">✔ Anywhere</td><td class="bad">✔ Anywhere</td><td class="bad">✔ Anywhere</td><td class="bad">✔ Anywhere</td></tr>
+          <tr><td><strong>Instant WhatsApp delivery</strong></td><td><span class="yn n">✗ (link/QR)</span></td><td class="bad">✔</td><td class="bad">✔</td><td class="bad">✔</td><td>✗</td></tr>
+          <tr><td><strong>Full organizer / cleanup</strong></td><td><span class="yn y">✔ Yes</span> <span class="badge win">edge</span></td><td>✗</td><td>✗</td><td>△ culling</td><td>△ basic</td></tr>
+          <tr><td><strong>Works offline</strong></td><td><span class="yn y">✔ Yes</span> <span class="badge win">edge</span></td><td class="bad">✗</td><td class="bad">✗</td><td class="bad">✗</td><td class="bad">✗</td></tr>
+          <tr><td><strong>Sell prints / marketplace</strong></td><td><span class="yn n">✗ Not yet</span></td><td class="bad">✔</td><td>△</td><td class="bad">✔</td><td>✗</td></tr>
+          <tr><td><strong>Pricing model</strong></td><td><span class="yn y">one-time / cheap</span></td><td>$16–31/mo</td><td>$42/mo → $30K</td><td>per-event quote</td><td>free</td></tr>
+          <tr><td><strong>Brand / trust today</strong></td><td><span class="yn n">✗ New</span></td><td class="bad">strong</td><td class="bad">strong (B2B)</td><td>growing</td><td class="bad">universal</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" style="font-size:.82rem;margin-top:8px">*Google Photos is "free" but generic — no per-guest self-service, no photographer branding, storage caps apply. It's the <em>casual</em> threat, not the pro tool.</p>
+    <div class="note"><strong>Read this table as your pitch:</strong> you win decisively on <strong>privacy, offline, zero cloud cost, and full cleanup</strong>; you lose on <strong>anywhere-access, WhatsApp, marketplace, and brand</strong>. Your entire strategy = amplify the wins, neutralize the losses just enough (one good share link), and never try to match them feature-for-feature on cloud.</div>
+  </section>
+
+  <!-- ============ PROS & CONS ============ -->
+  <section id="proscons">
+    <h2>4 · Pros &amp; cons of competing with phorg</h2>
+    <div class="swot">
+      <div class="box s"><h3>💪 Pros (why you can win)</h3><ul class="clean">
+        <li><strong>Near-zero marginal cost</strong> → structurally cheaper than any subscription rival.</li>
+        <li><strong>Privacy-by-design</strong> answers the sector's biggest regulatory threat — a marketing gift.</li>
+        <li><strong>Already built &amp; working</strong> — FaceFind, wedding sorting, dedupe, compression all exist.</li>
+        <li><strong>Bundled value</strong> — you replace 2–3 tools (organizer + culler + delivery) in one.</li>
+        <li><strong>No VC needed</strong> — the analysis shows leaders are bootstrapped &amp; profitable; you can be too.</li>
+      </ul></div>
+      <div class="box w"><h3>⚠️ Cons (what's stacked against you)</h3><ul class="clean">
+        <li><strong>Desktop-bound</strong> — guests want phone-first; you must ship a clean share link.</li>
+        <li><strong>No brand / distribution yet</strong> — rivals have logos, KSUM, case studies.</li>
+        <li><strong>Local compute limits</strong> — a 10,000-photo wedding taxes a laptop; rivals use cloud GPUs.</li>
+        <li><strong>Support burden</strong> — a paid app needs installers, code-signing, updates, help.</li>
+        <li><strong>Feature race</strong> — WhatsApp, marketplace, live upload are expected; you'll be catching up.</li>
+      </ul></div>
+    </div>
+    <div class="note"><strong>The trade you're making:</strong> you give up "runs anywhere in the cloud" to gain "private + free to run + cheaper." That's a <em>real</em> customer segment — but only for buyers who value price/privacy over convenience. Your job is to find and own that segment, not to convert everyone.</div>
+  </section>
+
+  <!-- ============ WHERE TO START ============ -->
+  <section id="where">
+    <h2>5 · Where to start (pick ONE beachhead)</h2>
+    <p class="lead">The #1 rule from the market analysis: <strong>a generic clone dies; a sharp niche wins.</strong> Don't launch "for everyone." Pick one wedge, dominate it, then expand.</p>
+    <div class="grid g3">
+      <div class="card"><h3>🥇 Best: budget Kerala wedding photographers</h3><p class="muted">Solo/small studios who find FotoOwl/Kamero subscriptions expensive and want a one-time tool. High volume, price-sensitive, ROI-driven — exactly your pitch. Dense, digital, referral-driven community.</p></div>
+      <div class="card"><h3>🥈 Also strong: privacy-sensitive events</h3><p class="muted">Government, defence-family, school/college, religious mega-events, corporate offsites where "guest faces must not go to a foreign cloud" is a hard requirement. Your local-only story is a <em>must-have</em>, not a nice-to-have.</p></div>
+      <div class="card"><h3>🥉 Consumer fallback: the host / family</h3><p class="muted">A tech-savvy family member who wants to sort a 5,000-photo wedding dump and let relatives grab their own photos — without paying a monthly SaaS. Lower ARPU but huge volume &amp; word-of-mouth.</p></div>
+    </div>
+    <div class="note"><strong>Recommendation:</strong> Start with <strong>budget Kerala wedding photographers</strong>. They feel the subscription pain, they talk to each other (fast word-of-mouth), and they're the exact users the incumbents already validated. You're not creating demand — you're offering a cheaper, private alternative to a habit that already exists.</div>
+  </section>
+
+  <!-- ============ HOW TO START ============ -->
+  <section id="how">
+    <h2>6 · How to start (step by step)</h2>
+    <div class="card">
+      <div class="step"><div class="sn">1</div><div class="sc"><h4>Sharpen FaceFind into "the product," not a feature</h4><p>Rename &amp; front-load it: a photographer opens phorg → points at the wedding folder → gets a per-guest gallery. Make that path 3 clicks. Everything else (dedupe, compress) is a bonus, not the headline.</p></div></div>
+      <div class="step"><div class="sn">2</div><div class="sc"><h4>Close the #1 gap: a shareable guest link + QR</h4><p>Add an optional, secure share link (tunnel/hosted relay) so guests scan a QR and find "photos of me" from <em>any</em> phone, not just same-Wi-Fi. This single feature makes you competitive with cloud rivals for the moment that matters.</p></div></div>
+      <div class="step"><div class="sn">3</div><div class="sc"><h4>Add the license/paywall layer</h4><p>Gate FaceFind + wedding sorting behind a paid tier (offline signed key or a storefront like Lemon Squeezy / Razorpay for India). Keep basic organizing free as the funnel. Code-sign the installer so Windows doesn't scare buyers.</p></div></div>
+      <div class="step"><div class="sn">4</div><div class="sc"><h4>Recruit 5–10 pilot photographers (free)</h4><p>Give free lifetime licenses to a handful of Kerala wedding photographers in exchange for real weddings + honest feedback + a testimonial. Their referrals are your distribution engine.</p></div></div>
+      <div class="step"><div class="sn">5</div><div class="sc"><h4>Turn pilots into proof</h4><p>Capture before/after: "sorted 8,000 photos + gave 200 guests self-serve galleries, ₹0 cloud cost, nothing left the laptop." That case study is your entire marketing site.</p></div></div>
+      <div class="step"><div class="sn">6</div><div class="sc"><h4>Launch paid to the niche, then expand</h4><p>Sell to the wider Kerala photographer community via referrals + WhatsApp groups + local wedding expos. Only after you own this niche, consider the optional cloud tier or new verticals (schools, corporate).</p></div></div>
+    </div>
+    <div class="note"><strong>MVP discipline:</strong> Steps 1–3 are the minimum to charge money. Don't build a marketplace, mobile app, or live-upload before you have 10 paying photographers. Sell what you have; let paying users tell you what to build next.</div>
+  </section>
+
+  <!-- ============ PRICING ============ -->
+  <section id="price">
+    <div style="height:2px;background:linear-gradient(90deg,transparent,var(--accent3),transparent);margin:56px 0 0"></div>
+    <h2 style="border-color:var(--accent3)">7 · What price to charge</h2>
+    <p class="lead">Your zero-cloud-cost structure lets you attack on price. Anchor <strong>below</strong> the subscriptions but <strong>above</strong> free — and lean on "pay once" vs "pay every month forever." ₹ figures use ~₹83/$.</p>
+
+    <div class="grid g3">
+      <div class="card kpi"><span class="num">₹0</span><span class="lbl">Free tier — basic organizer</span><span class="sub">Your funnel &amp; word-of-mouth</span></div>
+      <div class="card kpi"><span class="num">₹2,999<span style="font-size:.8rem"> once</span></span><span class="lbl">Pro (FaceFind + AI + wedding)</span><span class="sub">~$36 · one-time, per photographer</span></div>
+      <div class="card kpi"><span class="num">₹499<span style="font-size:.8rem">/event</span></span><span class="lbl">Studio share-link add-on</span><span class="sub">~$6 · optional anywhere-access</span></div>
+    </div>
+
+    <h3 style="margin-top:26px">Suggested tiers</h3>
+    <div class="chartbox" style="padding:0;overflow:hidden">
+      <table style="margin:0">
+        <thead><tr><th>Plan</th><th>Price</th><th>What's included</th><th>Positioned against</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Free</strong></td><td class="good">₹0</td><td>Junk sweep, dedupe, sort by type/date, basic reports. Local only. "Made with phorg" on shared galleries.</td><td>Google Photos / FotoOwl free tier</td></tr>
+          <tr><td><strong>Pro</strong> <span class="badge">most popular</span></td><td>₹2,999 one-time <br><span class="muted">(or ₹149/mo)</span></td><td>FaceFind guest galleries (Wi-Fi/local), all on-device AI, wedding event sorting, compression, presets. Commercial use.</td><td>FotoOwl $16–31/mo — you're a one-time fee</td></tr>
+          <tr><td><strong>Studio</strong></td><td>₹499/event <br><span class="muted">or ₹6,999/yr</span></td><td>Everything in Pro + <strong>anywhere share link/QR</strong>, branded galleries (your logo, no watermark), priority support.</td><td>Kamero per-event / Premagic SMB</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" style="font-size:.85rem;margin-top:8px">The <em>anywhere share link</em> is the only thing with a real cloud cost (a small relay). Charging per-event for it keeps you cash-positive and aligns with how photographers bill their clients.</p>
+
+    <div class="chartbox" style="margin-top:18px">
+      <h3>Cost of one busy year — you vs the subscriptions</h3>
+      <p class="cap">Illustrative: a photographer doing ~24 events/year. phorg Pro is a one-time ₹2,999; rivals recur monthly. Studio add-on assumes ₹499 × 24 events.</p>
+      <canvas id="chCost"></canvas>
+    </div>
+
+    <div class="note"><strong>Pricing logic:</strong> "Pay ₹2,999 once and own it — no monthly bill, and your guests' faces never leave your laptop" is a message no subscription competitor can match. Use a <strong>3-tier anchor</strong> (people pick the middle), a <strong>14-day full trial</strong>, and price in <strong>₹ for India / $ for export</strong>. Resist going too cheap — ₹2,999 signals a real tool; ₹299 signals a toy.</div>
+  </section>
+
+  <!-- ============ MARKETING ============ -->
+  <section id="market">
+    <h2>8 · How to market it</h2>
+    <p class="lead">You have no ad budget and no brand yet — so market where photographers already gather, and let the product's price/privacy story do the selling.</p>
+    <div class="grid g2">
+      <div class="card"><h3>🎯 Channels that fit a bootstrapper</h3><ul class="clean">
+        <li><strong>Photographer WhatsApp/Telegram groups</strong> — Kerala wedding shooters live here; one referral spreads fast.</li>
+        <li><strong>Local wedding expos &amp; photography meetups</strong> — live demo: "watch me sort 5,000 photos in minutes."</li>
+        <li><strong>Instagram / YouTube Shorts / Reels</strong> — before/after cleanup + "guests find their own photos" clips.</li>
+        <li><strong>KSUM &amp; startup ecosystem</strong> — the same support Premagic used; grants, exposure, credibility.</li>
+        <li><strong>Wedding-photography Facebook groups &amp; forums</strong> — answer "how do I deliver guest photos cheaply?" with your tool.</li>
+      </ul></div>
+      <div class="card"><h3>🗣️ The messages that land</h3><ul class="clean">
+        <li><strong>"Pay once. No monthly bill."</strong> — hits the subscription-fatigue nerve directly.</li>
+        <li><strong>"Your guests' faces never leave your computer."</strong> — privacy + compliance in one line.</li>
+        <li><strong>"Sort the shoot AND deliver guest galleries — one tool."</strong> — the bundle nobody else has.</li>
+        <li><strong>"Works even with bad venue Wi-Fi."</strong> — offline is a feature at real weddings.</li>
+        <li><strong>Social proof:</strong> lead every page with a real photographer's testimonial + numbers.</li>
+      </ul></div>
+    </div>
+    <div class="note"><strong>Marketing sequence:</strong> (1) 5–10 pilots → testimonials, (2) demo Reels + a simple landing page reusing your existing docs design, (3) seed the WhatsApp groups &amp; expos, (4) referral reward (give a discount for every photographer they bring). Word-of-mouth in a tight community beats paid ads for a niche tool.</div>
+  </section>
+
+  <!-- ============ RISKS ============ -->
+  <section id="risks">
+    <h2>9 · Risks &amp; how to counter them</h2>
+    <table>
+      <thead><tr><th>Risk</th><th>Why it matters</th><th>Your counter</th></tr></thead>
+      <tbody>
+        <tr><td><strong>"Desktop feels old"</strong></td><td>Guests &amp; some photographers expect a cloud/mobile experience.</td><td>Ship the share-link + QR so the <em>guest</em> side is phone-first even if the engine is on a PC.</td></tr>
+        <tr><td><strong>Local compute limits</strong></td><td>Huge weddings can be slow on a weak laptop.</td><td>Cache results, show progress, recommend specs; offer an optional cloud-boost tier later.</td></tr>
+        <tr><td><strong>Incumbents cut prices</strong></td><td>FotoOwl could add a cheap tier.</td><td>They can't beat ₹0 cloud cost or "pay once" without breaking their own model — hold the privacy+one-time line.</td></tr>
+        <tr><td><strong>Big-tech free face grouping</strong></td><td>Google Photos is "good enough" for casual users.</td><td>Target <em>pros</em> who need per-guest galleries + branding + cleanup, which Google doesn't do.</td></tr>
+        <tr><td><strong>Biometric regulation</strong></td><td>DPDP/GDPR/consent laws hit the whole sector.</td><td>This is your <em>advantage</em> — local processing = minimal data exposure. Say so in your terms &amp; marketing.</td></tr>
+        <tr><td><strong>Piracy of a desktop app</strong></td><td>A paid .exe can be cracked.</td><td>License keys + code-signing + updates; the share-link relay (server-side) is uncopyable and ties users to you.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ SCORECARD ============ -->
+  <section>
+    <h2>10 · Competitiveness scorecard</h2>
+    <div class="chartbox">
+      <p class="cap">Author's assessment (0–100) of phorg FaceFind competing in this market, as-is today vs. after closing the anywhere-access gap.</p>
+      <div class="grid g2">
+        <div>
+          <p class="muted" style="margin:8px 0 2px">Privacy / compliance edge <span class="good">90</span></p><div class="scorebar"><span style="width:90%;background:var(--good)"></span></div>
+          <p class="muted" style="margin:14px 0 2px">Price competitiveness <span class="good">88</span></p><div class="scorebar"><span style="width:88%;background:var(--good)"></span></div>
+          <p class="muted" style="margin:14px 0 2px">Bundled value (organizer+delivery) <span class="good">80</span></p><div class="scorebar"><span style="width:80%;background:var(--good)"></span></div>
+        </div>
+        <div>
+          <p class="muted" style="margin:8px 0 2px">Guest UX / anywhere access <span class="bad">42</span></p><div class="scorebar"><span style="width:42%;background:var(--bad)"></span></div>
+          <p class="muted" style="margin:14px 0 2px">Brand / distribution <span class="bad">25</span></p><div class="scorebar"><span style="width:25%;background:var(--bad)"></span></div>
+          <p class="muted" style="margin:14px 0 2px">Ecosystem maturity (marketplace, WhatsApp) <span class="warn">45</span></p><div class="scorebar"><span style="width:45%;background:var(--warn)"></span></div>
+        </div>
+      </div>
+      <p class="note" style="margin-top:16px"><strong>Composite: ~62/100 — "Competitive in a niche, not head-on."</strong> You have a genuinely strong wedge (privacy + price + bundle) dragged down by weak distribution and guest-UX gaps. Close the share-link gap and win one photographer community, and this climbs fast.</p>
+    </div>
+  </section>
+
+  <!-- ============ VERDICT ============ -->
+  <section id="verdict">
+    <h2>11 · Final verdict</h2>
+    <div class="card verdict">
+      <p style="margin-top:0"><strong>Compete as the private, pay-once, no-cloud alternative for budget wedding photographers — starting in Kerala — not as another cloud SaaS clone.</strong></p>
+      <h3>Do this:</h3>
+      <ul class="clean">
+        <li>🎯 <strong>Pick the niche:</strong> budget Kerala wedding photographers who hate subscriptions.</li>
+        <li>🔗 <strong>Close one gap:</strong> add a secure guest share link + QR so access isn't Wi-Fi-bound.</li>
+        <li>💰 <strong>Price to disrupt:</strong> ₹2,999 one-time Pro + ₹499/event Studio add-on; free basic tier as the funnel.</li>
+        <li>🗣️ <strong>Market via community:</strong> 5–10 pilot photographers → testimonials → WhatsApp groups → expos → referrals.</li>
+        <li>🔐 <strong>Lead with privacy:</strong> "faces never leave your PC" turns the sector's biggest risk into your slogan.</li>
+      </ul>
+      <p style="margin-bottom:0"><strong>Avoid:</strong> trying to out-cloud FotoOwl, building a marketplace/mobile app before 10 paying users, or launching broadly with no niche and no brand. Win small and private first; expand later.</p>
+    </div>
+    <div class="note">Companion document to <em>Event Photo-Sharing Apps — Market &amp; Business Analysis</em>. Strategy &amp; pricing here are directional recommendations for a bootstrapped launch, not financial or legal advice — validate prices with real customers and confirm dependency/biometric compliance before selling.</div>
+  </section>
+
+  <footer>
+    <p>phorg FaceFind competitive battle plan · positioning, comparison, go-to-market, pricing &amp; marketing for a bootstrapped launch against FotoOwl, Premagic, Kamero &amp; Google Photos. Figures illustrative; ₹→$ at ~₹83/$.</p>
+  </footer>
+
+</div>
+
+<script>
+Chart.defaults.color = '#9aa6c7';
+Chart.defaults.font.family = "'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+const grid = 'rgba(40,52,92,.6)';
+
+// Cost of one busy year (24 events) — one-time vs subscriptions (₹, approx)
+new Chart(document.getElementById('chCost'), {
+  type:'bar',
+  data:{
+    labels:['phorg Pro\n(one-time)','phorg Pro+Studio\n(add-on/event)','FotoOwl\n(~₹1,330/mo)','FotoOwl Biker\n(~₹2,000/mo)','Premagic SMB\n(~₹3,500/mo)'],
+    datasets:[{label:'Cost over 1 year (₹)',
+      data:[2999, 2999 + 499*24, 1330*12, 2000*12, 3500*12],
+      backgroundColor:['#39d98a','#7ef0c2','#6ea8fe','#c58bff','#ff7b9c']}]
+  },
+  options:{responsive:true,plugins:{legend:{display:false},
+    tooltip:{callbacks:{label:c=>'₹'+c.parsed.y.toLocaleString('en-IN')+' / year'}}},
+    scales:{y:{grid:{color:grid},title:{display:true,text:'₹ per year'},
+      ticks:{callback:v=>'₹'+(v/1000)+'K'}},x:{grid:{color:grid}}}}
+});
+</script>
+</body>
+</html>

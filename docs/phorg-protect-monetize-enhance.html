@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>phorg · Protect the code · Make it paid · Enhance it — a practical playbook</title>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a30; --panel2:#0f1728; --bd:#22304f;
+    --ink:#e8eefc; --mut:#93a4c8; --acc:#4f8cff; --acc2:#7c5cff;
+    --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --teal:#14b8a6;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,#182648 0,transparent 60%),var(--bg);
+    color:var(--ink);font:15px/1.6 "Segoe UI",system-ui,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 90px}
+  header.hero{padding:34px 30px;border:1px solid var(--bd);border-radius:20px;
+    background:linear-gradient(135deg,#14224400,#1a2c55 120%),var(--panel);position:relative;overflow:hidden}
+  header.hero:before{content:"";position:absolute;inset:-2px;background:
+    radial-gradient(600px 200px at 10% 0,#4f8cff22,transparent 60%);pointer-events:none}
+  .badge{display:inline-block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--acc);background:#4f8cff18;border:1px solid #4f8cff44;padding:4px 10px;border-radius:999px}
+  h1{margin:14px 0 6px;font-size:30px;letter-spacing:-.02em}
+  h1 .g{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--mut);max-width:820px;font-size:15.5px}
+  nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  nav.toc a{font-size:13px;color:var(--mut);text-decoration:none;border:1px solid var(--bd);
+    padding:6px 12px;border-radius:10px;background:var(--panel2);transition:.15s}
+  nav.toc a:hover{color:var(--ink);border-color:var(--acc);background:#4f8cff14}
+  section{margin-top:44px}
+  h2{font-size:22px;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  h2 .n{font-size:13px;color:#0b1020;background:linear-gradient(90deg,var(--acc),var(--acc2));
+    width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-weight:700}
+  h3{font-size:16.5px;margin:22px 0 8px}
+  .lead{color:var(--mut);margin:0 0 16px;max-width:840px}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:16px;padding:20px 22px;margin:14px 0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:720px){.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:1fr 1fr 1fr}}
+  .tile{background:var(--panel2);border:1px solid var(--bd);border-radius:14px;padding:16px}
+  .tile h4{margin:0 0 6px;font-size:15px}
+  .tile p{margin:0;color:var(--mut);font-size:13.5px}
+  .pill{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--bd);color:var(--mut);margin:0 4px 4px 0}
+  .pill.local{color:var(--good);border-color:#22c55e55;background:#22c55e12}
+  .pill.opt{color:var(--warn);border-color:#f59e0b55;background:#f59e0b12}
+  .pill.hard{color:var(--bad);border-color:#ef444455;background:#ef444412}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:6px 0}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--bd);vertical-align:top}
+  th{color:var(--mut);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em}
+  td code,.mono{font-family:"Cascadia Code",Consolas,monospace;font-size:12.5px;color:#a9c4ff}
+  pre{background:#0b1020;border:1px solid var(--bd);border-radius:12px;padding:14px 16px;overflow-x:auto;
+    font-family:"Cascadia Code",Consolas,monospace;font-size:12.5px;color:#cfe0ff;margin:12px 0}
+  pre .c{color:#5c6b8c}
+  pre .k{color:#7c9cff}
+  pre .s{color:#7ee7c0}
+  .callout{border-left:3px solid var(--acc);background:#4f8cff10;padding:12px 16px;border-radius:0 12px 12px 0;margin:12px 0;color:#cfe0ff;font-size:13.5px}
+  .callout.warn{border-color:var(--warn);background:#f59e0b12;color:#ffe7c2}
+  .callout.good{border-color:var(--good);background:#22c55e12;color:#c8f5d6}
+  .callout.bad{border-color:var(--bad);background:#ef444412;color:#ffd2d2}
+  ul{margin:6px 0;padding-left:20px;color:var(--mut)}
+  ul li{margin:4px 0}
+  ul li b,ul li strong{color:var(--ink)}
+  .kpi{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+  .kpi div{flex:1 1 150px;background:var(--panel2);border:1px solid var(--bd);border-radius:12px;padding:12px 14px}
+  .kpi b{display:block;font-size:20px}
+  .kpi span{font-size:12px;color:var(--mut)}
+  .tier{display:grid;gap:14px;margin:14px 0}
+  @media(min-width:820px){.tier{grid-template-columns:repeat(3,1fr)}}
+  .plan{background:var(--panel2);border:1px solid var(--bd);border-radius:16px;padding:18px 18px 20px;display:flex;flex-direction:column}
+  .plan.pop{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset,0 18px 40px -26px var(--acc)}
+  .plan .pt{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
+  .plan .pp{font-size:26px;font-weight:700;margin:6px 0}
+  .plan .pp small{font-size:13px;color:var(--mut);font-weight:400}
+  .plan ul{padding-left:18px;font-size:13px;flex:1}
+  .plan .tag{align-self:flex-start;font-size:11px;padding:2px 9px;border-radius:999px;background:#4f8cff18;border:1px solid #4f8cff44;color:var(--acc);margin-bottom:6px}
+  .step{display:flex;gap:14px;margin:10px 0;align-items:flex-start}
+  .step .sn{flex:0 0 30px;height:30px;border-radius:9px;display:grid;place-items:center;font-weight:700;
+    background:linear-gradient(90deg,var(--acc),var(--acc2));color:#0b1020;font-size:14px}
+  .step .sc{flex:1}
+  .step .sc h4{margin:2px 0 4px;font-size:15px}
+  .step .sc p{margin:0;color:var(--mut);font-size:13.5px}
+  footer{margin-top:56px;color:var(--mut);font-size:12.5px;text-align:center;border-top:1px solid var(--bd);padding-top:20px}
+  .rank{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px}
+  .r-easy{background:#22c55e18;color:var(--good);border:1px solid #22c55e44}
+  .r-med{background:#f59e0b18;color:var(--warn);border:1px solid #f59e0b44}
+  .r-hard{background:#ef444418;color:var(--bad);border:1px solid #ef444444}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <span class="badge">Business &amp; engineering playbook</span>
+  <h1>phorg — <span class="g">Protect the code, make it paid, and grow it</span></h1>
+  <p class="sub">
+    A grounded, no-hype guide for turning <b>phorg</b> (your local, standard-library
+    photo/file organizer with optional on-device AI) into a commercial product.
+    It covers three questions: <b>how to protect the source &amp; algorithms</b>,
+    <b>how to charge money for it</b>, and <b>what to build next</b>. Every option is
+    marked with effort and honesty about what actually works.
+  </p>
+  <nav class="toc">
+    <a href="#reality">Reality check</a>
+    <a href="#protect">1 · Protect the code</a>
+    <a href="#license">2 · Licensing &amp; keys</a>
+    <a href="#monetize">3 · Make it paid</a>
+    <a href="#pricing">4 · Pricing &amp; tiers</a>
+    <a href="#distribute">5 · Sell &amp; deliver</a>
+    <a href="#enhance">6 · Enhance the product</a>
+    <a href="#roadmap">7 · 90-day roadmap</a>
+    <a href="#legal">8 · Legal basics</a>
+  </nav>
+</header>
+
+<!-- ============================================================ -->
+<section id="reality">
+  <h2><span class="n">!</span> The honest reality check first</h2>
+  <p class="lead">
+    Before spending effort on "protection," internalize one rule: <b>any code that
+    runs on a customer's machine can eventually be reverse-engineered.</b> Python
+    especially — even a compiled <code>.exe</code> can be unpacked back to bytecode.
+    The goal is not to make theft impossible; it is to make it <b>slower and less
+    worthwhile than just paying you.</b>
+  </p>
+  <div class="grid three">
+    <div class="tile"><h4>🛡️ Deterrence, not walls</h4><p>Raise the cost of copying above the price of a license. That's a win.</p></div>
+    <div class="tile"><h4>🔑 Value beyond the binary</h4><p>Updates, support, a brand, and cloud services are harder to pirate than a file.</p></div>
+    <div class="tile"><h4>⚖️ The law is a real tool</h4><p>A license + copyright means a paying business can't safely steal from you.</p></div>
+  </div>
+  <div class="callout warn">
+    <b>Your architecture already helps sales:</b> phorg runs <b>100% locally, no data
+    leaves the PC.</b> That privacy story is a genuine selling point over cloud
+    competitors — lead with it.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="protect">
+  <h2><span class="n">1</span> Protecting the code &amp; the algorithm</h2>
+  <p class="lead">
+    Layered defense. Each layer below adds friction; combine 2–3 of them for a
+    realistic barrier. Do <b>not</b> waste weeks chasing a perfect DRM — ship
+    instead.
+  </p>
+
+  <h3>A · Don't ship source at all — ship a binary</h3>
+  <p class="lead">You already do this with PyInstaller (<code>build_app.bat</code> → <code>dist\phorg.exe</code>). That alone stops 95% of casual copying. Harden it:</p>
+  <div class="card">
+    <table>
+      <tr><th>Technique</th><th>What it does</th><th>Effort</th></tr>
+      <tr><td><b>Compile to native</b> with <a href="https://nuitka.net" target="_blank">Nuitka</a> (<code>--standalone --onefile</code>)</td><td>Turns Python into real C/machine code — far harder to unpack than PyInstaller, which just bundles <code>.pyc</code>.</td><td><span class="rank r-med">Medium</span></td></tr>
+      <tr><td><b>Bytecode encryption</b> (PyArmor)</td><td>Obfuscates &amp; encrypts your <code>.py</code> modules; supports license expiry &amp; machine binding.</td><td><span class="rank r-easy">Easy</span></td></tr>
+      <tr><td><b>Strip &amp; obfuscate names</b></td><td>Rename internal functions/vars; remove docstrings &amp; comments in the shipped build.</td><td><span class="rank r-easy">Easy</span></td></tr>
+      <tr><td><b>Code-sign the .exe</b></td><td>An OV/EV certificate removes the SmartScreen "unknown publisher" scare <em>and</em> proves tampering if the signature breaks.</td><td><span class="rank r-med">Medium</span></td></tr>
+    </table>
+  </div>
+  <div class="callout">
+    <b>Recommended combo for phorg:</b> Nuitka (or keep PyInstaller) + <b>PyArmor</b>
+    for the 2–3 files that contain your real IP + a <b>code-signing certificate</b>.
+    That's a strong, cheap, realistic stack.
+  </div>
+
+  <h3>B · Split the "secret sauce" out of the client</h3>
+  <p class="lead">
+    The single most effective protection: <b>if an algorithm is your moat, don't run
+    it on the customer's machine at all.</b> Move it behind an API you host. The
+    client sends inputs, your server returns results. They never get the code.
+  </p>
+  <div class="grid two">
+    <div class="tile"><h4>Keep local (privacy = feature)</h4>
+      <p>File moves, junk sweep, dedupe, EXIF date sorting, the UI. These are commodity &amp; privacy-sensitive — leave them on-device.</p></div>
+    <div class="tile"><h4>Consider server-side (your moat)</h4>
+      <p>Advanced face-clustering, "AI wedding sorting," social-group discovery. A hosted model = uncopyable + easy to meter &amp; bill.</p></div>
+  </div>
+  <div class="callout bad">
+    <b>Tension to decide deliberately:</b> phorg's headline promise is "nothing leaves
+    your PC." Moving AI to a server breaks that. Option: offer <b>both</b> — a private
+    on-device mode (Pro) and an optional faster cloud mode (opt-in, clearly labeled).
+  </div>
+
+  <h3>C · Anti-tamper &amp; integrity checks (light touch)</h3>
+  <ul>
+    <li>Verify the app's own file <b>hash/signature</b> at startup; refuse to run if modified.</li>
+    <li>Keep the <b>license-check logic inlined</b> in several places, not one tidy <code>is_licensed()</code> a cracker can flip.</li>
+    <li>Do a <b>periodic (not every-launch)</b> online validation so an offline crack drifts out of date.</li>
+  </ul>
+  <div class="callout warn">
+    Don't over-invest here. Aggressive anti-tamper annoys legitimate paying users
+    (antivirus false positives, offline failures) more than it stops crackers.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="license">
+  <h2><span class="n">2</span> Licensing &amp; license keys — how the "paid" part actually works</h2>
+  <p class="lead">A license system answers: <em>is this user allowed to use this feature?</em> Pick the simplest model that fits your buyer.</p>
+
+  <div class="grid two">
+    <div class="tile"><h4>Offline signed key <span class="pill local">no server</span></h4>
+      <p>You generate a key with a <b>private key</b>; the app verifies it with the embedded <b>public key</b> (RSA/Ed25519). Works fully offline, can encode tier + expiry. Con: can't revoke a leaked key.</p></div>
+    <div class="tile"><h4>Online activation <span class="pill opt">tiny server</span></h4>
+      <p>App calls your server to activate a key, binds it to a machine ID, and can <b>revoke</b> abused keys. Best balance for most desktop apps.</p></div>
+  </div>
+
+  <h3>Don't build it yourself — use a licensing service</h3>
+  <p class="lead">Rolling your own crypto + billing + revocation is a trap. These handle keys, activations, machine-limits, and trials for you:</p>
+  <div class="card">
+    <table>
+      <tr><th>Service</th><th>Good for</th></tr>
+      <tr><td><b>Keygen</b> / <b>Cryptolens</b> / <b>LicenseSpring</b></td><td>Desktop license keys, machine binding, floating seats, offline fallback.</td></tr>
+      <tr><td><b>Gumroad</b> / <b>Lemon Squeezy</b> / <b>Paddle</b></td><td>Sell + collect payment <em>and</em> issue a license key on purchase — plus they act as <b>merchant of record</b> (they handle VAT/tax for you).</td></tr>
+      <tr><td><b>Stripe</b> (+ your glue)</td><td>Subscriptions &amp; billing when you want full control; you handle tax or add Stripe Tax.</td></tr>
+    </table>
+  </div>
+
+  <h3>Minimal offline key flow (concept)</h3>
+  <pre><span class="c"># You (once): create a signing keypair. Keep the PRIVATE key secret.</span>
+<span class="c"># Ship the PUBLIC key inside the app.</span>
+
+<span class="c"># --- issue a key when someone buys ---</span>
+payload = {<span class="s">"email"</span>: buyer, <span class="s">"tier"</span>: <span class="s">"pro"</span>, <span class="s">"exp"</span>: <span class="s">"2027-01-01"</span>}
+license_key = sign(payload, PRIVATE_KEY)      <span class="c"># base64 blob you email them</span>
+
+<span class="c"># --- inside phorg at startup ---</span>
+<span class="k">if</span> verify(license_key, PUBLIC_KEY) <span class="k">and</span> not_expired(payload):
+    unlock_pro_features()
+<span class="k">else</span>:
+    run_free_tier()</pre>
+  <div class="callout good">
+    <b>Practical tip:</b> gate features with a single source of truth like
+    <code>features = entitlements(license)</code>, then check <code>features.facefind</code>,
+    <code>features.ai_sort</code>, etc. throughout the UI. Easy to reason about and to
+    expand into new tiers.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="monetize">
+  <h2><span class="n">3</span> How to make phorg paid — the models</h2>
+  <p class="lead">Match the model to how people get value. For a photo organizer aimed at events/weddings, a few models fit well:</p>
+
+  <div class="grid two">
+    <div class="tile"><h4>① Freemium desktop app <span class="pill local">recommended</span></h4>
+      <p>Core organizing is free; <b>AI + FaceFind + wedding sorting + guest portal</b> are Pro. Free users become your marketing.</p></div>
+    <div class="tile"><h4>② One-time license</h4>
+      <p>Pay once, own that major version. Simple, popular with individuals who hate subscriptions. Charge again for the next big version.</p></div>
+    <div class="tile"><h4>③ Subscription (SaaS-style)</h4>
+      <p>Monthly/yearly for Pro + updates + support. Predictable revenue; needs continuous value (updates, cloud features) to justify.</p></div>
+    <div class="tile"><h4>④ Per-event / usage packs</h4>
+      <p>Photographers pay per wedding processed (e.g. a credit unlocks one event's FaceFind + guest portal). Aligns cost with their billing.</p></div>
+  </div>
+
+  <h3>Who is the buyer? (this decides everything)</h3>
+  <div class="card">
+    <table>
+      <tr><th>Segment</th><th>What they'll pay for</th><th>Best model</th></tr>
+      <tr><td><b>Wedding / event photographers</b></td><td>FaceFind guest portal, AI event sorting, "deliver a gallery guests self-serve." This is a business tool that <em>saves them billable hours</em> — highest willingness to pay.</td><td>Per-event packs or Pro subscription</td></tr>
+      <tr><td><b>Families / individuals</b></td><td>Cleaning up a messy phone/PC, dedupe, compress, sort by date/person.</td><td>One-time Pro license</td></tr>
+      <tr><td><b>Prosumers / hobbyists</b></td><td>Bulk rename, content AI, presets, recipes.</td><td>Freemium → cheap Pro</td></tr>
+    </table>
+  </div>
+  <div class="callout">
+    <b>Sharpest wedge:</b> the <b>photographer</b> use-case. The FaceFind guest self-service
+    portal is a premium, time-saving feature others charge a lot for. Consider making
+    <b>that</b> your flagship paid product and everything else the free funnel.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="pricing">
+  <h2><span class="n">4</span> Suggested tiers &amp; pricing</h2>
+  <p class="lead">Illustrative — validate with real customers. Anchor on <em>value delivered</em>, not your effort. A photographer saving 3 hours per wedding easily justifies a meaningful price.</p>
+
+  <div class="tier">
+    <div class="plan">
+      <span class="tag">Funnel</span>
+      <div class="pt">Free</div>
+      <div class="pp">$0</div>
+      <ul>
+        <li>All safe organizing: junk sweep, by type/size, dedupe</li>
+        <li>Sort by date, bulk rename, empties, reports</li>
+        <li>Local backend only</li>
+        <li>Watermark / "Made with phorg" on shared galleries</li>
+      </ul>
+    </div>
+    <div class="plan pop">
+      <span class="tag">Most popular</span>
+      <div class="pt">Pro</div>
+      <div class="pp">$39 <small>one-time / or $6&#8239;mo</small></div>
+      <ul>
+        <li>Everything in Free, plus:</li>
+        <li><b>All on-device AI</b> — content sort, keep-best, similar</li>
+        <li><b>Face database</b> &amp; auto-group people</li>
+        <li>Compression suite (HEIC→JPG, lossless)</li>
+        <li>Presets, recipes, scheduling, watch-folder</li>
+      </ul>
+    </div>
+    <div class="plan">
+      <span class="tag">Business</span>
+      <div class="pt">Studio</div>
+      <div class="pp">$19<small>/event</small> <small>or $29&#8239;mo</small></div>
+      <ul>
+        <li>Everything in Pro, plus:</li>
+        <li><b>FaceFind guest self-service portal</b></li>
+        <li><b>AI wedding sorting</b> (events, venue/GPS, cover pick)</li>
+        <li>Branded galleries (your logo, no watermark)</li>
+        <li>Priority support + commercial license</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout good">
+    <b>Pricing tactics that work:</b> anchor with 3 tiers (people pick the middle),
+    offer a <b>7–14 day full-feature trial</b>, discount the annual plan, and give a
+    <b>generous free tier</b> so the app spreads. Sell to photographers as "pays for
+    itself in one wedding."
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="distribute">
+  <h2><span class="n">5</span> Selling &amp; delivering it</h2>
+  <div class="grid two">
+    <div class="tile"><h4>Storefront</h4>
+      <p>Use <b>Lemon Squeezy / Paddle / Gumroad</b> as merchant of record — they take payment, handle global tax/VAT, and auto-issue the license key. Least legal/accounting overhead to start.</p></div>
+    <div class="tile"><h4>A real landing page</h4>
+      <p>You already have a strong docs style. Turn it into a marketing site: hero demo GIF, the privacy story, before/after of a messy folder, testimonials, buy button.</p></div>
+    <div class="tile"><h4>Auto-update</h4>
+      <p>Ship an updater so Pro users always get the latest — this is a piracy-resistant value (a cracked copy goes stale).</p></div>
+    <div class="tile"><h4>Trials &amp; refunds</h4>
+      <p>Time-limited trial keys + a clear refund policy build trust and cut support load. Both storefronts above support this.</p></div>
+  </div>
+  <div class="callout warn">
+    <b>Signing &amp; SmartScreen:</b> your <code>build_app.bat</code> already documents code
+    signing. For a <em>paid</em> product this is close to mandatory — an "unknown
+    publisher" warning kills conversions. Budget for an OV/EV certificate.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="enhance">
+  <h2><span class="n">6</span> How to enhance the product (build what sells)</h2>
+  <p class="lead">Enhancements that either <b>increase willingness to pay</b> or <b>reduce churn</b>. Ranked by impact-to-effort for your current feature set.</p>
+
+  <h3>Quick wins (high leverage)</h3>
+  <div class="grid two">
+    <div class="tile"><h4>Branded / white-label galleries <span class="pill hard">$$</span></h4>
+      <p>Let photographers add their logo &amp; colors to the guest FaceFind portal. Directly billable, low effort — you already have the portal.</p></div>
+    <div class="tile"><h4>One-click shareable gallery link</h4>
+      <p>Beyond same-Wi-Fi: an optional hosted/tunnel link so guests anywhere can self-serve their photos. High value; requires a small backend.</p></div>
+    <div class="tile"><h4>Onboarding wizard + sample data</h4>
+      <p>First-run "organize this demo folder" flow so users hit the "wow" moment in 60 seconds. Boosts trial→paid conversion.</p></div>
+    <div class="tile"><h4>Undo confidence &amp; audit polish</h4>
+      <p>Your reversible-move guarantee is a top trust feature — surface it loudly (a persistent "everything is undoable" banner, export audit to CSV).</p></div>
+  </div>
+
+  <h3>Bigger bets (product moats)</h3>
+  <div class="grid two">
+    <div class="tile"><h4>Cloud FaceFind delivery</h4>
+      <p>Optional hosted portal so wedding guests worldwide fetch their photos. This is the feature photographers will happily pay per-event for — and it protects your algorithm server-side.</p></div>
+    <div class="tile"><h4>Better face model</h4>
+      <p>Upgrade recognition accuracy (modern embedding model) with a strictness slider. Accuracy is the #1 thing that makes or breaks FaceFind's reputation.</p></div>
+    <div class="tile"><h4>macOS / cross-platform build</h4>
+      <p>Many photographers are on Mac. A signed mac build widens the market significantly.</p></div>
+    <div class="tile"><h4>Team / studio accounts</h4>
+      <p>Multiple seats, shared presets/rules, per-event billing dashboard. Unlocks higher-priced business plans.</p></div>
+  </div>
+
+  <h3>Reduce churn &amp; support cost</h3>
+  <ul>
+    <li><b>In-app changelog &amp; "what's new"</b> so users feel ongoing value (justifies subscriptions).</li>
+    <li><b>Crash/error reporting</b> (opt-in) so you fix issues before they generate refunds.</li>
+    <li><b>Better duplicate/near-dup review UX</b> — the visual gallery is a differentiator; keep investing there.</li>
+    <li><b>Localization</b> (you already lean into Kerala wedding names) — regional templates are a memorable niche hook.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="roadmap">
+  <h2><span class="n">7</span> A pragmatic 90-day path to "paid"</h2>
+  <div class="card">
+    <div class="step"><div class="sn">1</div><div class="sc"><h4>Weeks 1–2 · Decide the wedge &amp; tiers</h4><p>Pick the photographer/wedding wedge. Lock the Free vs Pro vs Studio feature split. Write the feature-gating layer (<code>entitlements()</code>).</p></div></div>
+    <div class="step"><div class="sn">2</div><div class="sc"><h4>Weeks 3–4 · Licensing + payment</h4><p>Wire up Lemon Squeezy/Paddle to issue keys; add offline signed-key verification with a public key baked into the build. Add a 14-day trial.</p></div></div>
+    <div class="step"><div class="sn">3</div><div class="sc"><h4>Weeks 5–6 · Harden the build</h4><p>Switch/keep Nuitka or PyInstaller, add PyArmor on the IP modules, buy &amp; apply a code-signing cert, set up auto-update.</p></div></div>
+    <div class="step"><div class="sn">4</div><div class="sc"><h4>Weeks 7–9 · Landing page + polish</h4><p>Build the marketing page (reuse this design system), record a demo GIF, add onboarding wizard, in-app changelog, opt-in crash reports.</p></div></div>
+    <div class="step"><div class="sn">5</div><div class="sc"><h4>Weeks 10–13 · Launch to photographers</h4><p>Beta with 5–10 real photographers, gather quotes/testimonials, ship branded galleries, then public launch on the storefront.</p></div></div>
+  </div>
+  <div class="kpi">
+    <div><b>3</b><span>tiers to launch with</span></div>
+    <div><b>14&#8239;days</b><span>free trial length</span></div>
+    <div><b>1</b><span>wedge (photographers)</span></div>
+    <div><b>2–3</b><span>protection layers, no more</span></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="legal">
+  <h2><span class="n">8</span> Legal &amp; housekeeping basics</h2>
+  <ul>
+    <li><b>Copyright is automatic</b> — but add a clear <code>© You, All rights reserved</code> and a proprietary <b>EULA</b> (end-user license agreement) shipped with the app.</li>
+    <li><b>Check your dependencies' licenses.</b> OpenCV, model files, and any face/AI libraries have their own terms — confirm they permit commercial redistribution before you sell. This is the most commonly missed step.</li>
+    <li><b>Privacy policy</b> — even for a local app, if you add any cloud/telemetry you need one. Your "runs locally" promise is a marketing asset <em>and</em> a legal commitment; don't quietly break it.</li>
+    <li><b>Biometric caution:</b> face recognition is regulated in some regions (e.g. Illinois BIPA, EU). Since matching is local and user-initiated you're in a good spot, but say so explicitly in your terms.</li>
+    <li><b>Trademark the name</b> "phorg" (or your chosen brand) if you're serious — it protects the thing pirates can't copy: your reputation.</li>
+  </ul>
+  <div class="callout bad">
+    <b>Not legal advice.</b> For a real product, a short consult with a software/IP
+    lawyer on your EULA and dependency licenses is cheap insurance.
+  </div>
+</section>
+
+<footer>
+  phorg · protect · monetize · enhance — a strategy playbook.  Deterrence over
+  perfection; sell value, not just a binary.  &nbsp;·&nbsp;  This document is guidance, not legal advice.
+</footer>
+
+</div>
+</body>
+</html>
