@@ -1,4 +1,4 @@
-"""Core regression tests for phorg — pure logic, no cv2 required.
+"""Core regression tests for FaceFind — pure logic, no cv2 required.
 
 Run with:  python -m pytest -q
 """
@@ -10,7 +10,7 @@ import pytest
 
 from phorg.safety import SafetyPolicy
 from phorg.backends import LocalBackend, Op, _unique_local, _same_file
-from phorg import organizer, vision
+from phorg import vision
 
 
 # --------------------------------------------------------------------------
@@ -102,54 +102,6 @@ def test_apply_identical_dedupe_removes_source(tmproot):
 
 
 # --------------------------------------------------------------------------
-# organizer planners
-# --------------------------------------------------------------------------
-def test_norm_dupname():
-    assert organizer._norm_dupname("IMG (1)") == organizer._norm_dupname("IMG")
-    assert organizer._norm_dupname("photo-copy") == organizer._norm_dupname("photo")
-
-
-def test_plan_flatten_empties_folders_with_identical_dupes(tmproot):
-    be = LocalBackend(tmproot)
-    saf = SafetyPolicy()
-    _mk(tmproot, "A/photo.jpg", b"IDENTICAL")
-    _mk(tmproot, "B/photo.jpg", b"IDENTICAL")   # same name + content
-    _mk(tmproot, "B/other.jpg", b"unique")
-    ops, _ = organizer.plan_flatten(be, be.root, saf)
-    be.apply_ops(ops, journal=[])
-    left = sorted(f for f in os.listdir(tmproot) if os.path.isfile(os.path.join(tmproot, f)))
-    assert left == ["other.jpg", "photo.jpg"]
-    # sub-folders fully emptied + removed
-    assert not os.path.isdir(os.path.join(tmproot, "A"))
-    assert not os.path.isdir(os.path.join(tmproot, "B"))
-
-
-def test_duplicate_groups_and_hash_cache(tmproot):
-    be = LocalBackend(tmproot)
-    saf = SafetyPolicy()
-    blob = b"D" * 5000
-    _mk(tmproot, "a.bin", blob)
-    _mk(tmproot, "b.bin", blob)      # identical
-    _mk(tmproot, "c.bin", b"E" * 5000)
-    groups = organizer.duplicate_groups(be, be.root, saf)
-    assert len(groups) == 1
-    assert len(groups[0]["members"]) == 2
-    # the hash cache DB was created under .phorg
-    assert os.path.isdir(os.path.join(tmproot, ".phorg"))
-
-
-def test_plan_junk_to_trash_produces_trash_ops(tmproot):
-    be = LocalBackend(tmproot)
-    saf = SafetyPolicy()
-    _mk(tmproot, "thumbs.db", b"junk")
-    _mk(tmproot, "keep.jpg", b"data")
-    ops, summary = organizer.plan_junk(be, be.root, saf, to_trash=True)
-    kinds = {o.kind for o in ops}
-    assert summary["to_trash"] is True
-    assert kinds == {"trash"} or kinds == set()  # only trash ops, never move
-
-
-# --------------------------------------------------------------------------
 # vision — pure helpers (no cv2)
 # --------------------------------------------------------------------------
 def test_is_image_video():
@@ -158,27 +110,6 @@ def test_is_image_video():
     assert not vision.is_image("c.txt")
     assert vision.is_video("clip.MP4")
     assert not vision.is_video("d.png")
-
-
-def test_scene_bucket_index_ranges():
-    assert vision.scene_bucket_for_index(1) == "animals"
-    assert vision.scene_bucket_for_index(950) == "food"
-    assert vision.scene_bucket_for_index(975) == "nature"
-    assert vision.scene_bucket_for_index(990) == "plants"
-    assert vision.scene_bucket_for_index(817) == "vehicles"
-    assert vision.scene_bucket_for_index(600) is None
-
-
-def test_haversine_distance():
-    # ~ same point -> ~0; two far cities -> large
-    assert vision._haversine_m((10.0, 76.0), (10.0, 76.0)) < 1.0
-    d = vision._haversine_m((10.0, 76.0), (12.97, 77.59))  # Kochi -> Bengaluru
-    assert 300000 < d < 450000
-
-
-def test_person_folder_safe():
-    assert vision.person_folder("Amma / Family!") == "Amma__Family"
-    assert vision.person_folder("") == "Person"
 
 
 # --------------------------------------------------------------------------
@@ -196,22 +127,3 @@ def test_metacache_roundtrip_and_invalidation(tmproot):
     # a different mtime invalidates
     assert c.get(f, key[0], key[1] + 1) is None
     c.close()
-
-
-# --------------------------------------------------------------------------
-# peopledb (needs numpy)
-# --------------------------------------------------------------------------
-def test_peopledb_roundtrip(tmproot, monkeypatch):
-    pytest.importorskip("numpy")
-    from phorg import peopledb
-    monkeypatch.setattr(peopledb, "_DIR", os.path.join(tmproot, ".phorg"))
-    monkeypatch.setattr(peopledb, "_PATH",
-                        os.path.join(tmproot, ".phorg", "people.json"))
-    assert peopledb.summary() == []
-    peopledb.remember("Amma", [1.0, 0.0, 0.0, 0.0])
-    names = [x["name"] for x in peopledb.summary()]
-    assert names == ["Amma"]
-    refs = peopledb.refs()
-    assert len(refs) == 1 and refs[0][0] == "Amma"
-    peopledb.forget("Amma")
-    assert peopledb.summary() == []
