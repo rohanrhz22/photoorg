@@ -1289,6 +1289,39 @@ def _resume_pending():
             continue
 
 
+# --------------------------------------------------------------------------
+# Always-on relay: runtime manager (Phase 3-5 desktop control)
+# --------------------------------------------------------------------------
+_RELAY = {"on": False, "base": None, "event": None, "key": None, "name": None,
+          "root": None, "tier_b": False, "expires_at": 0, "guest_url": None,
+          "error": None, "stop": None, "thread": None}
+_RELAY_CFG = os.path.join(os.path.expanduser("~"), ".phorg", "relay_cfg.json")
+
+
+def _slug(s):
+    import re
+    s = re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")
+    return s[:32] or "event"
+
+
+def _relay_load_cfg():
+    try:
+        with open(_RELAY_CFG, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _relay_save_cfg(cfg):
+    try:
+        os.makedirs(os.path.dirname(_RELAY_CFG), exist_ok=True)
+        with open(_RELAY_CFG, "w", encoding="utf-8") as f:
+            json.dump(cfg, f)
+    except OSError:
+        pass
+
+
 def _relay_build_matcher(root, threshold=0.44):
     """Build a matcher for the relay sync loop: given a guest's selfie bytes,
     run local face matching over *root* and return the delivered photos as
@@ -1330,22 +1363,26 @@ def _relay_build_matcher(root, threshold=0.44):
     return matcher
 
 
-def _relay_loop(base, event_id, key, name, root, interval=20):
-    """Opt-in background loop: keep the event published on the always-on relay
-    and drain queued guest sign-ups by matching them locally.  Enabled via the
-    PHORG_RELAY_* environment variables (see serve())."""
+def _relay_loop(base, event_id, key, name, root, interval=20,
+                stop=None, tier_b=None):
+    """Background loop: keep the event published on the always-on relay and
+    drain queued guest sign-ups by matching them locally.  Stops when *stop*
+    is set."""
     from . import vision, relay_client
     if vision.check_deps():
+        _RELAY["error"] = "AI tools not installed"
         return
+    if tier_b is None:
+        tier_b = str(os.environ.get("PHORG_RELAY_TIER_B", "")).lower() \
+            not in ("", "0", "false", "no")
     try:
         relay_client.publish_event(base, event_id, name, key)
-    except Exception:
-        pass
-    tier_b = str(os.environ.get("PHORG_RELAY_TIER_B", "")).lower() \
-        not in ("", "0", "false", "no")
+        _RELAY["error"] = None
+    except Exception as e:
+        _RELAY["error"] = f"connect failed: {e}"
     matcher = _relay_build_matcher(root)
     i = 0
-    while True:
+    while not (stop and stop.is_set()):
         if tier_b and i % 15 == 0:      # refresh the instant-match index
             try:
                 _relay_publish_index(base, event_id, key, root)
@@ -1353,10 +1390,14 @@ def _relay_loop(base, event_id, key, name, root, interval=20):
                 pass
         try:
             relay_client.sync_once(base, event_id, key, matcher)
-        except Exception:
-            pass
+            _RELAY["error"] = None
+        except Exception as e:
+            _RELAY["error"] = str(e)[:200]
         i += 1
-        time.sleep(max(5, interval))
+        for _ in range(int(max(5, interval))):   # responsive to stop
+            if stop and stop.is_set():
+                break
+            time.sleep(1)
 
 
 def _relay_publish_index(base, event_id, key, root):
@@ -1411,6 +1452,120 @@ def _relay_publish_index(base, event_id, key, root):
             pass
 
 
+def _relay_stop():
+    st = _RELAY.get("stop")
+    if st:
+        st.set()
+    _RELAY["on"] = False
+
+
+def _relay_start(base, event, key, name, root, tier_b, expires_at=0):
+    from . import relay_client
+    _relay_stop()
+    stop = threading.Event()
+    _RELAY.update({"on": True, "base": base, "event": event, "key": key,
+                   "name": name, "root": root, "tier_b": bool(tier_b),
+                   "expires_at": int(expires_at or 0), "error": None,
+                   "guest_url": relay_client.guest_url(base, event),
+                   "stop": stop})
+    t = threading.Thread(target=_relay_loop, args=(base, event, key, name, root),
+                         kwargs={"stop": stop, "tier_b": bool(tier_b)},
+                         daemon=True)
+    _RELAY["thread"] = t
+    t.start()
+
+
+def api_relay_status(_p):
+    """Host-only: current relay state + live guest stats for the dashboard."""
+    on = bool(_RELAY.get("on"))
+    out = {"on": on, "base": _RELAY.get("base"), "event": _RELAY.get("event"),
+           "guest_url": _RELAY.get("guest_url"), "tier_b": _RELAY.get("tier_b"),
+           "expires_at": _RELAY.get("expires_at"), "error": _RELAY.get("error"),
+           "last": _relay_load_cfg(), "stats": None}
+    if on and _RELAY.get("base"):
+        try:
+            from . import relay_client
+            out["stats"] = relay_client.event_stats(
+                _RELAY["base"], _RELAY["event"], _RELAY["key"])
+        except Exception as e:
+            out["error"] = str(e)[:200]
+    return out
+
+
+def api_relay_enable(p):
+    """Host-only: connect the current shared event to an always-on relay."""
+    base = (p.get("base") or "").strip().rstrip("/")
+    if not base.startswith("http"):
+        raise ValueError("Enter the relay URL (https://\u2026).")
+    with _SHARE_LOCK:
+        root = _SHARE.get("root") if _SHARE.get("enabled") else None
+        ev_name = _SHARE.get("event") or "Our Event"
+    if not root:
+        raise ValueError("Turn on the guest portal first, then enable the relay.")
+    from . import vision, relay_client
+    if vision.check_deps() or not vision.cluster_api_available():
+        raise ValueError("Face matching needs the AI tools installed "
+                         "(click 'Install AI support' once).")
+    cfg = _relay_load_cfg()
+    # A stable event id + key per relay so re-enabling keeps the same guest link.
+    event_id = cfg.get("event") or (_slug(ev_name) + "-" + uuid.uuid4().hex[:6])
+    key = cfg.get("key") or uuid.uuid4().hex
+    tier_b = bool(p.get("tier_b"))
+    try:
+        exp_min = int(p.get("expiry_minutes") or 0)
+    except (TypeError, ValueError):
+        exp_min = 0
+    expires_at = int(time.time()) + exp_min * 60 if exp_min > 0 else 0
+    try:
+        relay_client.publish_event(base, event_id, ev_name, key)
+    except Exception as e:
+        raise ValueError(f"Couldn't reach the relay: {e}")
+    if expires_at:
+        try:
+            relay_client.set_lifecycle(base, event_id, key, expires_at)
+        except Exception:
+            pass
+    _relay_start(base, event_id, key, ev_name, root, tier_b, expires_at)
+    _relay_save_cfg({"base": base, "event": event_id, "key": key,
+                     "tier_b": tier_b})
+    return {"ok": True, "guest_url": _RELAY["guest_url"], "event": event_id,
+            "tier_b": tier_b, "expires_at": expires_at}
+
+
+def api_relay_disable(_p):
+    _relay_stop()
+    return {"ok": True, "on": False}
+
+
+def api_relay_delete(_p):
+    """Host-only: stop the relay and delete all guest data for this event."""
+    base, event, key = (_RELAY.get("base"), _RELAY.get("event"),
+                        _RELAY.get("key"))
+    if not (base and event and key):
+        cfg = _relay_load_cfg()
+        base = base or cfg.get("base")
+        event = event or cfg.get("event")
+        key = key or cfg.get("key")
+    _relay_stop()
+    if base and event and key:
+        try:
+            from . import relay_client
+            relay_client.delete_event(base, event, key)
+        except Exception:
+            pass
+    return {"ok": True}
+
+
+# Registered here (not in the ROUTES literal) because these handlers are defined
+# after ROUTES.  Host-only: never added to _GUEST_ROUTES.
+ROUTES.update({
+    "/api/share/relay/status": api_relay_status,
+    "/api/share/relay/enable": api_relay_enable,
+    "/api/share/relay/disable": api_relay_disable,
+    "/api/share/relay/delete": api_relay_delete,
+})
+
+
 def serve(host="127.0.0.1", port=8765, open_browser=True):
     global _SERVER_PORT
     # Durable guest queue: create the store, drop stale sign-ups, and resume any
@@ -1442,9 +1597,10 @@ def serve(host="127.0.0.1", port=8765, open_browser=True):
     _rr = os.environ.get("PHORG_RELAY_ROOT")
     if _rb and _re and _rk and _rr and os.path.isdir(_rr):
         _rn = os.environ.get("PHORG_RELAY_NAME", "Our Event")
+        _tb = str(os.environ.get("PHORG_RELAY_TIER_B", "")).lower() \
+            not in ("", "0", "false", "no")
         print(f"  Relay sync ON → {_rb} (event {_re})\n")
-        threading.Thread(target=_relay_loop,
-                         args=(_rb, _re, _rk, _rn, _rr), daemon=True).start()
+        _relay_start(_rb, _re, _rk, _rn, _rr, _tb)
     if open_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:

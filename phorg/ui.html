@@ -567,6 +567,8 @@ async function refreshShareBox(){
         <div class="ends"><span>Looser — more photos</span><span>Stricter — only sure matches</span></div>
         <div class="subhint">Getting wrong people? Slide toward <b>Stricter</b>.</div>
       </div>
+      <div class="sect-t" style="margin-top:14px">☁️ Always-on cloud relay</div>
+      <div id="relayBox"><div class="subhint">Loading…</div></div>
       <div class="sect-t" style="margin-top:12px">👥 Guests who’ve searched <span id="guestCount" style="color:var(--mut)"></span></div>
       <div id="guestList"><div class="subhint">No one yet.</div></div>
       <div class="btn-row"><button class="btn warn" id="shareStop">⏹️ Stop sharing</button></div>`;
@@ -594,6 +596,7 @@ async function refreshShareBox(){
         toast("Strictness updated","good");}catch(err){toast(err.message,"bad");}};
     }
     pollGuests();
+    renderRelayBox();
   }else{
     const last=st.last||{};
     if(!S.shareEvent&&last.event)S.shareEvent=last.event;
@@ -674,6 +677,59 @@ function renderGuestList(d){
   list.querySelectorAll(".gPrevBtn").forEach(b=>b.onclick=()=>{
     const j=b.dataset.job;GUEST_OPEN.has(j)?GUEST_OPEN.delete(j):GUEST_OPEN.add(j);
     renderGuestList(d);});
+}
+function statCell(label,v){return `<div style="background:#0d1424;border:1px solid #23324e;border-radius:10px;padding:8px;text-align:center">
+  <div style="font-size:1.2rem;font-weight:700">${v==null?"—":num(v)}</div><div style="color:var(--mut);font-size:11px">${esc(label)}</div></div>`;}
+async function renderRelayBox(){
+  const box=$("#relayBox");if(!box)return;
+  let d;try{d=await api("share/relay/status",{});}catch(e){d={on:false};}
+  const last=d.last||{};
+  if(d.on){
+    const s=d.stats||{};
+    const exp=d.expires_at?`<div class="subhint">⏳ Auto-deletes: <b>${esc(new Date(d.expires_at*1000).toLocaleString())}</b></div>`:"";
+    box.innerHTML=`<div class="callout safe" style="margin-top:6px">🟢 Relay is ON — guests can find their photos even after you close the app.</div>
+      <div class="row" style="margin-top:8px"><input readonly value="${esc(d.guest_url||"")}" style="flex:1;min-width:0"/>
+        <button class="btn ghost sm" data-copy="${esc(d.guest_url||"")}">Copy</button></div>
+      <div id="relayQr" style="text-align:center;margin-top:8px"></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px">
+        ${statCell("Registered",s.registrations)}${statCell("Matched",s.matched)}${statCell("Pending",s.pending)}${statCell("Indexed",s.photos)}</div>
+      ${d.tier_b?`<div class="subhint" style="margin-top:8px">⚡ Instant matching ON — face data + previews are uploaded to the relay.</div>`:`<div class="subhint" style="margin-top:8px">🔒 Strict mode — face matching stays on this PC.</div>`}
+      ${exp}
+      ${d.error?`<div class="callout warn" style="margin-top:8px">⚠️ ${esc(d.error)}</div>`:""}
+      <div class="btn-row"><button class="btn ghost sm" id="relayOff">⏹️ Turn off relay</button>
+        <button class="btn warn sm" id="relayDel">🗑️ Delete guest data</button></div>`;
+    box.querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>{
+      navigator.clipboard.writeText(b.dataset.copy).then(()=>toast("Link copied","good")).catch(()=>toast("Copy manually","bad"));});
+    if(d.guest_url&&typeof renderQR==="function")renderQR($("#relayQr"),d.guest_url,5,2,"H");
+    $("#relayOff").onclick=async e=>{busy(e.target,true,"Turning off…");
+      try{await api("share/relay/disable",{});toast("Relay turned off","good");}catch(err){toast(err.message,"bad");}
+      renderRelayBox();};
+    $("#relayDel").onclick=async e=>{
+      if(!confirm("Delete all guest sign-ups and photos from the relay? This can't be undone."))return;
+      busy(e.target,true,"Deleting…");
+      try{await api("share/relay/delete",{});toast("Guest data deleted","good");}catch(err){toast(err.message,"bad");}
+      renderRelayBox();};
+    clearTimeout(S._relayPoll);
+    if($("#relayBox"))S._relayPoll=setTimeout(renderRelayBox,6000);
+  }else{
+    box.innerHTML=`<div class="subhint">Point at a relay you run so the guest link stays live 24×7 — even after you close the app.</div>
+      <label class="fld" style="margin-top:8px">Relay URL</label>
+      <input type="text" id="relayUrl" placeholder="https://your-relay.example.com" value="${esc(last.base||"")}"/>
+      <label class="toggle" style="margin-top:10px"><input type="checkbox" id="relayTierB" ${last.tier_b?"checked":""}/>
+        <span class="tk"></span><span>⚡ Instant matching<span class="desc"> — uploads face data + previews so guests get results while your PC is off</span></span></label>
+      <label class="fld" style="margin-top:10px">⏳ Auto-delete guest data</label>
+      <select id="relayExpiry"><option value="0">Never</option><option value="1440">After 1 day</option><option value="4320">After 3 days</option><option value="10080">After 7 days</option></select>
+      <div class="btn-row"><button class="btn" id="relayOn">☁️ Enable relay</button></div>
+      ${d.error?`<div class="callout warn" style="margin-top:8px">⚠️ ${esc(d.error)}</div>`:""}`;
+    $("#relayOn").onclick=async e=>{
+      const base=($("#relayUrl").value||"").trim();
+      if(!base){toast("Enter the relay URL first","bad");return;}
+      const tier_b=$("#relayTierB").checked;const expiry_minutes=+($("#relayExpiry").value||0);
+      busy(e.target,true,"Connecting…");
+      try{await api("share/relay/enable",{base,tier_b,expiry_minutes});toast("Relay is live","good");}
+      catch(err){toast(err.message,"bad");}
+      renderRelayBox();};
+  }
 }
 // ---- guest portal (opened via ?g=<token> on a phone) ----
 async function initGuestPortal(token){
