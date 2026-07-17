@@ -657,11 +657,19 @@ function renderGuestList(d){
     const prevBtn=canPrev?`<button class="btn ghost sm gPrevBtn" data-job="${esc(g.job)}">${open?"✕ Hide":"👁 Preview"}</button>`:"";
     const grid=open?`<div class="thumbgrid" style="margin-top:10px">${g.matches.map(p=>`<a class="thumb" href="/api/download?path=${encodeURIComponent(p)}" download>
       <img loading="lazy" src="/api/thumb?size=300&path=${encodeURIComponent(p)}" alt=""/><div class="nm">⬇️ download</div></a>`).join("")}</div>`:"";
+    let deliver="";
+    if(g.contact){
+      const ok=g.notified==="sent";
+      const tried=g.done&&g.count>0;
+      const badge=ok?`<span style="color:var(--good)">✅ sent</span>`
+        :(tried?`<span style="color:var(--warn)" title="${esc(g.notified||"")}">✉️ not sent</span>`:"");
+      deliver=`<div class="ht" style="margin-top:3px">✉️ ${esc(g.contact)} ${badge}</div>`;
+    }
     return `<div class="histrow" style="display:block">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
         <span class="hl">🙂 <b>${esc(g.name)}</b> <span class="ht">· ${time}</span></span>
         <span style="color:var(--mut);display:flex;gap:10px;align-items:center">${right}${prevBtn}</span>
-      </div>${grid}</div>`;
+      </div>${deliver}${grid}</div>`;
   }).join("");
   list.querySelectorAll(".gPrevBtn").forEach(b=>b.onclick=()=>{
     const j=b.dataset.job;GUEST_OPEN.has(j)?GUEST_OPEN.delete(j):GUEST_OPEN.add(j);
@@ -687,6 +695,33 @@ async function initGuestPortal(token){
     });
   }
   renderGuestPortal();
+}
+// Reopen a saved album from a signed link (?a=rid.token). Works any time the
+// host is sharing, even after the app was restarted (durable registrations).
+async function initGuestAlbum(ref){
+  const main=$("#main");
+  let d;try{d=await api("share/album",{a:ref});}catch(e){d=null;}
+  if(!d){
+    main.innerHTML=`<div class="page" style="max-width:560px;margin:24px auto"><div class="card">
+      <div class="callout warn">🔗 This album link isn't available right now. The host may have stopped sharing — please try again later.</div></div></div>`;
+    return;}
+  const m=d.matches||[];
+  const nm=(d.name&&d.name!=="Guest")?(", "+esc(d.name)):"";
+  main.innerHTML=`<div class="page" style="max-width:620px;margin:18px auto">
+    <div class="brand"><img class="brandlogo" src="/logo.png" alt="Hapzea"/><span class="brandbadge">FaceFind</span></div>
+    <h1>📸 ${esc(d.event||"Your photos")}</h1>
+    <p class="lead">Your private album${nm} — tap any photo to download.</p>
+    ${m.length?`<div class="callout safe">✅ Found <b>${num(m.length)}</b> photo(s) you're in.</div>
+      <div class="btn-row"><a class="btn" href="/api/download/zip?a=${encodeURIComponent(ref)}" download>⬇️ Download all (${num(m.length)})</a></div>
+      <div class="thumbgrid">${m.map((x,i)=>`<div class="thumb" data-ai="${i}">
+        <button class="zoom" data-az="${i}" aria-label="Zoom">⤢</button>
+        <a href="/api/download?path=${encodeURIComponent(x.path)}" download>
+          <img loading="lazy" src="/api/thumb?size=400&path=${encodeURIComponent(x.path)}" alt=""/>
+          <div class="nm">⬇️ download</div></a></div>`).join("")}</div>`
+      :`<div class="callout info">Your photos aren't ready yet, or none were found. Please check back a little later.</div>`}
+    </div>`;
+  main.querySelectorAll("[data-az]").forEach(z=>z.onclick=e=>{e.preventDefault();e.stopPropagation();
+    openLightbox(m,+z.dataset.az);});
 }
 function renderGuestPin(token){
   const main=$("#main");
@@ -724,6 +759,8 @@ function renderGuestPortal(){
     <div class="card">
       <label class="fld">Your name (optional)</label>
       <input type="text" id="gName" placeholder="e.g. Anjali"/>
+      <label class="fld" style="margin-top:12px">Email or phone <span style="color:var(--mut2);font-weight:400">— optional, so we can send your photos if you leave</span></label>
+      <input type="text" id="gContact" placeholder="you@email.com"/>
       <label class="fld" style="margin-top:12px">Your selfie <span style="color:var(--mut2);font-weight:400">— add up to 3 for better accuracy</span></label>
       <div class="selfies" id="gSelfies"></div>
       <div class="btn-row" style="margin-top:12px"><button class="btn ghost sm" id="gCam">📷 Use camera</button></div>
@@ -815,8 +852,8 @@ async function guestFind(e){
   const prog=$("#gProgress");$("#gOut").innerHTML="";
   try{
     const d=await api("share/find/start",{token:S.guestToken,selfies:S.guestSelfies,pin:S.guestPin||"",
-      name:($("#gName")?$("#gName").value:""),cid:guestCid()});
-    S.gJob=d.jobId;
+      name:($("#gName")?$("#gName").value:""),contact:($("#gContact")?$("#gContact").value:""),cid:guestCid()});
+    S.gJob=d.jobId;S.gRid=d.rid;S.gAtoken=d.atoken;
     prog.innerHTML=`<div class="preview" style="margin-top:14px"><div class="ph"><div class="chips" id="gTally"><span class="chip">Starting…</span></div></div>
       <div style="padding:14px 18px"><div class="track" style="display:block;height:14px;border-radius:8px;background:#0d1424;border:1px solid #23324e;overflow:hidden">
         <div id="gBar" class="fill" style="display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
@@ -864,6 +901,14 @@ async function guestPoll(btn){
     {title:S.guestEvent,text:"Find your photos from "+S.guestEvent,url:location.href}).catch(()=>{});}
   $("#gOut").querySelectorAll("[data-gz]").forEach(z=>z.onclick=e=>{e.preventDefault();e.stopPropagation();
     openLightbox(m,+z.dataset.gz);});
+  if(S.gRid&&S.gAtoken){
+    const link=location.origin+"/?a="+S.gRid+"."+S.gAtoken;
+    $("#gOut").insertAdjacentHTML("beforeend",
+      `<div class="callout info" style="margin-top:12px">🔖 Save your private album link to come back anytime:
+        <div class="btn-row" style="margin-top:8px"><input id="gLink" readonly value="${esc(link)}" style="flex:1;min-width:0"/>
+        <button class="btn ghost sm" id="gCopy">Copy</button></div></div>`);
+    const cp=$("#gCopy");if(cp)cp.onclick=()=>{try{navigator.clipboard.writeText(link);toast("Link copied","good");}catch(e){const i=$("#gLink");if(i){i.select();document.execCommand("copy");toast("Link copied","good");}}};
+  }
 }
 
 function ffStrictLabel(v){return v<=36?"Looser":v>=46?"Strict":"Balanced";}
@@ -1104,7 +1149,10 @@ function maybeOnboard(){
 
 // ---------------------------------------------------------------- boot
 const _guestToken=new URLSearchParams(location.search).get("g");
-if(_guestToken){
+const _albumRef=new URLSearchParams(location.search).get("a");
+if(_albumRef){
+  setTimeout(()=>initGuestAlbum(_albumRef),40);
+}else if(_guestToken){
   setTimeout(()=>initGuestPortal(_guestToken),40);
 }else{
   try{const lr=localStorage.getItem("phorg-lastroot");if(lr)S.root=lr;}catch(e){}

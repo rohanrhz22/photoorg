@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FaceFind — Always-On Availability: serving guests who register during & after the event</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#121a33; --card:#161f3d; --card2:#1c2850;
+    --ink:#e8ecf8; --muted:#9aa6c7; --line:#28345c;
+    --accent:#6ea8fe; --accent2:#7ef0c2; --accent3:#ffb86b; --accent4:#ff7b9c; --accent5:#c58bff;
+    --good:#39d98a; --bad:#ff6b6b; --warn:#ffcf5c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b1020,#0d1226 60%,#0b0f1e);color:var(--ink);line-height:1.55}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 22px 80px}
+  header.hero{padding:46px 34px;border-radius:20px;background:radial-gradient(1200px 400px at 10% -10%,rgba(110,168,254,.25),transparent),radial-gradient(900px 400px at 100% 0%,rgba(126,240,194,.18),transparent),var(--card);border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  header.hero h1{margin:0 0 10px;font-size:2.05rem;line-height:1.2}
+  header.hero p{margin:6px 0;color:var(--muted);max-width:880px}
+  .tagpills{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px}
+  .pill{font-size:.78rem;padding:6px 12px;border-radius:999px;background:var(--card2);border:1px solid var(--line);color:var(--ink)}
+  h2{margin:46px 0 8px;font-size:1.5rem;border-left:4px solid var(--accent);padding-left:12px}
+  h3{margin:26px 0 8px;font-size:1.15rem;color:#dfe6fb}
+  p.lead{color:var(--muted)}
+  section{scroll-margin-top:20px}
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:900px){.g2,.g3,.g4{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .kpi{display:flex;flex-direction:column;gap:4px}
+  .kpi .num{font-size:1.6rem;font-weight:700}
+  .kpi .lbl{color:var(--muted);font-size:.86rem}
+  .kpi .sub{font-size:.78rem;color:var(--accent2)}
+  .chartbox{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 8px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .chartbox h3{margin-top:4px}
+  .chartbox .cap{color:var(--muted);font-size:.8rem;margin:2px 0 12px}
+  canvas{max-height:340px}
+  table{width:100%;border-collapse:collapse;font-size:.92rem;margin-top:8px;overflow:hidden;border-radius:12px}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--card2);color:#dbe4ff;font-weight:600}
+  tr:hover td{background:rgba(110,168,254,.06)}
+  .good{color:var(--good);font-weight:600}
+  .bad{color:var(--bad);font-weight:600}
+  .warn{color:var(--warn);font-weight:600}
+  .muted{color:var(--muted)}
+  code{background:#0d1424;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:.86em;color:#cfe0ff}
+  pre{background:#0d1424;border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow:auto;font-size:.82rem;line-height:1.5;color:#cfe0ff}
+  pre .c{color:#7f8db3}
+  ul.clean{margin:8px 0;padding-left:20px}
+  ul.clean li{margin:6px 0}
+  .verdict{background:linear-gradient(135deg,rgba(126,240,194,.14),rgba(110,168,254,.14));border:1px solid var(--line);border-radius:18px;padding:26px}
+  .note{font-size:.82rem;color:var(--muted);background:var(--bg2);border:1px dashed var(--line);border-radius:12px;padding:14px;margin-top:14px}
+  .toc{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .toc a{font-size:.85rem;color:var(--ink);background:var(--card2);border:1px solid var(--line);padding:7px 12px;border-radius:10px;text-decoration:none}
+  .toc a:hover{border-color:var(--accent)}
+  .badge{display:inline-block;font-size:.72rem;padding:3px 8px;border-radius:6px;background:var(--card2);border:1px solid var(--line);color:var(--muted);margin-left:6px}
+  .badge.win{background:rgba(57,217,138,.14);border-color:rgba(57,217,138,.4);color:var(--good)}
+  .badge.rec{background:rgba(197,139,255,.16);border-color:rgba(197,139,255,.45);color:#d9b8ff}
+  .step{display:flex;gap:14px;margin:14px 0;align-items:flex-start}
+  .step .sn{flex:0 0 34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent5));color:#0b1020}
+  .step .sc h4{margin:3px 0 4px;font-size:1.02rem}
+  .step .sc p{margin:0;color:var(--muted);font-size:.9rem}
+  .yn{font-weight:700}
+  .yn.y{color:var(--good)} .yn.n{color:var(--bad)} .yn.p{color:var(--warn)}
+  /* architecture diagram */
+  .arch{display:grid;grid-template-columns:1fr 40px 1.15fr 40px 1fr;align-items:stretch;gap:0;margin-top:10px}
+  @media(max-width:900px){.arch{grid-template-columns:1fr}}
+  .node{background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .node h4{margin:0 0 6px;font-size:1rem}
+  .node .tag{font-size:.72rem;color:var(--muted)}
+  .node ul{margin:8px 0 0;padding-left:18px}
+  .node li{font-size:.82rem;color:var(--muted);margin:4px 0}
+  .node.on{border-color:rgba(57,217,138,.5);box-shadow:0 0 0 1px rgba(57,217,138,.2) inset}
+  .node.host{border-color:rgba(110,168,254,.5)}
+  .arrow{display:grid;place-items:center;color:var(--accent);font-size:1.4rem;font-weight:700}
+  @media(max-width:900px){.arrow{padding:6px 0;transform:rotate(90deg)}}
+  .lgd{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:.8rem;color:var(--muted)}
+  .lgd span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  footer{margin-top:50px;color:var(--muted);font-size:.82rem;border-top:1px solid var(--line);padding-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>🕒 FaceFind — Always-On Availability</h1>
+    <p>How to keep the guest portal working <strong>during the event and days after</strong> — when guests keep registering their faces but the photographer's PC gets shut down. Complete analysis: the problem, the options, the recommended architecture, how to implement it on the existing code, security, cost and a rollout plan.</p>
+    <div class="tagpills">
+      <span class="pill">Problem: host PC isn't always on</span>
+      <span class="pill">Guests register late (T+1 day)</span>
+      <span class="pill">Fix: decouple register from match</span>
+      <span class="pill">Keep matching local &amp; private</span>
+    </div>
+    <div class="toc">
+      <a href="#problem">The problem</a>
+      <a href="#today">What happens today</a>
+      <a href="#insight">Key insight</a>
+      <a href="#options">Solution options</a>
+      <a href="#compare">Comparison</a>
+      <a href="#arch" style="border-color:var(--accent5);background:rgba(197,139,255,.12)">⭐ Recommended</a>
+      <a href="#persist">Never lose a signup</a>
+      <a href="#deliver">Async delivery</a>
+      <a href="#impl">Implementation</a>
+      <a href="#privacy">Security</a>
+      <a href="#cost">Cost</a>
+      <a href="#verdict">Verdict</a>
+    </div>
+  </header>
+
+  <!-- ============ PROBLEM ============ -->
+  <section id="problem">
+    <h2>1 · The problem — the availability window</h2>
+    <p class="lead">A wedding isn't a single moment. Guests scan your QR and add a selfie <strong>throughout the event and for days afterward</strong> — on the drive home, the next morning, when a relative forwards them the link. But FaceFind's engine runs on the photographer's laptop, and that laptop <strong>gets closed, sleeps, moves networks, or is powered off.</strong></p>
+    <div class="grid g4">
+      <div class="card kpi"><span class="num">3–7 days</span><span class="lbl">Typical tail of late signups</span><span class="sub">after the event ends</span></div>
+      <div class="card kpi"><span class="num">~40%</span><span class="lbl">Guests who register after day 0</span><span class="sub">illustrative, event-dependent</span></div>
+      <div class="card kpi"><span class="num">0</span><span class="lbl">Matches served while PC is off</span><span class="sub">link is simply dead</span></div>
+      <div class="card kpi"><span class="num">1 tiny</span><span class="lbl">Always-on piece you actually need</span><span class="sub">not the whole laptop</span></div>
+    </div>
+    <div class="note"><strong>The trap:</strong> the naive fix is "just leave the laptop running with the tunnel on for a week." That's fragile (sleep, Wi-Fi drops, updates, power, the photographer needs their machine back) and it ties up an expensive device. There's a much better way — and it keeps face matching on the PC where your privacy story lives.</div>
+  </section>
+
+  <!-- ============ TODAY ============ -->
+  <section id="today">
+    <h2>2 · What happens today when the PC shuts down</h2>
+    <p class="lead">Grounded in the current code, here is the exact failure chain — and which parts are already safe.</p>
+    <div class="chartbox" style="padding:0;overflow:hidden">
+      <table style="margin:0">
+        <thead><tr><th>On shutdown / sleep</th><th>What happens now</th><th>Impact</th></tr></thead>
+        <tbody>
+          <tr><td>Local HTTP server (<code>server.py</code>) stops</td><td>Guest portal endpoints stop answering</td><td class="bad">Link returns an error — no registration, no matches</td></tr>
+          <tr><td>Cloudflare tunnel (<code>tunnel.py</code>) is torn down</td><td>Public <code>*.trycloudflare.com</code> URL dies</td><td class="bad">The QR everyone scanned now points nowhere</td></tr>
+          <tr><td>In-memory guest list (<code>_SHARE["guests"]</code>)</td><td>Held in RAM — lost on exit</td><td class="bad">Who registered &amp; what they matched is forgotten</td></tr>
+          <tr><td>Running match jobs (<code>_JOBS</code>)</td><td>In-memory — lost on exit</td><td class="bad">In-flight searches vanish; no resume</td></tr>
+          <tr><td>Last share <em>config</em> (<code>~/.phorg/share_last.json</code>)</td><td>Event name + folder + options persisted</td><td class="warn">Re-enabling is one click — but the <em>data</em> isn't kept</td></tr>
+          <tr><td>Per-folder embedding cache (<code>hashcache.py</code>)</td><td>Persisted on disk</td><td class="good">Re-scans are fast — good foundation to build on</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><strong>Takeaway:</strong> two things are missing — <strong>(a) an always-on endpoint</strong> so the link never dies, and <strong>(b) durable storage of registrations</strong> so nothing is lost when the app closes. The embedding cache already proves the pattern: heavy work computed once, saved to disk, reused later.</div>
+  </section>
+
+  <!-- ============ INSIGHT ============ -->
+  <section id="insight">
+    <h2>3 · The key insight — split "register" from "match"</h2>
+    <p class="lead">Guests do <strong>two different things</strong>, and they have completely different availability needs. Treating them as one is why the naive "keep the PC on" approach feels forced.</p>
+    <div class="grid g2">
+      <div class="card"><h3>📝 Register (must be always-on)</h3><p class="muted">Submitting a selfie + a way to reach them (email / phone). This is tiny — a few KB — and must accept input <strong>24×7</strong>, including when the host PC is off. It never needs heavy compute.</p></div>
+      <div class="card"><h3>🧠 Match (can be deferred)</h3><p class="muted">Scanning thousands of photos for that face is heavy and can run on the PC <strong>whenever it's next online</strong>. Guests don't need it <em>instantly</em> — they're fine with "we'll text you when your photos are ready."</p></div>
+    </div>
+    <div class="note"><strong>Design rule:</strong> put only the <em>cheap, always-on</em> part (registration + delivery) on an always-on endpoint; keep the <em>heavy, private</em> part (face matching) on the PC, processed asynchronously and delivered by notification. This gives always-on availability at almost no cost — without the privacy or expense of a full cloud SaaS.</div>
+  </section>
+
+  <!-- ============ TIMELINE CHART ============ -->
+  <section>
+    <div class="chartbox">
+      <h3>Why "always-on" matters — when guests actually register</h3>
+      <p class="cap">Illustrative distribution of guest sign-ups over time for a wedding. A large share arrives <em>after</em> the photographer has gone home and shut the laptop — exactly the window that's dead today.</p>
+      <canvas id="chArrivals"></canvas>
+    </div>
+  </section>
+
+  <!-- ============ OPTIONS ============ -->
+  <section id="options">
+    <h2>4 · The solution options</h2>
+    <p class="lead">Six realistic approaches, from "change nothing" to "full cloud." They stack — the recommended answer combines a couple of them.</p>
+
+    <div class="grid g2">
+      <div class="card"><h3>① Keep the host on longer (baseline)</h3>
+        <p class="muted">Leave the PC awake with the tunnel on for the event window.</p>
+        <p><span class="yn n">Weak.</span> Fragile, ties up the machine, dies on sleep/reboot. Fine only as a same-day stopgap. Improve slightly with a keep-awake toggle + auto-restart of sharing on launch.</p>
+      </div>
+      <div class="card"><h3>② Dedicated always-on appliance</h3>
+        <p class="muted">A cheap mini-PC / NUC / Raspberry Pi that hosts the portal for the event, so the photographer keeps their laptop.</p>
+        <p><span class="yn p">OK.</span> Keeps everything local &amp; private, always on. But it's hardware to buy, set up and secure per photographer — doesn't scale to a product easily.</p>
+      </div>
+      <div class="card" style="border-color:rgba(197,139,255,.4)"><h3>③ Always-on relay + store-and-forward <span class="badge rec">core of the pick</span></h3>
+        <p class="muted">A <em>tiny</em> always-on cloud service hosts the stable guest link and <strong>queues registrations</strong> when the PC is offline. The PC drains the queue and delivers results when it next comes online.</p>
+        <p><span class="yn y">Strong.</span> Always-on availability, matching stays on the PC (private), pennies to run. The registration data is safe even with the laptop shut.</p>
+      </div>
+      <div class="card" style="border-color:rgba(197,139,255,.4)"><h3>④ Embeddings-in-relay for instant matches <span class="badge rec">optional add-on</span></h3>
+        <p class="muted">The PC (while online) publishes <strong>face embeddings + low-res thumbnails</strong> — not the original photos — to the relay. Now the relay can match <em>and</em> preview instantly, even while the PC is off.</p>
+        <p><span class="yn y">Strong UX.</span> Instant results anytime; full-resolution downloads still come from the PC (or a short-lived cache). Embeddings are vectors, not viewable photos — privacy stays high.</p>
+      </div>
+      <div class="card"><h3>⑤ Time-boxed cloud gallery</h3>
+        <p class="muted">Publish the whole event to a temporary cloud instance that auto-expires (e.g. 7–30 days) — the FotoOwl model, but opt-in and self-deleting.</p>
+        <p><span class="yn p">Best UX, weakest privacy.</span> Full photos live in the cloud for the window. Offer only as a premium convenience tier for hosts who accept the trade.</p>
+      </div>
+      <div class="card"><h3>⑥ Scheduled availability windows</h3>
+        <p class="muted">Advertise "gallery open 7–10pm daily"; queue registrations the rest of the time and process in the window.</p>
+        <p><span class="yn p">Cheap fallback.</span> Works with just option ③'s queue and zero embeddings in cloud. Lower expectations, but honest and simple.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ COMPARE ============ -->
+  <section id="compare">
+    <h2>5 · Comparison at a glance</h2>
+    <div class="chartbox" style="padding:0;overflow:hidden">
+      <table style="margin:0">
+        <thead><tr><th>Option</th><th>Always-on?</th><th>Instant match?</th><th>Privacy</th><th>Cost / effort</th><th>Scales as a product?</th></tr></thead>
+        <tbody>
+          <tr><td>① Keep PC on</td><td class="bad">✗ fragile</td><td class="warn">△ only while up</td><td class="good">✔ full local</td><td class="good">₹0</td><td class="bad">✗</td></tr>
+          <tr><td>② Mini-PC appliance</td><td><span class="yn y">✔</span></td><td><span class="yn y">✔</span></td><td class="good">✔ full local</td><td class="warn">hardware</td><td class="bad">✗ per-unit</td></tr>
+          <tr><td><strong>③ Relay + store-forward</strong></td><td><span class="yn y">✔</span></td><td class="warn">△ deferred + notify</td><td class="good">✔ match stays local</td><td class="good">~₹400–800/mo</td><td><span class="yn y">✔</span></td></tr>
+          <tr><td><strong>④ + embeddings in relay</strong></td><td><span class="yn y">✔</span></td><td><span class="yn y">✔</span></td><td class="warn">△ vectors+thumbs only</td><td class="warn">+storage</td><td><span class="yn y">✔</span></td></tr>
+          <tr><td>⑤ Time-boxed cloud</td><td><span class="yn y">✔</span></td><td><span class="yn y">✔</span></td><td class="bad">✗ photos in cloud</td><td class="bad">GPU+storage</td><td><span class="yn y">✔</span></td></tr>
+          <tr><td>⑥ Scheduled windows</td><td class="warn">△ queue only</td><td class="bad">✗ batched</td><td class="good">✔ full local</td><td class="good">~₹400/mo</td><td><span class="yn y">✔</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><strong>Reading it:</strong> ③ is the durable backbone (always-on, private, cheap, productisable). ④ layers on top for instant results when a host opts in. ⑤ is a premium tier for convenience-first customers. ① and ⑥ are honest stopgaps for day one.</div>
+  </section>
+
+  <!-- ============ RECOMMENDED ARCH ============ -->
+  <section id="arch">
+    <div style="height:2px;background:linear-gradient(90deg,transparent,var(--accent5),transparent);margin:56px 0 0"></div>
+    <h2 style="border-color:var(--accent5)">6 · Recommended architecture ⭐</h2>
+    <p class="lead"><strong>Always-on relay + local engine, with two privacy tiers.</strong> A tiny always-on relay owns the stable link and the registration queue; the photographer's PC does the heavy, private matching whenever it's online and delivers results by notification. Hosts who want instant results opt into publishing embeddings + thumbnails.</p>
+
+    <div class="arch">
+      <div class="node">
+        <h4>📱 Guest (phone, PWA)</h4>
+        <span class="tag">any phone · anytime</span>
+        <ul>
+          <li>Scan QR → open stable link</li>
+          <li>Add 1–3 selfies + email/phone</li>
+          <li>Instant preview <em>if</em> tier B</li>
+          <li>Else: “we’ll notify you” → gets a text/email later</li>
+        </ul>
+      </div>
+      <div class="arrow">⇄</div>
+      <div class="node on">
+        <h4>☁️ Relay <span class="badge win">always on</span></h4>
+        <span class="tag">~₹400–800/mo · tiny VPS or serverless + object store</span>
+        <ul>
+          <li>Serves the stable branded URL (replaces throwaway tunnel)</li>
+          <li><strong>Queues registrations</strong> durably (works while PC off)</li>
+          <li>Sends notifications (email / WhatsApp) with signed links</li>
+          <li><strong>Tier B only:</strong> holds embeddings + thumbnails → instant match &amp; preview</li>
+        </ul>
+      </div>
+      <div class="arrow">⇄</div>
+      <div class="node host">
+        <h4>🖥️ Photographer PC (engine)</h4>
+        <span class="tag">online when convenient</span>
+        <ul>
+          <li>Pulls queued registrations</li>
+          <li>Runs face matching locally (<code>vision.py</code>)</li>
+          <li>Pushes results + fires notifications</li>
+          <li><strong>Tier B:</strong> publishes embeddings + thumbnails (never full photos)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="lgd">
+      <span><span class="dot" style="background:var(--good)"></span> always-on, cheap</span>
+      <span><span class="dot" style="background:var(--accent)"></span> heavy compute, private, intermittent</span>
+      <span><span class="dot" style="background:var(--muted)"></span> raw full-res photos never leave the PC in Tier A</span>
+    </div>
+
+    <div class="grid g2" style="margin-top:18px">
+      <div class="card"><h3>🔒 Tier A — Strict (max privacy, default)</h3>
+        <p class="muted">Relay stores <strong>only</strong> registrations (selfie + contact), encrypted, with a TTL. <strong>All matching happens on the PC</strong> when it next comes online; guests are notified with a link to their album.</p>
+        <ul class="clean">
+          <li><span class="good">Pro:</span> no photos or embeddings ever sit in the cloud.</li>
+          <li><span class="warn">Con:</span> results aren't instant while the PC is off — guest gets a "ready soon" + a notification.</li>
+          <li><strong>Best for:</strong> privacy-sensitive events; your headline promise stays 100% true.</li>
+        </ul>
+      </div>
+      <div class="card"><h3>⚡ Tier B — Instant (best UX, opt-in)</h3>
+        <p class="muted">The PC also publishes <strong>face embeddings + low-res thumbnails</strong> to the relay. Guests get matches and previews instantly, anytime. Full-resolution downloads are pulled from the PC when online, or from a short-TTL encrypted cache.</p>
+        <ul class="clean">
+          <li><span class="good">Pro:</span> cloud-app instant UX, even at 2am with the laptop shut.</li>
+          <li><span class="warn">Con:</span> vectors + thumbnails live in the cloud (auto-expiring). Not the original photos.</li>
+          <li><strong>Best for:</strong> hosts who value speed and accept the (small, disclosed) trade.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="note"><strong>Why this is the answer to your exact question:</strong> when the PC shuts down mid-registration, nothing breaks — the relay keeps accepting selfies into a durable queue, and the moment the photographer reopens the app (or overnight, on a schedule) the backlog is matched and everyone is notified. No lost sign-ups, no dead link, and heavy compute never has to live in the cloud.</div>
+  </section>
+
+  <!-- ============ PERSISTENCE ============ -->
+  <section id="persist">
+    <h2>7 · Never lose a sign-up — durable registrations</h2>
+    <p class="lead">The first, cheapest win — even before you stand up a relay — is to <strong>stop keeping registrations in RAM.</strong> Persist them to disk the instant they arrive, and resume on next launch.</p>
+    <div class="grid g2">
+      <div class="card"><h3>What to store</h3>
+        <ul class="clean">
+          <li>A tiny SQLite DB, e.g. <code>~/.phorg/events/&lt;event&gt;.db</code></li>
+          <li><code>registrations</code>: id, name, contact, selfie blob (or path), status (<code>pending → matched → delivered</code>), created_at</li>
+          <li><code>results</code>: registration_id, matched photo paths, scores, album path</li>
+          <li>Reuse the existing per-folder embedding cache (<code>hashcache.py</code>) so re-scans stay fast</li>
+        </ul>
+      </div>
+      <div class="card"><h3>How it behaves</h3>
+        <ul class="clean">
+          <li>Selfie submitted → row written <strong>immediately</strong> (survives shutdown)</li>
+          <li>On app launch → load <code>pending</code> rows, resume matching automatically</li>
+          <li>Idempotent: re-running never double-delivers</li>
+          <li>Retention/TTL job purges the event after N days (privacy)</li>
+        </ul>
+      </div>
+    </div>
+    <pre><span class="c"># minimal schema — durable registration queue</span>
+CREATE TABLE registrations(
+  id         TEXT PRIMARY KEY,
+  event      TEXT,
+  name       TEXT,
+  contact    TEXT,          <span class="c">-- email or phone for notification</span>
+  selfie     BLOB,          <span class="c">-- or a path under ~/.phorg/events/&lt;event&gt;/</span>
+  status     TEXT DEFAULT 'pending',   <span class="c">-- pending|matched|delivered|expired</span>
+  created_at INTEGER,
+  matched_at INTEGER
+);
+CREATE TABLE results(
+  reg_id  TEXT, path TEXT, score REAL,
+  PRIMARY KEY(reg_id, path)
+);</pre>
+    <div class="note"><strong>This alone</strong> upgrades the current behaviour from "close the app = forget everyone" to "close the app = the queue waits, and processes when you reopen." It's a small, local change with no cloud required — the foundation everything else builds on.</div>
+  </section>
+
+  <!-- ============ DELIVERY ============ -->
+  <section id="deliver">
+    <h2>8 · Async delivery — how the guest gets told</h2>
+    <p class="lead">If results aren't instant, the guest must be <strong>reached later</strong>. That contact field turns a dead link into a promise you keep.</p>
+    <div class="grid g3">
+      <div class="card"><h3>✉️ Email</h3><p class="muted">Cheapest, universal. Send "your photos from {event} are ready" with a secure, expiring link. Use a transactional provider (SES / Resend / Postmark).</p></div>
+      <div class="card"><h3>💬 WhatsApp</h3><p class="muted">Highest open rates in India. Use the WhatsApp Business API (or a click-to-chat + template) to deliver the album link — matches how the market already shares photos.</p></div>
+      <div class="card"><h3>🔔 Web push / SMS</h3><p class="muted">If the guest keeps the PWA open, web-push "your photos are ready." SMS as a fallback where WhatsApp isn't available.</p></div>
+    </div>
+    <div class="note"><strong>Link security:</strong> every delivery link is a signed, per-guest token with an expiry (mirror the existing guest-token model). It reveals only <em>that guest's</em> album — never the folder or other people's photos.</div>
+  </section>
+
+  <!-- ============ IMPLEMENTATION ============ -->
+  <section id="impl">
+    <h2>9 · How to implement it — mapped to the current code</h2>
+    <p class="lead">Phased, so each step ships value on its own. Nothing here throws away what exists; it extends <code>server.py</code>, <code>vision.py</code> and <code>tunnel.py</code>.</p>
+
+    <div class="card">
+      <div class="step"><div class="sn">1</div><div class="sc"><h4>Persist registrations locally (no cloud yet)</h4><p>Add the SQLite queue from §7. Write a row the moment a selfie hits <code>/api/share/find/start</code>; move <code>_SHARE["guests"]</code> and <code>_JOBS</code> state into it. On startup, reload <code>pending</code> and resume. <em>Result: shutdown no longer loses anyone.</em></p></div></div>
+      <div class="step"><div class="sn">2</div><div class="sc"><h4>Capture contact + add a delivery step</h4><p>Add name + email/phone to the guest form. When a match finishes, send the "ready" notification with a signed album link. <em>Result: late/offline guests get their photos without the link being live 24×7.</em></p></div></div>
+      <div class="step"><div class="sn">3</div><div class="sc"><h4>Stand up the always-on relay (option ③)</h4><p>A small always-on service (tiny VPS or serverless + object store) that (a) serves a <strong>stable branded URL</strong> instead of the throwaway <code>*.trycloudflare.com</code>, and (b) exposes <code>POST /register</code> that durably queues selfies. The PC polls <code>GET /registrations?since=…</code> and posts back results. Generalise <code>tunnel.py</code> into a "relay client." <em>Result: the link never dies; sign-ups are accepted while the PC is off.</em></p></div></div>
+      <div class="step"><div class="sn">4</div><div class="sc"><h4>Add Tier B instant matching (opt-in)</h4><p>While online, the PC publishes <strong>embeddings + thumbnails</strong> (from <code>vision.py</code> / the hash cache) to the relay. The relay runs the lightweight cosine match (same maths as <code>best_score</code>) and returns matches + previews instantly. Full-res downloads stream from the PC when up, or a short-TTL encrypted cache. <em>Result: instant results anytime, without originals in the cloud.</em></p></div></div>
+      <div class="step"><div class="sn">5</div><div class="sc"><h4>Lifecycle &amp; retention</h4><p>Per-event expiry (extend the existing <code>expires</code> field), auto-purge on the relay and locally, and a host dashboard: who registered, matched, delivered, pending. <em>Result: clean privacy story + operational visibility.</em></p></div></div>
+    </div>
+
+    <h3>Relay API sketch</h3>
+    <pre><span class="c"># Always-on relay — the only piece that must never sleep.</span>
+POST /events/&lt;id&gt;/register      <span class="c"># guest: {selfies[], contact} -> queued (works PC-offline)</span>
+GET  /events/&lt;id&gt;/registrations  <span class="c"># host: pull new sign-ups since cursor</span>
+POST /events/&lt;id&gt;/results        <span class="c"># host: push {reg_id, matches[]} -> triggers notify</span>
+GET  /a/&lt;signed-token&gt;           <span class="c"># guest: their album (signed, expiring, per-guest)</span>
+
+<span class="c"># Tier B only (opt-in instant matching):</span>
+POST /events/&lt;id&gt;/index          <span class="c"># host: {embeddings[], thumbnails[]} (no full photos)</span>
+POST /events/&lt;id&gt;/match          <span class="c"># guest: {selfie} -> instant matches from published index</span></pre>
+    <div class="note"><strong>Reuse, don't rebuild:</strong> the guest UI, QR, token model, rate limiter and threshold logic already exist in <code>server.py</code>; the face maths lives in <code>vision.py</code>; <code>tunnel.py</code> already proves opt-in public exposure. The relay is a thin, mostly-stateless forwarder with a queue — the genuinely new piece is small.</div>
+  </section>
+
+  <!-- ============ PRIVACY ============ -->
+  <section id="privacy">
+    <h2>10 · Security &amp; privacy</h2>
+    <table>
+      <thead><tr><th>Concern</th><th>Control</th></tr></thead>
+      <tbody>
+        <tr><td>Selfies in the relay queue</td><td>Encrypt at rest; short TTL; delete on match+deliver; never expose publicly.</td></tr>
+        <tr><td>Embeddings in the cloud (Tier B)</td><td>Vectors aren't viewable photos; still treat as biometric data — encrypt, TTL, per-event isolation, delete on expiry.</td></tr>
+        <tr><td>Thumbnails in the cloud (Tier B)</td><td>Low-res only, watermarkable, auto-expiring; full-res never leaves the PC without a signed pull.</td></tr>
+        <tr><td>Access control</td><td>Signed, per-guest, expiring tokens (extend the current token model); guest routes stay allow-listed as in <code>_GUEST_ROUTES</code>.</td></tr>
+        <tr><td>Consent &amp; law (DPDP/GDPR)</td><td>Explicit "find my photos" consent, purpose limitation, retention limit, delete-my-data link. Tier A keeps you in the strongest position.</td></tr>
+        <tr><td>Abuse</td><td>Keep the per-IP rate limiter (<code>_rate_ok</code>) on the relay; optional event PIN (already supported via <code>pin</code>).</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><strong>Marketing stays honest:</strong> in Tier A you can still say "your photos never leave your computer" — only a selfie + contact transit an encrypted queue, briefly. Tier B is a clearly-labelled convenience upgrade, not the default.</div>
+  </section>
+
+  <!-- ============ COST ============ -->
+  <section id="cost">
+    <h2>11 · What it costs to run</h2>
+    <div class="chartbox">
+      <p class="cap">Rough monthly running cost of the always-on piece per approach (₹, illustrative). The relay is cheap because it does no heavy compute — that stays on the photographer's PC.</p>
+      <canvas id="chCost"></canvas>
+    </div>
+    <div class="grid g3" style="margin-top:16px">
+      <div class="card kpi"><span class="num">~₹400–800<span style="font-size:.8rem">/mo</span></span><span class="lbl">Tier A relay (queue + notify)</span><span class="sub">tiny VPS / serverless + email</span></div>
+      <div class="card kpi"><span class="num">+ storage</span><span class="lbl">Tier B (embeddings + thumbs)</span><span class="sub">object store, auto-expiring</span></div>
+      <div class="card kpi"><span class="num">GPU + TB</span><span class="lbl">Full cloud (option ⑤)</span><span class="sub">why you avoid it by default</span></div>
+    </div>
+    <div class="note"><strong>Business angle:</strong> this tiny, recurring relay cost is exactly what justifies the per-event "Studio" add-on — and being server-side, it's uncopyable, so it doubles as your anti-piracy anchor. One small relay serves many photographers.</div>
+  </section>
+
+  <!-- ============ VERDICT ============ -->
+  <section id="verdict">
+    <h2>12 · Verdict &amp; recommended path</h2>
+    <div class="card verdict">
+      <p style="margin-top:0"><strong>Don't keep the laptop on. Keep a tiny relay on.</strong> Decouple registration from matching: an always-on relay owns the stable link and durably queues sign-ups; the PC does private matching whenever it's online and notifies guests. Add instant matching (Tier B) only for hosts who opt in.</p>
+      <h3>Do this, in order:</h3>
+      <ul class="clean">
+        <li>✅ <strong>Ship persistence first</strong> (§7) — SQLite queue so a shutdown never loses a sign-up. Local-only, no cloud, immediate win.</li>
+        <li>✅ <strong>Add contact + async delivery</strong> (§8) — "we'll notify you," signed expiring album links.</li>
+        <li>⭐ <strong>Stand up the always-on relay</strong> (option ③) — stable URL + store-and-forward queue. This is the real fix.</li>
+        <li>⚡ <strong>Offer Tier B instant matching</strong> (option ④) — embeddings + thumbnails only, for hosts who want cloud-app speed.</li>
+        <li>🧹 <strong>Enforce lifecycle</strong> — per-event TTL and auto-purge everywhere; a host dashboard for status.</li>
+      </ul>
+      <p style="margin-bottom:0"><strong>Avoid</strong> the full cloud gallery (option ⑤) as a default — it throws away the privacy + zero-cost edge that makes this product different. Keep it as a clearly-labelled premium tier only.</p>
+    </div>
+    <div class="note">Companion to the FaceFind competitive battle plan and market analysis. Percentages, arrival curves and ₹ costs here are illustrative planning figures — validate with real events and confirm biometric/DPDP compliance before launch.</div>
+  </section>
+
+  <footer>
+    <p>FaceFind always-on availability analysis · solving the "guests register while the host PC is off" problem with a store-and-forward relay + local engine. Architecture &amp; cost figures are directional, not financial or legal advice.</p>
+  </footer>
+
+</div>
+
+<script>
+Chart.defaults.color = '#9aa6c7';
+Chart.defaults.font.family = "'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+const grid = 'rgba(40,52,92,.6)';
+
+// Guest arrivals over time — big tail after the event
+new Chart(document.getElementById('chArrivals'), {
+  type:'bar',
+  data:{
+    labels:['During event','That night','Day +1','Day +2','Day +3','Day +4–7'],
+    datasets:[{label:'Guest sign-ups',
+      data:[38, 22, 18, 9, 7, 6],
+      backgroundColor:['#6ea8fe','#7ef0c2','#ffb86b','#ffb86b','#c58bff','#c58bff']}]
+  },
+  options:{responsive:true,plugins:{legend:{display:false},
+    tooltip:{callbacks:{label:c=>c.parsed.y+'% of sign-ups'}}},
+    scales:{y:{grid:{color:grid},title:{display:true,text:'% of total sign-ups'},
+      ticks:{callback:v=>v+'%'}},
+      x:{grid:{color:grid},title:{display:true,text:'PC is usually OFF from here →'}}}}
+});
+
+// Monthly running cost of the always-on piece
+new Chart(document.getElementById('chCost'), {
+  type:'bar',
+  data:{
+    labels:['① Keep PC on','③ Relay (Tier A)','④ Relay + embeddings','⑤ Full cloud gallery'],
+    datasets:[{label:'₹ / month (always-on piece)',
+      data:[0, 600, 1200, 9000],
+      backgroundColor:['#9aa6c7','#39d98a','#7ef0c2','#ff6b6b']}]
+  },
+  options:{responsive:true,plugins:{legend:{display:false},
+    tooltip:{callbacks:{label:c=>'≈ ₹'+c.parsed.y.toLocaleString('en-IN')+' / month'}}},
+    scales:{y:{grid:{color:grid},title:{display:true,text:'₹ per month'},
+      ticks:{callback:v=>'₹'+(v/1000)+'K'}},x:{grid:{color:grid}}}}
+});
+</script>
+</body>
+</html>

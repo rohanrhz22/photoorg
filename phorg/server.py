@@ -27,6 +27,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .backends import LocalBackend
 from .safety import SafetyPolicy
+from . import registrations
 
 # Best-effort HEIC/HEIF support so iPhone selfies/photos preview & match.
 try:
@@ -98,6 +99,7 @@ _RATE_LOCK = threading.Lock()
 _GUEST_ROUTES = {
     "/api/health", "/api/share/status", "/api/share/find/start",
     "/api/facefind/selfie", "/api/cluster/progress", "/api/cluster/cancel",
+    "/api/share/album",
 }
 
 
@@ -533,10 +535,12 @@ def _selfie_list(p):
     return [s for s in raw if s and os.path.isfile(s)][:5]
 
 
-def _start_facefind_job(root, selfie, threshold, recursive=True):
+def _start_facefind_job(root, selfie, threshold, recursive=True, on_done=None):
     """Start a background FaceFind job over *root*; returns {'jobId'}.
 
     *selfie* may be a single path or a list of selfie paths (averaged).
+    *on_done*, if given, is called with the finished job dict (success or
+    error) so callers can persist the result.
     """
     from . import vision
     from .backends import LocalBackend
@@ -610,6 +614,11 @@ def _start_facefind_job(root, selfie, threshold, recursive=True):
             job["phase"] = "error"
         finally:
             job["finished"] = True
+            if on_done:
+                try:
+                    on_done(job)
+                except Exception:
+                    pass
 
     threading.Thread(target=run, daemon=True).start()
     return {"jobId": job_id}
@@ -843,6 +852,7 @@ def api_share_find_start(p):
         if not _SHARE["enabled"] or token != _SHARE["token"]:
             raise ValueError("This photo link is no longer active.")
         root = _SHARE["root"]
+        event = _SHARE.get("event") or ""
         pin = _SHARE.get("pin")
         thr = _SHARE.get("threshold", 0.45)
     if pin and (str(p.get("pin") or "").strip() != pin):
@@ -863,42 +873,104 @@ def api_share_find_start(p):
                 job = _JOBS.get(jid)
             if job and not job.get("finished"):
                 job["cancel"] = True
-    r = _start_facefind_job(root, selfies, thr, True)
     name = (p.get("name") or "").strip()[:60] or "Guest"
+    contact = (p.get("contact") or "").strip()[:120]
+    # Persist the sign-up durably *before* matching so a shutdown never loses it.
+    reg_id = uuid.uuid4().hex
+    atoken = uuid.uuid4().hex          # per-guest secret for the album link
+    durable = registrations.persist_selfies(reg_id, selfies) or selfies
+    registrations.add(reg_id, event=event, root=root, token=token, cid=cid,
+                      name=name, contact=contact, selfies=durable,
+                      threshold=thr, atoken=atoken)
+
+    def _on_done(job, _rid=reg_id, _at=atoken, _contact=contact, _event=event,
+                 _name=name):
+        if job.get("error"):
+            registrations.save_error(_rid, job["error"])
+            return
+        res = job.get("result") or {}
+        registrations.save_results(_rid, res)
+        # Async delivery: if the guest left a contact and we found photos, send
+        # them their private album link (no-op if no notifier is configured).
+        if _contact and (res.get("count") or 0) > 0:
+            try:
+                from . import notify
+                out = notify.send(_contact, _event, _album_url(_rid, _at),
+                                  name=_name)
+                registrations.set_notified(
+                    _rid, "sent" if out.get("sent")
+                    else (out.get("reason") or "failed"))
+            except Exception:
+                registrations.set_notified(_rid, "failed")
+
+    r = _start_facefind_job(root, durable, thr, True, on_done=_on_done)
+    registrations.set_job(reg_id, r["jobId"])
     with _SHARE_LOCK:
         guests = _SHARE.setdefault("guests", [])
         if cid:                         # drop this browser's old entry
             guests[:] = [g for g in guests if g.get("cid") != cid]
         guests.append({"name": name, "ts": int(time.time()),
-                       "job": r["jobId"], "cid": cid})
+                       "job": r["jobId"], "cid": cid, "reg": reg_id})
         _SHARE["guests"] = guests[-200:]
-    return r
+    return {"jobId": r["jobId"], "rid": reg_id, "atoken": atoken}
+
+
+def _album_url(rid, atoken):
+    """Build the guest's private album link, preferring the public tunnel URL
+    and falling back to the LAN address."""
+    with _SHARE_LOCK:
+        pub = _SHARE.get("public_url") if _SHARE.get("online") else None
+    if pub:
+        base = pub.rstrip("/")
+    else:
+        ips = _lan_ips()
+        host = ips[0] if ips else "127.0.0.1"
+        base = f"http://{host}:{_SERVER_PORT}"
+    return f"{base}/?a={rid}.{atoken}"
+
+
+def api_share_album(p):
+    """Guest: fetch a saved album by its signed link (survives app restarts as
+    long as the host is sharing)."""
+    ref = (p.get("a") or "").strip()
+    rid = (p.get("rid") or "").strip()
+    tok = (p.get("token") or p.get("atoken") or "").strip()
+    if ref and "." in ref and not rid:
+        rid, tok = ref.split(".", 1)
+    d = registrations.album(rid, tok)
+    if not d:
+        raise ValueError("This photo link is not valid.")
+    return {"event": d.get("event") or "the event", "name": d.get("name"),
+            "count": d.get("count"), "status": d.get("status"),
+            "matches": d.get("matches") or []}
 
 
 def api_share_guests(_p):
     """Host-only: who has searched, how many photos each found, and the matched
-    photo paths so the host can preview them."""
+    photo paths so the host can preview them.  Backed by the durable store, so
+    the list survives an app restart (Phase 1 availability)."""
     with _SHARE_LOCK:
-        guests = list(_SHARE.get("guests") or [])
+        root = _SHARE.get("root") if _SHARE.get("enabled") else None
+    if not root:
+        root = (_load_share_cfg() or {}).get("root")
+    regs = registrations.list_for_root(root) if root else []
     out = []
-    for g in guests:
-        cnt = None
-        done = False
-        scanned = None
-        paths = []
+    for g in regs:
         with _JOBS_LOCK:
             job = _JOBS.get(g.get("job"))
-        if job and job.get("finished"):
-            done = True
-            res = job.get("result") or {}
-            cnt = res.get("count")
-            scanned = res.get("scanned")
-            paths = [m.get("path") for m in (res.get("matches") or [])
-                     if m.get("path")]
-        out.append({"name": g["name"], "ts": g["ts"], "count": cnt,
-                    "done": done, "scanned": scanned, "job": g.get("job"),
-                    "matches": paths})
-    out.reverse()
+        if job and not job.get("finished"):     # a live, in-flight search
+            out.append({"name": g.get("name"), "ts": g.get("created_at"),
+                        "count": None, "done": False, "scanned": None,
+                        "job": g.get("job"), "matches": [],
+                        "contact": g.get("contact"), "notified": None})
+        else:
+            out.append({"name": g.get("name"), "ts": g.get("created_at"),
+                        "count": g.get("count"),
+                        "done": g.get("status") in ("matched", "error"),
+                        "scanned": g.get("scanned"), "job": g.get("job"),
+                        "matches": g.get("matches") or [],
+                        "contact": g.get("contact"),
+                        "notified": g.get("notified")})
     return {"guests": out, "count": len(out)}
 
 
@@ -923,6 +995,7 @@ ROUTES = {
     "/api/share/status": api_share_status,
     "/api/share/threshold": api_share_threshold,
     "/api/share/find/start": api_share_find_start,
+    "/api/share/album": api_share_album,
     "/api/share/guests": api_share_guests,
 }
 
@@ -1082,23 +1155,34 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "Cannot read"})
 
     def _serve_zip(self):
-        """Zip up all matches from a finished FaceFind job (Download all)."""
+        """Zip up all matches from a finished FaceFind job (Download all), or the
+        photos of a saved album when an ``a=<rid>.<token>`` link is used."""
         from urllib.parse import urlparse, parse_qs
         qs = parse_qs(urlparse(self.path).query)
         job = (qs.get("job") or [""])[0]
         token = (qs.get("token") or [""])[0]
+        ref = (qs.get("a") or [""])[0]
         local = self._is_local_req()
-        if not local:
-            with _SHARE_LOCK:
-                ok = _SHARE["enabled"] and token == _SHARE["token"]
-            if not ok:
+        if ref and "." in ref:
+            rid, tok = ref.split(".", 1)
+            d = registrations.album(rid, tok)
+            if not d:
                 self._send(403, {"error": "link inactive"})
                 return
-        with _SHARE_LOCK:
-            event = _SHARE["event"] or "photos"
-        with _JOBS_LOCK:
-            j = _JOBS.get(job)
-        matches = ((j or {}).get("result") or {}).get("matches") or []
+            event = d.get("event") or "photos"
+            matches = d.get("matches") or []
+        else:
+            if not local:
+                with _SHARE_LOCK:
+                    ok = _SHARE["enabled"] and token == _SHARE["token"]
+                if not ok:
+                    self._send(403, {"error": "link inactive"})
+                    return
+            with _SHARE_LOCK:
+                event = _SHARE["event"] or "photos"
+            with _JOBS_LOCK:
+                j = _JOBS.get(job)
+            matches = ((j or {}).get("result") or {}).get("matches") or []
         import io
         import zipfile
         buf = io.BytesIO()
@@ -1170,8 +1254,51 @@ def _find_free_port(host, start, tries=20):
     return start
 
 
+def _resume_pending():
+    """Re-run any guest match that never finished because the app was closed
+    mid-scan.  Only runs when the vision models are already present so we never
+    trigger a surprise download at launch.  Results are written back to the
+    durable store, so the host dashboard is complete on next open."""
+    try:
+        from . import vision
+        if vision.check_deps() or not vision.cluster_api_available() \
+                or not vision.models_present():
+            return
+    except Exception:
+        return
+    for g in registrations.pending():
+        root = g.get("root")
+        selfies = [s for s in (g.get("selfies") or []) if os.path.isfile(s)]
+        if not root or not os.path.isdir(root) or not selfies:
+            continue
+        reg_id = g["id"]
+
+        def _on_done(job, _rid=reg_id):
+            if job.get("error"):
+                registrations.save_error(_rid, job["error"])
+            else:
+                registrations.save_results(_rid, job.get("result") or {})
+
+        try:
+            _register_root(root)
+            r = _start_facefind_job(root, selfies,
+                                    float(g.get("threshold") or 0.44),
+                                    True, on_done=_on_done)
+            registrations.set_job(reg_id, r["jobId"])
+        except Exception:
+            continue
+
+
 def serve(host="127.0.0.1", port=8765, open_browser=True):
     global _SERVER_PORT
+    # Durable guest queue: create the store, drop stale sign-ups, and resume any
+    # match that was interrupted by a shutdown (Phase 1 availability).
+    try:
+        registrations.init()
+        registrations.purge_expired()
+        _register_root(registrations.selfie_dir())
+    except Exception:
+        pass
     # Bind on all interfaces so the guest-sharing portal can be reached from
     # phones on the same Wi-Fi.  Access stays loopback-only until the host
     # explicitly turns sharing on (see Handler._host_ok).
@@ -1184,6 +1311,7 @@ def serve(host="127.0.0.1", port=8765, open_browser=True):
     print(f"  Open in your browser:  {url}")
     print("  Keep this window open while you use the app.")
     print("  Press Ctrl+C (or close this window) to stop.\n")
+    threading.Thread(target=_resume_pending, daemon=True).start()
     if open_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
