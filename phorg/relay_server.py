@@ -87,11 +87,22 @@ CREATE TABLE IF NOT EXISTS results(
   idx    INTEGER,
   name   TEXT,
   score  REAL,
+  pid    TEXT,
   image  BLOB,
   PRIMARY KEY(reg_id, idx)
 );
+CREATE TABLE IF NOT EXISTS photos(
+  event_id   TEXT,
+  pid        TEXT,
+  name       TEXT,
+  embeds     TEXT,                     -- JSON list of unit-norm face vectors
+  image      BLOB,                     -- medium deliverable JPEG
+  created_at INTEGER,
+  PRIMARY KEY(event_id, pid)
+);
 CREATE INDEX IF NOT EXISTS idx_reg_event  ON registrations(event_id);
 CREATE INDEX IF NOT EXISTS idx_reg_status ON registrations(status);
+CREATE INDEX IF NOT EXISTS idx_photo_event ON photos(event_id);
 """
 
 
@@ -100,6 +111,11 @@ def init():
         conn = _connect()
         try:
             conn.executescript(_SCHEMA)
+            # Forward-compat for relays created before Tier B.
+            try:
+                conn.execute("ALTER TABLE results ADD COLUMN pid TEXT")
+            except sqlite3.OperationalError:
+                pass
             conn.commit()
         finally:
             conn.close()
@@ -245,7 +261,8 @@ def album(rid, atoken):
             if not r:
                 return None
             items = conn.execute(
-                "SELECT idx,name,score,(image IS NOT NULL) AS has_img "
+                "SELECT idx,name,score,"
+                "(image IS NOT NULL OR pid IS NOT NULL) AS has_img "
                 "FROM results WHERE reg_id=? ORDER BY score DESC", (rid,)
             ).fetchall()
             return {
@@ -263,17 +280,174 @@ def result_image(rid, atoken, idx):
     with _LOCK:
         conn = _connect()
         try:
-            ok = conn.execute(
-                "SELECT 1 FROM registrations WHERE id=? AND atoken=?",
+            reg = conn.execute(
+                "SELECT event_id FROM registrations WHERE id=? AND atoken=?",
                 (rid, atoken)).fetchone()
-            if not ok:
+            if not reg:
                 return None, None
             row = conn.execute(
-                "SELECT name,image FROM results WHERE reg_id=? AND idx=?",
+                "SELECT name,image,pid FROM results WHERE reg_id=? AND idx=?",
                 (rid, int(idx))).fetchone()
-            if not row or row["image"] is None:
+            if not row:
                 return None, None
-            return row["name"], row["image"]
+            if row["image"] is not None:
+                return row["name"], row["image"]
+            if row["pid"]:                       # Tier B: image lives on the photo
+                ph = conn.execute(
+                    "SELECT image FROM photos WHERE event_id=? AND pid=?",
+                    (reg["event_id"], row["pid"])).fetchone()
+                if ph and ph["image"] is not None:
+                    return row["name"], ph["image"]
+            return None, None
+        finally:
+            conn.close()
+
+
+# --------------------------------------------------------------------------
+# Tier B: instant matching from a published embedding index
+# --------------------------------------------------------------------------
+def _cos(a, b):
+    s = da = db = 0.0
+    for x, y in zip(a, b):
+        s += x * y
+        da += x * x
+        db += y * y
+    if da <= 0 or db <= 0:
+        return 0.0
+    return s / ((da ** 0.5) * (db ** 0.5))
+
+
+def _as_query_vectors(x):
+    if not x:
+        return []
+    if isinstance(x, (list, tuple)) and x and isinstance(x[0], (list, tuple)):
+        return [list(v) for v in x]
+    if isinstance(x, (list, tuple)):
+        return [list(x)]
+    return []
+
+
+def _relay_embed(selfie_bytes):
+    """Embed a guest selfie on the relay when the vision stack is installed.
+    Returns None when instant matching isn't available (caller falls back to
+    store-and-forward), [] when no face was found, else a list of vectors."""
+    try:
+        from phorg import vision
+        if vision.check_deps() or not vision.models_present():
+            return None
+    except Exception:
+        return None
+    import tempfile
+    import uuid as _uuid
+    d = os.path.join(tempfile.gettempdir(), "phorg_relay_sel")
+    os.makedirs(d, exist_ok=True)
+    p = os.path.join(d, _uuid.uuid4().hex + ".jpg")
+    try:
+        with open(p, "wb") as f:
+            f.write(selfie_bytes)
+        vecs = vision.FaceEmbedder().embed_all(p)
+        return [v.tolist() for v in vecs] if vecs else []
+    except Exception:
+        return []
+    finally:
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+
+
+def index_photos(event_id, key, photos):
+    """Host: publish (or refresh) the event's face-embedding index."""
+    with _LOCK:
+        conn = _connect()
+        try:
+            if not _event_key_ok(conn, event_id, key):
+                return None
+            n = 0
+            for ph in photos or []:
+                img = ph.get("image_b64")
+                blob = base64.b64decode(img) if img else None
+                if blob and len(blob) > _MAX_IMG:
+                    blob = None
+                conn.execute(
+                    "INSERT OR REPLACE INTO photos"
+                    "(event_id,pid,name,embeds,image,created_at)"
+                    " VALUES(?,?,?,?,?,?)",
+                    (event_id, ph.get("pid"), ph.get("name") or "",
+                     json.dumps(ph.get("embeds") or []), blob, _now()))
+                n += 1
+            conn.commit()
+            return n
+        finally:
+            conn.close()
+
+
+def index_status(event_id, key):
+    with _LOCK:
+        conn = _connect()
+        try:
+            if not _event_key_ok(conn, event_id, key):
+                return None
+            rows = conn.execute(
+                "SELECT pid FROM photos WHERE event_id=?", (event_id,)).fetchall()
+            pids = [r["pid"] for r in rows]
+            return {"count": len(pids), "pids": pids}
+        finally:
+            conn.close()
+
+
+def match_guest(event_id, name, contact, selfie_bytes=None,
+                selfie_embed=None, threshold=0.44):
+    """Instant match a guest against the published index (Tier B).  Creates a
+    matched registration so the normal album link works."""
+    queries = _as_query_vectors(selfie_embed)
+    if not queries and selfie_bytes is not None:
+        emb = _relay_embed(selfie_bytes)
+        if emb is None:
+            return {"error": "instant_unavailable", "need_fallback": True}
+        queries = emb
+    if not queries:
+        return {"error": "no_face"}
+    with _LOCK:
+        conn = _connect()
+        try:
+            if not conn.execute("SELECT 1 FROM events WHERE id=?",
+                                (event_id,)).fetchone():
+                return {"error": "no such event"}
+            rows = conn.execute(
+                "SELECT pid,name,embeds FROM photos WHERE event_id=?",
+                (event_id,)).fetchall()
+            matches = []
+            for r in rows:
+                try:
+                    embeds = json.loads(r["embeds"] or "[]")
+                except (ValueError, TypeError):
+                    embeds = []
+                best = 0.0
+                for q in queries:
+                    for e in embeds:
+                        c = _cos(q, e)
+                        if c > best:
+                            best = c
+                if best >= threshold:
+                    matches.append((r["pid"], r["name"], best))
+            matches.sort(key=lambda x: -x[2])
+            rid = _uid()
+            atoken = _uid(16)
+            conn.execute(
+                "INSERT INTO registrations(id,event_id,name,contact,atoken,"
+                "selfie,status,count,created_at,matched_at)"
+                " VALUES(?,?,?,?,?,?, 'matched', ?, ?, ?)",
+                (rid, event_id, name or "Guest", contact or "", atoken, None,
+                 len(matches), _now(), _now()))
+            for i, (pid, nm, score) in enumerate(matches):
+                conn.execute(
+                    "INSERT OR REPLACE INTO results(reg_id,idx,name,score,pid,image)"
+                    " VALUES(?,?,?,?,?,NULL)", (rid, i, nm, float(score), pid))
+            conn.commit()
+            return {"rid": rid, "atoken": atoken, "count": len(matches),
+                    "matches": [{"i": i, "name": nm, "score": sc, "has_img": True}
+                                for i, (pid, nm, sc) in enumerate(matches)]}
         finally:
             conn.close()
 
@@ -327,14 +501,17 @@ function showRegister(ev){
     if(!f){out.innerHTML='<div class=callout>Please add a selfie.</div>';return;}
     out.innerHTML='<div class=callout>Uploading…</div>';
     try{const selfie=await fileB64(f);
-      const d=await api('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({event:ev.id,name:document.getElementById('n').value,
-          contact:document.getElementById('c').value,selfie:selfie})});
-      const link=location.origin+'/?a='+d.rid+'.'+d.atoken;
-      out.innerHTML='<div class=callout>✅ You\\'re registered! We\\'ll find your photos.<br><br>'+
+      const payload={event:ev.id,name:document.getElementById('n').value,
+        contact:document.getElementById('c').value,selfie:selfie};
+      let d,instant=false;
+      try{d=await api('/api/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});instant=true;}
+      catch(e){d=await api('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});}
+      const ref=d.rid+'.'+d.atoken;
+      const link=location.origin+'/?a='+ref;
+      out.innerHTML='<div class=callout>'+(instant?'✅ Found your photos!':'✅ You\\'re registered! We\\'ll find your photos.')+'<br><br>'+
         '🔖 Save your private album link:<br><input readonly value="'+esc(link)+'"></div>';
-      history.replaceState(null,'','/?a='+d.rid+'.'+d.atoken);
-      setTimeout(()=>showAlbum(d.rid+'.'+d.atoken),1200);
+      history.replaceState(null,'','/?a='+ref);
+      setTimeout(()=>showAlbum(ref),instant?200:1200);
     }catch(e){out.innerHTML='<div class=callout>'+esc(e.message)+'</div>';}
   };
 }
@@ -412,6 +589,14 @@ class RelayHandler(BaseHTTPRequestHandler):
             else:
                 self._json(200, {"registrations": data})
             return
+        if path == "/api/index/status":
+            ev = (qs.get("event") or [""])[0]
+            st = index_status(ev, self._key())
+            if st is None:
+                self._json(403, {"error": "bad event key"})
+            else:
+                self._json(200, st)
+            return
         if path == "/api/album":
             rid, tok = _split_ref((qs.get("a") or [""])[0])
             d = album(rid, tok)
@@ -473,6 +658,31 @@ class RelayHandler(BaseHTTPRequestHandler):
                               body.get("status"), body.get("count"),
                               body.get("matches") or [])
             self._json(200 if ok else 403, {"ok": ok})
+            return
+        if path == "/api/index":
+            n = index_photos(body.get("event"), self._key(),
+                             body.get("photos") or [])
+            if n is None:
+                self._json(403, {"error": "bad event key"})
+            else:
+                self._json(200, {"ok": True, "count": n})
+            return
+        if path == "/api/match":
+            selfie = _data_url_bytes(body.get("selfie"))
+            try:
+                thr = float(body.get("threshold") or 0.44)
+            except (TypeError, ValueError):
+                thr = 0.44
+            d = match_guest(body.get("event"), body.get("name"),
+                            body.get("contact"), selfie_bytes=selfie,
+                            selfie_embed=body.get("selfie_embedding"),
+                            threshold=thr)
+            if d.get("need_fallback"):
+                self._json(501, d)
+            elif d.get("error"):
+                self._json(400, d)
+            else:
+                self._json(200, d)
             return
         self._json(404, {"error": "not found"})
 

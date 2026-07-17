@@ -98,3 +98,47 @@ def test_relay_bad_key_rejected(relay):
     # the original key still works
     ev = relay_client.publish_event(relay, "ev2", "Event Two", "KEYA")
     assert ev["id"] == "ev2"
+
+
+def test_relay_tier_b_instant_match(relay):
+    base = relay
+    relay_client.publish_event(base, "tierb", "Tier B Event", "KEY")
+
+    # host publishes an embedding index: photo A ~ [1,0,0], photo B ~ [0,1,0]
+    photos = [
+        {"pid": "pA", "name": "A.jpg", "embeds": [[1.0, 0.0, 0.0]],
+         "image_bytes": b"IMG-A"},
+        {"pid": "pB", "name": "B.jpg", "embeds": [[0.0, 1.0, 0.0]],
+         "image_bytes": b"IMG-B"},
+    ]
+    assert relay_client.publish_index(base, "tierb", "KEY", photos) == 2
+
+    st = relay_client.index_status(base, "tierb", "KEY")
+    assert st["count"] == 2 and set(st["pids"]) == {"pA", "pB"}
+
+    # guest matches instantly with a selfie embedding close to photo A
+    d = relay_client._post(base, "/api/match", {
+        "event": "tierb", "name": "Ravi", "selfie_embedding": [0.95, 0.05, 0.0],
+        "threshold": 0.5,
+    })
+    assert d["count"] == 1
+    assert d["matches"][0]["name"] == "A.jpg"
+
+    # album + delivered photo resolve from the published index (PC can be off)
+    alb = relay_client._get(base, f"/api/album?a={d['rid']}.{d['atoken']}")
+    assert alb["status"] == "matched" and alb["count"] == 1
+    name, blob = relay_server.result_image(d["rid"], d["atoken"], 0)
+    assert blob == b"IMG-A"
+
+
+def test_relay_match_multi_face_photo(relay):
+    base = relay
+    relay_client.publish_event(base, "grp", "Group Event", "KEY")
+    # a group photo with two faces; guest matches the second face
+    relay_client.publish_index(base, "grp", "KEY", [
+        {"pid": "g1", "name": "group.jpg",
+         "embeds": [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]], "image_bytes": b"G"},
+    ])
+    d = relay_client._post(base, "/api/match", {
+        "event": "grp", "selfie_embedding": [0.0, 0.0, 1.0], "threshold": 0.5})
+    assert d["count"] == 1 and d["matches"][0]["name"] == "group.jpg"

@@ -59,6 +59,38 @@ def pull(base, event_id, key):
     return d.get("registrations") or []
 
 
+def index_status(base, event_id, key):
+    """Return {count, pids} of photos already published to the relay (Tier B)."""
+    from urllib.parse import quote
+    return _get(base, "/api/index/status?event=" + quote(event_id), key=key)
+
+
+def publish_index(base, event_id, key, photos, chunk=20):
+    """Publish face embeddings + deliverable images to the relay in batches.
+
+    *photos* is a list of ``{pid, name, embeds:[[...]], image_bytes}``.
+    """
+    total = 0
+    batch = []
+    for ph in photos:
+        img = ph.get("image_bytes")
+        batch.append({
+            "pid": ph.get("pid"), "name": ph.get("name"),
+            "embeds": ph.get("embeds") or [],
+            "image_b64": base64.b64encode(img).decode() if img else None,
+        })
+        if len(batch) >= chunk:
+            total += _post(base, "/api/index",
+                           {"event": event_id, "photos": batch},
+                           key=key).get("count", 0)
+            batch = []
+    if batch:
+        total += _post(base, "/api/index",
+                       {"event": event_id, "photos": batch},
+                       key=key).get("count", 0)
+    return total
+
+
 def post_results(base, event_id, key, rid, matches, status="matched",
                  count=None):
     """Send a guest's results back.  *matches* is a list of

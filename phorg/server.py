@@ -1341,13 +1341,74 @@ def _relay_loop(base, event_id, key, name, root, interval=20):
         relay_client.publish_event(base, event_id, name, key)
     except Exception:
         pass
+    tier_b = str(os.environ.get("PHORG_RELAY_TIER_B", "")).lower() \
+        not in ("", "0", "false", "no")
     matcher = _relay_build_matcher(root)
+    i = 0
     while True:
+        if tier_b and i % 15 == 0:      # refresh the instant-match index
+            try:
+                _relay_publish_index(base, event_id, key, root)
+            except Exception:
+                pass
         try:
             relay_client.sync_once(base, event_id, key, matcher)
         except Exception:
             pass
+        i += 1
         time.sleep(max(5, interval))
+
+
+def _relay_publish_index(base, event_id, key, root):
+    """Tier B: publish face embeddings + medium images for every event photo so
+    the relay can match guests instantly while this PC is off.  Incremental —
+    photos already on the relay are skipped."""
+    from . import vision, relay_client
+    from PIL import Image
+    import io as _io
+    import hashlib
+    if vision.check_deps() or not vision.models_present():
+        return
+    try:
+        st = relay_client.index_status(base, event_id, key)
+        have = set(st.get("pids") or [])
+    except Exception:
+        have = set()
+    _be, native = _gather_event_images(root, True)
+    emb = vision.FaceEmbedder()
+    batch = []
+    for p in native:
+        pid = hashlib.sha1(os.path.abspath(p).encode()).hexdigest()[:16]
+        if pid in have:
+            continue
+        try:
+            vecs = emb.embed_all(p)
+        except Exception:
+            vecs = []
+        if not vecs:
+            continue
+        try:
+            im = Image.open(p).convert("RGB")
+            im.thumbnail((1400, 1400))
+            buf = _io.BytesIO()
+            im.save(buf, "JPEG", quality=85)
+            img = buf.getvalue()
+        except Exception:
+            continue
+        batch.append({"pid": pid, "name": os.path.basename(p),
+                      "embeds": [v.tolist() for v in vecs],
+                      "image_bytes": img})
+        if len(batch) >= 20:
+            try:
+                relay_client.publish_index(base, event_id, key, batch)
+            except Exception:
+                pass
+            batch = []
+    if batch:
+        try:
+            relay_client.publish_index(base, event_id, key, batch)
+        except Exception:
+            pass
 
 
 def serve(host="127.0.0.1", port=8765, open_browser=True):
