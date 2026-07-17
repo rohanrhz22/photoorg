@@ -19,6 +19,12 @@ def main(argv=None):
     if argv and argv[0] in ("ui", "app"):
         argv = argv[1:]
 
+    # "relay" runs the always-on store-and-forward relay instead of the UI.
+    if argv and argv[0] == "relay":
+        from . import relay_server
+        relay_server.main(argv[1:])
+        return
+
     no_browser = "--no-browser" in argv
     port = 8765
     if "--port" in argv:

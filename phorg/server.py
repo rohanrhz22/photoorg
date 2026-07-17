@@ -1289,6 +1289,67 @@ def _resume_pending():
             continue
 
 
+def _relay_build_matcher(root, threshold=0.44):
+    """Build a matcher for the relay sync loop: given a guest's selfie bytes,
+    run local face matching over *root* and return the delivered photos as
+    medium JPEGs.  Heavy work stays on this PC; only results go to the relay."""
+    from . import vision
+    from PIL import Image
+    import io as _io
+
+    def matcher(selfie_bytes, _reg):
+        d = os.path.join(tempfile.gettempdir(), "phorg_relay")
+        os.makedirs(d, exist_ok=True)
+        sp = os.path.join(d, uuid.uuid4().hex + ".jpg")
+        with open(sp, "wb") as f:
+            f.write(selfie_bytes)
+        try:
+            _be, native = _gather_event_images(root, True)
+            res = vision.facefind(native, [sp], threshold=threshold)
+            out = []
+            for m in (res.get("matches") or []):
+                p = m.get("path")
+                if not p or not os.path.isfile(p):
+                    continue
+                try:
+                    im = Image.open(p).convert("RGB")
+                    im.thumbnail((1600, 1600))
+                    buf = _io.BytesIO()
+                    im.save(buf, "JPEG", quality=85)
+                    out.append({"name": os.path.basename(p),
+                                "score": m.get("score"),
+                                "image_bytes": buf.getvalue()})
+                except Exception:
+                    continue
+            return out
+        finally:
+            try:
+                os.remove(sp)
+            except OSError:
+                pass
+    return matcher
+
+
+def _relay_loop(base, event_id, key, name, root, interval=20):
+    """Opt-in background loop: keep the event published on the always-on relay
+    and drain queued guest sign-ups by matching them locally.  Enabled via the
+    PHORG_RELAY_* environment variables (see serve())."""
+    from . import vision, relay_client
+    if vision.check_deps():
+        return
+    try:
+        relay_client.publish_event(base, event_id, name, key)
+    except Exception:
+        pass
+    matcher = _relay_build_matcher(root)
+    while True:
+        try:
+            relay_client.sync_once(base, event_id, key, matcher)
+        except Exception:
+            pass
+        time.sleep(max(5, interval))
+
+
 def serve(host="127.0.0.1", port=8765, open_browser=True):
     global _SERVER_PORT
     # Durable guest queue: create the store, drop stale sign-ups, and resume any
@@ -1312,6 +1373,17 @@ def serve(host="127.0.0.1", port=8765, open_browser=True):
     print("  Keep this window open while you use the app.")
     print("  Press Ctrl+C (or close this window) to stop.\n")
     threading.Thread(target=_resume_pending, daemon=True).start()
+    # Opt-in always-on relay sync (Phase 3): match queued guest sign-ups locally
+    # and post results to a relay that stays up while this PC is off.
+    _rb = os.environ.get("PHORG_RELAY_URL")
+    _re = os.environ.get("PHORG_RELAY_EVENT")
+    _rk = os.environ.get("PHORG_RELAY_KEY")
+    _rr = os.environ.get("PHORG_RELAY_ROOT")
+    if _rb and _re and _rk and _rr and os.path.isdir(_rr):
+        _rn = os.environ.get("PHORG_RELAY_NAME", "Our Event")
+        print(f"  Relay sync ON → {_rb} (event {_re})\n")
+        threading.Thread(target=_relay_loop,
+                         args=(_rb, _re, _rk, _rn, _rr), daemon=True).start()
     if open_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
