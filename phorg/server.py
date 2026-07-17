@@ -28,6 +28,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .backends import LocalBackend
 from .safety import SafetyPolicy
 
+# Best-effort HEIC/HEIF support so iPhone selfies/photos preview & match.
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except Exception:
+    pass
+
 
 HERE = os.path.dirname(__file__)
 
@@ -74,9 +81,17 @@ def _under_allowed(path):
 # --------------------------------------------------------------------------
 _SHARE = {"enabled": False, "root": None, "event": "", "token": None,
           "guests": [], "online": False, "public_url": None,
-          "public_host": None, "threshold": 0.45}
+          "public_host": None, "threshold": 0.45, "pin": None, "expires": 0}
 _SHARE_LOCK = threading.Lock()
 _SERVER_PORT = 8765
+
+# Remembered settings from the last time sharing was enabled (event name, folder,
+# online/pin choices) so re-enabling after a restart is one click.
+_SHARE_CFG = os.path.join(os.path.expanduser("~"), ".phorg", "share_last.json")
+
+# Very small per-IP rate limiter for the public guest endpoints.
+_RATE = {}
+_RATE_LOCK = threading.Lock()
 
 # Endpoints a non-local (guest) visitor is allowed to call.  Everything else
 # stays host-only even while sharing is on.
@@ -84,6 +99,45 @@ _GUEST_ROUTES = {
     "/api/health", "/api/share/status", "/api/share/find/start",
     "/api/facefind/selfie", "/api/cluster/progress", "/api/cluster/cancel",
 }
+
+
+def _share_expired():
+    exp = _SHARE.get("expires") or 0
+    return bool(exp) and time.time() > exp
+
+
+def _persist_share_cfg(cfg):
+    try:
+        os.makedirs(os.path.dirname(_SHARE_CFG), exist_ok=True)
+        with open(_SHARE_CFG, "w", encoding="utf-8") as f:
+            json.dump(cfg, f)
+    except OSError:
+        pass
+
+
+def _load_share_cfg():
+    try:
+        with open(_SHARE_CFG, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _rate_ok(ip, limit=25, window=60):
+    """True if *ip* is under *limit* requests in the last *window* seconds."""
+    now = time.time()
+    with _RATE_LOCK:
+        arr = [t for t in _RATE.get(ip, ()) if now - t < window]
+        if len(arr) >= limit:
+            _RATE[ip] = arr
+            return False
+        arr.append(now)
+        _RATE[ip] = arr
+        if len(_RATE) > 500:                      # keep the table bounded
+            for k in list(_RATE.keys())[:200]:
+                _RATE.pop(k, None)
+        return True
 
 
 def _lan_ips():
@@ -306,9 +360,11 @@ def api_cluster_progress(p):
         job = _JOBS.get(p.get("jobId"))
     if not job:
         raise ValueError("Search job not found (it may have expired).")
-    return {k: job[k] for k in ("done", "total", "phase", "clusters",
-                                "finished", "error", "result",
-                                "model_done", "model_total", "model_name")}
+    out = {k: job[k] for k in ("done", "total", "phase", "clusters",
+                               "finished", "error", "result",
+                               "model_done", "model_total", "model_name")}
+    out["preview"] = list(job.get("preview") or [])
+    return out
 
 
 def api_cluster_cancel(p):
@@ -469,8 +525,19 @@ def api_facefind_selfie(p):
     return {"path": path}
 
 
+def _selfie_list(p):
+    """Collect valid on-disk selfie paths from a request (single or multiple)."""
+    raw = p.get("selfies") if p.get("selfies") else [p.get("selfie")]
+    if not isinstance(raw, (list, tuple)):
+        raw = [raw]
+    return [s for s in raw if s and os.path.isfile(s)][:5]
+
+
 def _start_facefind_job(root, selfie, threshold, recursive=True):
-    """Start a background FaceFind job over *root*; returns {'jobId'}."""
+    """Start a background FaceFind job over *root*; returns {'jobId'}.
+
+    *selfie* may be a single path or a list of selfie paths (averaged).
+    """
     from . import vision
     from .backends import LocalBackend
     be = LocalBackend(root)
@@ -494,7 +561,7 @@ def _start_facefind_job(root, selfie, threshold, recursive=True):
     job_id = uuid.uuid4().hex
     job = {"done": 0, "total": len(native), "phase": "starting", "clusters": 0,
            "finished": False, "error": None, "result": None, "cancel": False,
-           "model_done": 0, "model_total": 0, "model_name": ""}
+           "model_done": 0, "model_total": 0, "model_name": "", "preview": []}
     with _JOBS_LOCK:
         _JOBS[job_id] = job
         for k in list(_JOBS.keys())[:-20]:
@@ -520,8 +587,17 @@ def _start_facefind_job(root, selfie, threshold, recursive=True):
             def cancelled():
                 return job["cancel"]
 
+            def on_match(m):
+                # Keep a bounded, highest-first preview for live streaming.
+                pv = job["preview"]
+                pv.append(m)
+                if len(pv) > 60:
+                    pv.sort(key=lambda x: -x["score"])
+                    del pv[60:]
+
             res = vision.facefind(native, selfie, threshold=threshold,
                                   progress=prog, cancel=cancelled,
+                                  on_match=on_match,
                                   cache_dir=os.path.join(os.path.abspath(be.root),
                                                          ".phorg"))
             res["scanned"] = len(native)
@@ -549,11 +625,11 @@ def api_facefind_start(p):
     if not vision.cluster_api_available():
         raise ValueError("Your OpenCV build lacks the face modules needed "
                          "(needs opencv-contrib-python).")
-    selfie = p.get("selfie")
-    if not selfie or not os.path.isfile(selfie):
+    selfies = _selfie_list(p)
+    if not selfies:
         raise ValueError("Please add a clear selfie photo first.")
     be = _build_backend(p)
-    return _start_facefind_job(be.root, selfie, float(p.get("threshold") or 0.44),
+    return _start_facefind_job(be.root, selfies, float(p.get("threshold") or 0.44),
                                bool(p.get("recursive", True)))
 
 
@@ -680,17 +756,26 @@ def api_share_enable(p):
     except (TypeError, ValueError):
         thr = 0.45
     thr = min(0.60, max(0.30, thr))
+    pin = (str(p.get("pin") or "").strip())[:12] or None
+    try:
+        exp_min = int(p.get("expiry_minutes") or 0)
+    except (TypeError, ValueError):
+        exp_min = 0
+    expires = int(time.time()) + exp_min * 60 if exp_min > 0 else 0
     with _SHARE_LOCK:
         _SHARE.update({"enabled": True, "root": os.path.abspath(root),
                        "event": (p.get("event") or "Our Event").strip()[:80],
                        "token": token, "guests": [], "online": online,
                        "public_url": public_url, "public_host": public_host,
-                       "threshold": thr})
+                       "threshold": thr, "pin": pin, "expires": expires})
         event = _SHARE["event"]
+    _persist_share_cfg({"root": os.path.abspath(root), "event": event,
+                        "online": online, "pin": pin or "",
+                        "expiry_minutes": exp_min})
     ips = _lan_ips()
     return {"ok": True, "token": token, "event": event, "port": _SERVER_PORT,
             "ips": ips, "urls": _share_urls(token), "online": online,
-            "public_url": public_url}
+            "public_url": public_url, "pin": pin or "", "expires": expires}
 
 
 def api_share_disable(_p):
@@ -699,7 +784,7 @@ def api_share_disable(_p):
         _SHARE.update({"enabled": False, "root": None, "event": "",
                        "token": None, "guests": [], "online": False,
                        "public_url": None, "public_host": None,
-                       "threshold": 0.45})
+                       "threshold": 0.45, "pin": None, "expires": 0})
     if was_online:
         try:
             from . import tunnel
@@ -724,6 +809,8 @@ def api_share_threshold(p):
 
 def api_share_status(p):
     token = p.get("token")
+    if _share_expired():
+        api_share_disable({})
     with _SHARE_LOCK:
         enabled = _SHARE["enabled"]
         event = _SHARE["event"]
@@ -731,29 +818,38 @@ def api_share_status(p):
         online = _SHARE.get("online")
         public_url = _SHARE.get("public_url")
         threshold = _SHARE.get("threshold", 0.45)
+        pin = _SHARE.get("pin")
+        expires = _SHARE.get("expires", 0)
     if not enabled:
-        return {"enabled": False}
+        return {"enabled": False, "last": _load_share_cfg()}
     if token is not None:                     # a guest checking their link
-        ok = (token == cur)
-        return {"enabled": ok, "event": event if ok else ""}
+        if token != cur:
+            return {"enabled": False}
+        if pin and (str(p.get("pin") or "").strip() != pin):
+            return {"enabled": True, "pin_required": True, "event": ""}
+        return {"enabled": True, "event": event, "expires": expires}
     ips = _lan_ips()                          # host asking for the link
     return {"enabled": True, "event": event, "token": cur,
             "port": _SERVER_PORT, "ips": ips, "urls": _share_urls(cur),
             "online": bool(online), "public_url": public_url,
-            "threshold": threshold}
+            "threshold": threshold, "pin": pin or "", "expires": expires}
 
 
 def api_share_find_start(p):
     token = p.get("token")
+    if _share_expired():
+        api_share_disable({})
     with _SHARE_LOCK:
         if not _SHARE["enabled"] or token != _SHARE["token"]:
             raise ValueError("This photo link is no longer active.")
         root = _SHARE["root"]
-    selfie = p.get("selfie")
-    if not selfie or not os.path.isfile(selfie):
-        raise ValueError("Please add a clear selfie first.")
-    with _SHARE_LOCK:
+        pin = _SHARE.get("pin")
         thr = _SHARE.get("threshold", 0.45)
+    if pin and (str(p.get("pin") or "").strip() != pin):
+        raise ValueError("Wrong PIN for this event.")
+    selfies = _selfie_list(p)
+    if not selfies:
+        raise ValueError("Please add a clear selfie first.")
     cid = (p.get("cid") or "").strip()[:64]
     # A guest who reloads or searches again from the same browser replaces their
     # previous search: cancel the old (still-running) job so it doesn't keep
@@ -767,7 +863,7 @@ def api_share_find_start(p):
                 job = _JOBS.get(jid)
             if job and not job.get("finished"):
                 job["cancel"] = True
-    r = _start_facefind_job(root, selfie, thr, True)
+    r = _start_facefind_job(root, selfies, thr, True)
     name = (p.get("name") or "").strip()[:60] or "Guest"
     with _SHARE_LOCK:
         guests = _SHARE.setdefault("guests", [])
@@ -1034,9 +1130,14 @@ class Handler(BaseHTTPRequestHandler):
             self._send(403, {"error": "Forbidden"})
             return
         path = self.path.split("?", 1)[0]
-        if not self._is_local_req() and path not in _GUEST_ROUTES:
-            self._send(403, {"error": "Not available"})
-            return
+        if not self._is_local_req():
+            if path not in _GUEST_ROUTES:
+                self._send(403, {"error": "Not available"})
+                return
+            ip = self.client_address[0] if self.client_address else "?"
+            if not _rate_ok(ip):
+                self._send(429, {"error": "Too many requests — please wait a moment."})
+                return
         fn = ROUTES.get(path)
         if not fn:
             self._send(404, {"error": "Not found"})

@@ -18,6 +18,15 @@ Public entry points used by the server:
 """
 import os
 
+# Best-effort HEIC/HEIF support (iPhone photos & selfies).  Optional — if the
+# package isn't installed, HEIC simply falls back to whatever the platform can
+# decode.  Registered once at import so PIL's Image.open() handles .heic files.
+try:
+    import pillow_heif  # noqa: F401
+    pillow_heif.register_heif_opener()
+except Exception:
+    pass
+
 
 IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "bmp", "heic", "heif",
               "tif", "tiff", "gif"}
@@ -227,9 +236,14 @@ def _thread_local_embedder(local):
     return emb
 
 
-def facefind(native_paths, selfie_path, threshold=0.40,
-             progress=None, cancel=None, cache_dir=None, workers=None):
+def facefind(native_paths, selfie_path, threshold=0.44,
+             progress=None, cancel=None, cache_dir=None, workers=None,
+             on_match=None):
     """Find every photo in *native_paths* containing the face in *selfie_path*.
+
+    ``selfie_path`` may be a single path or a list of selfies of the same
+    person — several are averaged into one reference embedding for more robust
+    matching (better recall, fewer false positives).
 
     When ``cache_dir`` is given, each photo's face embeddings are cached there
     by (path, size, mtime), so repeated searches over the same event folder
@@ -241,15 +255,26 @@ def facefind(native_paths, selfie_path, threshold=0.40,
     bookkeeping stay on the calling thread (the SQLite cache and result lists
     are single-threaded), so only the heavy per-photo work is parallelised.
 
-    Returns {"matches": [{"path", "score"}], "count"} or {"error": ...}.
+    ``on_match`` (optional) is called with each match dict as it is found, so a
+    caller can stream results to the UI while the scan is still running.
+
+    Returns {"matches": [{"path", "score", "mtime", "faces"}], "count"} or
+    {"error": ...}.
     """
     import numpy as np
     import threading
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    ref = FaceEmbedder().embed(selfie_path)
-    if ref is None:
+    # Accept one selfie or several; average them into a single unit reference.
+    selfies = selfie_path if isinstance(selfie_path, (list, tuple)) else [selfie_path]
+    emb0 = FaceEmbedder()
+    refs = [v for v in (emb0.embed(sp) for sp in selfies if sp) if v is not None]
+    if not refs:
         return {"error": "no_face_in_selfie", "matches": [], "count": 0}
+    ref = np.mean(refs, axis=0)
+    _rn = float(np.linalg.norm(ref))
+    if _rn > 0:
+        ref = ref / _rn
 
     cache = None
     if cache_dir:
@@ -279,8 +304,22 @@ def facefind(native_paths, selfie_path, threshold=0.40,
         nonlocal done
         done += 1
         best = best_score(vecs)
-        if best >= threshold:
-            matches.append({"path": path, "score": round(best, 3)})
+        # Photos crammed with faces (posters / collages) are a common source of
+        # false matches, so require a slightly stronger score for them.
+        thr = threshold + (0.08 if len(vecs) >= 12 else 0.0)
+        if best >= thr:
+            try:
+                mt = int(os.path.getmtime(path))
+            except OSError:
+                mt = 0
+            m = {"path": path, "score": round(best, 3), "mtime": mt,
+                 "faces": len(vecs)}
+            matches.append(m)
+            if on_match:
+                try:
+                    on_match(m)
+                except Exception:
+                    pass
         if progress:
             progress(done, total, len(matches))
 
