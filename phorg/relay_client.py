@@ -65,6 +65,23 @@ def index_status(base, event_id, key):
     return _get(base, "/api/index/status?event=" + quote(event_id), key=key)
 
 
+def event_stats(base, event_id, key):
+    """Return registration/match/photo counts for the host dashboard."""
+    from urllib.parse import quote
+    return _get(base, "/api/event/stats?event=" + quote(event_id), key=key)
+
+
+def set_lifecycle(base, event_id, key, expires_at=0):
+    """Set/clear the event's auto-purge time on the relay (0 = never)."""
+    return _post(base, "/api/event/lifecycle",
+                 {"event": event_id, "expires_at": int(expires_at or 0)}, key=key)
+
+
+def delete_event(base, event_id, key):
+    """Immediately delete an event and all its guest data from the relay."""
+    return _post(base, "/api/event/delete", {"event": event_id}, key=key)
+
+
 def publish_index(base, event_id, key, photos, chunk=20):
     """Publish face embeddings + deliverable images to the relay in batches.
 

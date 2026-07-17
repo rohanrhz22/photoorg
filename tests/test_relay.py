@@ -142,3 +142,53 @@ def test_relay_match_multi_face_photo(relay):
     d = relay_client._post(base, "/api/match", {
         "event": "grp", "selfie_embedding": [0.0, 0.0, 1.0], "threshold": 0.5})
     assert d["count"] == 1 and d["matches"][0]["name"] == "group.jpg"
+
+
+def test_relay_event_stats(relay):
+    base = relay
+    relay_client.publish_event(base, "stats", "Stats Event", "KEY")
+    relay_client.publish_index(base, "stats", "KEY", [
+        {"pid": "p1", "name": "1.jpg", "embeds": [[1.0, 0.0]], "image_bytes": b"1"},
+        {"pid": "p2", "name": "2.jpg", "embeds": [[0.0, 1.0]], "image_bytes": b"2"},
+    ])
+    relay_client._post(base, "/api/register", {
+        "event": "stats", "name": "G",
+        "selfie": "data:image/png;base64," + base64.b64encode(b"s").decode()})
+    st = relay_client.event_stats(base, "stats", "KEY")
+    assert st["registrations"] == 1 and st["pending"] == 1 and st["photos"] == 2
+
+
+def test_relay_lifecycle_expiry_purges(relay):
+    base = relay
+    relay_client.publish_event(base, "temp", "Temp Event", "KEY")
+    reg = relay_client._post(base, "/api/register", {
+        "event": "temp", "name": "G",
+        "selfie": "data:image/png;base64," + base64.b64encode(b"s").decode()})
+
+    # set expiry in the past, then purge
+    relay_client.set_lifecycle(base, "temp", "KEY", expires_at=1)
+    assert relay_server.purge_expired_events() >= 1
+
+    # event + guest data are gone: registering now fails, album is gone
+    import urllib.error
+    with pytest.raises(urllib.error.HTTPError):
+        relay_client.event_stats(base, "temp", "KEY")   # event no longer exists
+    with pytest.raises(urllib.error.HTTPError):
+        relay_client._get(base, f"/api/album?a={reg['rid']}.{reg['atoken']}")
+
+
+def test_relay_delete_event(relay):
+    base = relay
+    relay_client.publish_event(base, "del", "Delete Me", "KEY")
+    reg = relay_client._post(base, "/api/register", {
+        "event": "del", "name": "G",
+        "selfie": "data:image/png;base64," + base64.b64encode(b"s").decode()})
+    assert relay_client.delete_event(base, "del", "KEY")["ok"] is True
+    import urllib.error
+    with pytest.raises(urllib.error.HTTPError):
+        relay_client._get(base, f"/api/album?a={reg['rid']}.{reg['atoken']}")
+
+    # wrong key can't delete
+    relay_client.publish_event(base, "keep", "Keep", "RIGHT")
+    with pytest.raises(urllib.error.HTTPError):
+        relay_client.delete_event(base, "keep", "WRONG")

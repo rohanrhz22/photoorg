@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS events(
   id         TEXT PRIMARY KEY,
   name       TEXT,
   key        TEXT,
+  expires_at INTEGER DEFAULT 0,        -- 0 = never; else purge after this time
   created_at INTEGER,
   updated_at INTEGER
 );
@@ -111,11 +112,14 @@ def init():
         conn = _connect()
         try:
             conn.executescript(_SCHEMA)
-            # Forward-compat for relays created before Tier B.
-            try:
-                conn.execute("ALTER TABLE results ADD COLUMN pid TEXT")
-            except sqlite3.OperationalError:
-                pass
+            # Forward-compat for relays created before later phases.
+            for col in ("ALTER TABLE results ADD COLUMN pid TEXT",
+                        "ALTER TABLE events ADD COLUMN expires_at INTEGER "
+                        "DEFAULT 0"):
+                try:
+                    conn.execute(col)
+                except sqlite3.OperationalError:
+                    pass
             conn.commit()
         finally:
             conn.close()
@@ -161,6 +165,112 @@ def _event_key_ok(conn, event_id, key):
     return bool(row) and hmac.compare_digest(str(row["key"]), str(key or ""))
 
 
+def _delete_event_data(conn, event_id):
+    """Remove every trace of an event (registrations, results, photos, event)."""
+    regids = [r["id"] for r in conn.execute(
+        "SELECT id FROM registrations WHERE event_id=?", (event_id,)).fetchall()]
+    if regids:
+        q = ",".join("?" * len(regids))
+        conn.execute(f"DELETE FROM results WHERE reg_id IN ({q})", regids)
+    conn.execute("DELETE FROM registrations WHERE event_id=?", (event_id,))
+    conn.execute("DELETE FROM photos WHERE event_id=?", (event_id,))
+    conn.execute("DELETE FROM events WHERE id=?", (event_id,))
+
+
+def _purge_if_expired(event_id):
+    """If the event's expiry has passed, delete all its data.  Returns True when
+    it was purged."""
+    with _LOCK:
+        conn = _connect()
+        try:
+            row = conn.execute("SELECT expires_at FROM events WHERE id=?",
+                               (event_id,)).fetchone()
+            if not row:
+                return False
+            exp = row["expires_at"] or 0
+            if exp and _now() > exp:
+                _delete_event_data(conn, event_id)
+                conn.commit()
+                return True
+            return False
+        finally:
+            conn.close()
+
+
+def purge_expired_events():
+    """Delete every event whose expiry has passed.  Returns how many were
+    purged.  Called on a timer by the running relay and lazily on access."""
+    with _LOCK:
+        conn = _connect()
+        try:
+            rows = conn.execute(
+                "SELECT id FROM events WHERE expires_at>0 AND expires_at<?",
+                (_now(),)).fetchall()
+            for r in rows:
+                _delete_event_data(conn, r["id"])
+            conn.commit()
+            return len(rows)
+        finally:
+            conn.close()
+
+
+def set_lifecycle(event_id, key, expires_at=0):
+    """Host: set/clear the event's auto-purge time (epoch seconds; 0 = never)."""
+    with _LOCK:
+        conn = _connect()
+        try:
+            if not _event_key_ok(conn, event_id, key):
+                return None
+            conn.execute("UPDATE events SET expires_at=?,updated_at=? WHERE id=?",
+                         (int(expires_at or 0), _now(), event_id))
+            conn.commit()
+            return {"expires_at": int(expires_at or 0)}
+        finally:
+            conn.close()
+
+
+def event_stats(event_id, key):
+    """Host: registration/match/photo counts for the dashboard."""
+    with _LOCK:
+        conn = _connect()
+        try:
+            if not _event_key_ok(conn, event_id, key):
+                return None
+            ev = conn.execute(
+                "SELECT name,expires_at FROM events WHERE id=?",
+                (event_id,)).fetchone()
+
+            def c(sql):
+                return conn.execute(sql, (event_id,)).fetchone()[0]
+
+            return {
+                "event": ev["name"], "expires_at": ev["expires_at"] or 0,
+                "registrations": c("SELECT COUNT(*) FROM registrations "
+                                   "WHERE event_id=?"),
+                "matched": c("SELECT COUNT(*) FROM registrations "
+                             "WHERE event_id=? AND status='matched'"),
+                "pending": c("SELECT COUNT(*) FROM registrations "
+                             "WHERE event_id=? AND status='pending'"),
+                "photos": c("SELECT COUNT(*) FROM photos WHERE event_id=?"),
+            }
+        finally:
+            conn.close()
+
+
+def delete_event(event_id, key):
+    """Host: immediately delete an event and all its guest data."""
+    with _LOCK:
+        conn = _connect()
+        try:
+            if not _event_key_ok(conn, event_id, key):
+                return None
+            _delete_event_data(conn, event_id)
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+
 def event_public(event_id):
     with _LOCK:
         conn = _connect()
@@ -174,6 +284,7 @@ def event_public(event_id):
 
 def add_registration(event_id, name, contact, selfie_bytes):
     """Queue a guest sign-up.  Works whether or not the host is online."""
+    _purge_if_expired(event_id)
     rid = _uid()
     atoken = _uid(16)
     with _LOCK:
@@ -408,6 +519,7 @@ def match_guest(event_id, name, contact, selfie_bytes=None,
         queries = emb
     if not queries:
         return {"error": "no_face"}
+    _purge_if_expired(event_id)
     with _LOCK:
         conn = _connect()
         try:
@@ -597,6 +709,14 @@ class RelayHandler(BaseHTTPRequestHandler):
             else:
                 self._json(200, st)
             return
+        if path == "/api/event/stats":
+            ev = (qs.get("event") or [""])[0]
+            st = event_stats(ev, self._key())
+            if st is None:
+                self._json(403, {"error": "bad event key"})
+            else:
+                self._json(200, st)
+            return
         if path == "/api/album":
             rid, tok = _split_ref((qs.get("a") or [""])[0])
             d = album(rid, tok)
@@ -667,6 +787,16 @@ class RelayHandler(BaseHTTPRequestHandler):
             else:
                 self._json(200, {"ok": True, "count": n})
             return
+        if path == "/api/event/lifecycle":
+            r = set_lifecycle(body.get("event"), self._key(),
+                              body.get("expires_at") or 0)
+            self._json(200 if r else 403, r or {"error": "bad event key"})
+            return
+        if path == "/api/event/delete":
+            r = delete_event(body.get("event"), self._key())
+            self._json(200 if r else 403, {"ok": bool(r)}
+                       if r else {"error": "bad event key"})
+            return
         if path == "/api/match":
             selfie = _data_url_bytes(body.get("selfie"))
             try:
@@ -713,6 +843,15 @@ def make_server(port=8080, host="0.0.0.0"):
 
 def serve(port=8080, host="0.0.0.0"):
     httpd = make_server(port, host)
+    # Retention: purge expired events on a timer so guest data doesn't linger.
+    def _purge_loop():
+        while True:
+            try:
+                purge_expired_events()
+            except Exception:
+                pass
+            time.sleep(300)
+    threading.Thread(target=_purge_loop, daemon=True).start()
     print(f"\n  FaceFind relay running on http://{host}:{port}/")
     print(f"  Data dir: {_home()}")
     print("  Keep this always on so guest links never die. Ctrl+C to stop.\n")
