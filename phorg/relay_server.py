@@ -658,71 +658,196 @@ def match_guest(event_id, name, contact, selfie_bytes=None,
 # --------------------------------------------------------------------------
 _PORTAL = """<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>Hapzea</title><style>
-body{margin:0;font-family:'Segoe UI',Roboto,Arial,sans-serif;background:#0b1020;color:#e8ecf8}
-.wrap{max-width:620px;margin:18px auto;padding:0 16px}
-.card{background:#161f3d;border:1px solid #28345c;border-radius:16px;padding:18px;margin-top:14px}
-h1{font-size:1.4rem}label{display:block;margin:12px 0 4px;color:#9aa6c7;font-size:.9rem}
-input{width:100%;padding:10px;border-radius:10px;border:1px solid #28345c;background:#0d1424;color:#e8ecf8}
-.btn{margin-top:14px;padding:11px 16px;border:0;border-radius:10px;font-weight:600;cursor:pointer;
-background:linear-gradient(90deg,#6ea8fe,#7ef0c2);color:#0b1020}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:14px}
-.grid a{display:block;border:1px solid #28345c;border-radius:12px;overflow:hidden}
-.grid img{width:100%;height:130px;object-fit:cover;display:block}
-.callout{padding:12px;border-radius:10px;background:#12203a;border:1px solid #28345c;margin-top:12px}
-.mut{color:#9aa6c7;font-size:.85rem}</style></head><body><div class=wrap id=app></div>
+<title>Your photographs · Hapzea</title><style>
+body{margin:0;color:#2a231b;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+background:#f6f1e7;background-image:radial-gradient(900px 420px at 50% -8%,#fffdf7,rgba(255,253,247,0))}
+.wrap{max-width:560px;margin:0 auto;padding:8px 18px 40px}
+.brand{text-align:center;padding-top:24px;font-family:Georgia,'Times New Roman',serif;
+letter-spacing:.34em;font-size:12px;color:#8a6b30}
+.hdr{text-align:center}
+.eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:#a3803c;
+margin:26px 0 0;font-weight:700}
+h1.ev{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:500;
+font-size:clamp(26px,6vw,34px);margin:8px 0 10px;color:#241d15}
+.lead{color:#6f6452;font-size:15.5px;line-height:1.55;margin:0 0 6px}
+.card{background:#fffdf9;border:1px solid #e8dfd0;border-radius:18px;padding:22px;
+margin-top:18px;box-shadow:0 10px 30px rgba(60,45,20,.07);text-align:left}
+.selwrap{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.selring{width:118px;height:118px;border-radius:50%;border:2px dashed #cdbd9a;flex:none;
+display:flex;align-items:center;justify-content:center;color:#b3a685;
+background:#fbf7ee center/cover no-repeat;cursor:pointer}
+.selring.set{border:3px solid #b08d4a;color:transparent}
+.selbtns{display:flex;flex-direction:column;gap:9px;flex:1;min-width:180px}
+.selok{color:#6b7f4f;font-size:13px;font-weight:600;margin-top:10px}
+.btn{appearance:none;border:0;cursor:pointer;border-radius:999px;padding:12px 20px;
+font-size:15px;font-weight:600;background:#28211a;color:#f8f3e9;letter-spacing:.01em}
+.btn.ghost{background:transparent;border:1px solid #d5c7ac;color:#4a4133}
+.btn.wide{display:block;width:100%;margin-top:18px;padding:14px}
+.btn.sm{padding:9px 14px;font-size:13.5px}
+.hr{height:1px;background:#e9dfcb;margin:20px 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:460px){.two{grid-template-columns:1fr}}
+label{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#8a7c66;
+display:block;margin:0 0 6px}
+.opt{color:#b3a685;text-transform:none;letter-spacing:0}
+input{width:100%;box-sizing:border-box;padding:12px;border-radius:12px;
+border:1px solid #ddd0b8;background:#fdfaf3;color:#26211a;font-size:16px}
+.note{background:#f7efdd;border:1px solid #e6d7b5;border-radius:12px;padding:12px 14px;
+font-size:14.5px;margin-top:14px;line-height:1.5}
+.fine{color:#a4977f;font-size:12.5px;margin:16px 0 0;text-align:center;line-height:1.5}
+.keep{background:#f4ecdc;border:1px solid #e2d5b8;border-radius:14px;padding:12px 14px;margin-top:16px}
+.keeplbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8a6b30;
+font-weight:700;margin-bottom:8px}
+.keeprow{display:flex;gap:8px}
+.keeprow input{font-size:13px;padding:9px 10px}
+.waitrow{display:flex;gap:12px;align-items:flex-start}
+.mut2{color:#6f6452;font-size:14px;line-height:1.5}
+.pulse{width:10px;height:10px;border-radius:50%;background:#b08d4a;flex:none;margin-top:5px;
+animation:pu 1.2s ease-in-out infinite}
+@keyframes pu{50%{opacity:.25;transform:scale(.8)}}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin:18px 0 4px}
+.tile{position:relative;display:block;border-radius:14px;overflow:hidden;background:#eee5d2;
+aspect-ratio:1/1;border:1px solid #e6dac2}
+.tile img{width:100%;height:100%;object-fit:cover;display:block}
+.tile .dl{position:absolute;right:8px;bottom:8px;width:30px;height:30px;border-radius:50%;
+background:rgba(38,33,26,.82);color:#f7f0e2;display:flex;align-items:center;justify-content:center}
+.foot{text-align:center;color:#a4977f;font-size:11px;letter-spacing:.16em;
+text-transform:uppercase;margin:30px 0 8px}
+.hide{display:none}
+</style></head><body><div class=wrap><div id=app></div></div>
 <script>
-const qs=new URLSearchParams(location.search);const app=document.getElementById('app');
-const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const app=document.getElementById("app");
+const el=x=>document.getElementById(x);
+const esc=s=>(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const IC_CAM='<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5h2.8l1.6-2.3h7.2l1.6 2.3H20a.9.9 0 0 1 .9.9V18a.9.9 0 0 1-.9.9H4a.9.9 0 0 1-.9-.9V9.4a.9.9 0 0 1 .9-.9z"/><circle cx="12" cy="13.4" r="3.4"/></svg>';
+const IC_DL='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>';
 async function api(path,opts){const r=await fetch(path,opts);const d=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(d.error||'error');return d;}
-function fileB64(f){return new Promise((res,rej)=>{const rd=new FileReader();
-  rd.onload=()=>res(rd.result);rd.onerror=()=>rej(new Error('read'));rd.readAsDataURL(f);});}
-async function showAlbum(a){
-  let d;try{d=await api('/api/album?a='+encodeURIComponent(a));}catch(e){d=null;}
-  if(!d){app.innerHTML='<div class=card><div class=callout>This album link isn\\'t valid.</div></div>';return;}
-  const m=d.matches||[];
-  app.innerHTML='<h1>📸 '+esc(d.event)+'</h1><div class=card>'+
-    (d.status!=='matched'?'<div class=callout>⏳ Your photos aren\\'t ready yet. We\\'ll have them shortly — check back soon.</div>':
-      (m.length? '<div class=callout>✅ Found <b>'+m.length+'</b> photo(s) you\\'re in.</div><div class=grid>'+
-        m.map(x=>'<a href="/api/photo?a='+encodeURIComponent(a)+'&i='+x.i+'&dl=1" download>'+
-          (x.has_img?'<img loading=lazy src="/api/photo?a='+encodeURIComponent(a)+'&i='+x.i+'">':'')+'</a>').join('')+'</div>'
-        :'<div class=callout>No matches found. Try registering again with a clearer selfie.</div>'))+
-    '</div>';
-}
+  if(!r.ok)throw new Error(d.error||"Something went wrong");return d;}
+function paint(inner){app.innerHTML='<div class=brand>HAPZEA</div>'+inner+
+  '<p class=foot>Your photos, found privately</p>';}
+function hdr(eyebrow,title,lead){return '<div class=hdr><p class=eyebrow>'+esc(eyebrow)+'</p>'+
+  '<h1 class=ev>'+esc(title)+'</h1>'+(lead?'<p class=lead>'+lead+'</p>':'')+'</div>';}
+// Shrink the selfie on the phone before upload: faster on venue Wi-Fi and the
+// matcher never needs more than ~1280px.
+function prep(file){return new Promise((res,rej)=>{
+  const img=new Image();const url=URL.createObjectURL(file);
+  img.onload=()=>{const mx=1280,r=Math.min(1,mx/Math.max(img.width,img.height));
+    const c=document.createElement("canvas");
+    c.width=Math.round(img.width*r);c.height=Math.round(img.height*r);
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    URL.revokeObjectURL(url);res(c.toDataURL("image/jpeg",0.85));};
+  img.onerror=()=>{URL.revokeObjectURL(url);
+    const rd=new FileReader();rd.onload=()=>res(rd.result);
+    rd.onerror=()=>rej(new Error("That photo could not be read"));rd.readAsDataURL(file);};
+  img.src=url;});}
+function linkBox(ref){const link=location.origin+"/?a="+ref;
+  return '<div class=keep><div class=keeplbl>Your private album link — save it</div>'+
+    '<div class=keeprow><input readonly id=klink value="'+esc(link)+'">'+
+    '<button class="btn ghost sm" id=kcopy>Copy</button></div></div>';}
+function wireCopy(){const b=el("kcopy");if(!b)return;
+  b.onclick=()=>{const i=el("klink");i.select();
+    try{navigator.clipboard.writeText(i.value);}catch(e){document.execCommand("copy");}
+    b.textContent="Copied";setTimeout(()=>b.textContent="Copy",1600);};}
+let SELFIE=null;
 function showRegister(ev){
-  app.innerHTML='<h1>📸 '+esc(ev.name||'Find your photos')+'</h1>'+
-    '<p class=mut>Add a selfie to find every photo you\\'re in. Matched privately.</p><div class=card>'+
-    '<label>Your name (optional)</label><input id=n placeholder="e.g. Anjali">'+
-    '<label>Email or phone (optional) — so we can send your photos</label><input id=c placeholder="you@email.com">'+
-    '<label>Your selfie</label><input id=f type=file accept="image/*">'+
-    '<button class=btn id=go>🔎 Find my photos</button><div id=out></div></div>';
-  document.getElementById('go').onclick=async()=>{
-    const f=document.getElementById('f').files[0];const out=document.getElementById('out');
-    if(!f){out.innerHTML='<div class=callout>Please add a selfie.</div>';return;}
-    out.innerHTML='<div class=callout>Uploading…</div>';
-    try{const selfie=await fileB64(f);
-      const payload={event:ev.id,name:document.getElementById('n').value,
-        contact:document.getElementById('c').value,selfie:selfie};
-      let d,instant=false;
-      try{d=await api('/api/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});instant=true;}
-      catch(e){d=await api('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});}
-      const ref=d.rid+'.'+d.atoken;
-      const link=location.origin+'/?a='+ref;
-      out.innerHTML='<div class=callout>'+(instant?'✅ Found your photos!':'✅ You\\'re registered! We\\'ll find your photos.')+'<br><br>'+
-        '🔖 Save your private album link:<br><input readonly value="'+esc(link)+'"></div>';
-      history.replaceState(null,'','/?a='+ref);
-      setTimeout(()=>showAlbum(ref),instant?200:1200);
-    }catch(e){out.innerHTML='<div class=callout>'+esc(e.message)+'</div>';}
+  paint(hdr("Find your photographs",ev.name||"Our event",
+    "One selfie is all it takes — we gather every photo you appear in.")+
+  '<div class=card>'+
+    '<div class=selwrap>'+
+      '<div class=selring id=ring>'+IC_CAM+'</div>'+
+      '<div class=selbtns>'+
+        '<button class=btn id=take>Take a selfie</button>'+
+        '<button class="btn ghost" id=pick>Choose from gallery</button>'+
+        '<div class="selok hide" id=selok>Selfie added — looking good</div>'+
+      '</div>'+
+    '</div>'+
+    '<input type=file id=cam accept="image/*" capture="user" class=hide>'+
+    '<input type=file id=gal accept="image/*" class=hide>'+
+    '<div class=hr></div>'+
+    '<div class=two>'+
+      '<div><label for=n>Name <span class=opt>· optional</span></label>'+
+        '<input id=n placeholder="Anjali" autocomplete=name></div>'+
+      '<div><label for=c>Email or phone <span class=opt>· optional</span></label>'+
+        '<input id=c placeholder="you@email.com" autocomplete=email></div>'+
+    '</div>'+
+    '<button class="btn wide" id=go>Find my photographs</button>'+
+    '<div id=out></div>'+
+    '<p class=fine>Your selfie is used once, only to find your photos.<br>'+
+    'It is never shared or posted anywhere.</p>'+
+  '</div>');
+  const use=async f=>{if(!f)return;
+    try{SELFIE=await prep(f);}catch(e){el("out").innerHTML='<div class=note>'+esc(e.message)+'</div>';return;}
+    const r=el("ring");r.style.backgroundImage="url("+SELFIE+")";r.classList.add("set");
+    el("selok").classList.remove("hide");el("out").innerHTML="";};
+  el("cam").onchange=e=>use(e.target.files[0]);
+  el("gal").onchange=e=>use(e.target.files[0]);
+  el("take").onclick=()=>el("cam").click();
+  el("pick").onclick=()=>el("gal").click();
+  el("ring").onclick=()=>el(SELFIE?"gal":"cam").click();
+  el("go").onclick=async()=>{
+    const out=el("out");
+    if(!SELFIE){out.innerHTML='<div class=note>Please add a selfie first — take one or pick from your gallery.</div>';return;}
+    out.innerHTML='<div class=note><span class=waitrow><span class=pulse></span>'+
+      '<span>Looking through the album…</span></span></div>';
+    const payload={event:ev.id,name:el("n").value,contact:el("c").value,selfie:SELFIE};
+    let d;
+    try{
+      try{d=await api("/api/match",{method:"POST",
+        headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});}
+      catch(e){d=await api("/api/register",{method:"POST",
+        headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});}
+    }catch(e){out.innerHTML='<div class=note>'+esc(e.message)+'</div>';return;}
+    const ref=d.rid+"."+d.atoken;
+    history.replaceState(null,"","/?a="+ref+"&e="+encodeURIComponent(ev.id));
+    showAlbum(ref);
   };
 }
+async function showAlbum(ref){
+  let d;try{d=await api("/api/album?a="+encodeURIComponent(ref));}catch(e){d=null;}
+  if(!d){paint('<div class=card><div class=note>This album link is not valid. '+
+    'Please use the link or QR your event host shared with you.</div></div>');return;}
+  if(d.status!=="matched"){
+    paint(hdr("One moment",d.event,"")+
+      '<div class=card><div class=waitrow><span class=pulse></span>'+
+      '<div><b>We are gathering your photographs.</b><br>'+
+      '<span class=mut2>This page updates by itself — nothing to do. '+
+      'If you leave, your album will be waiting at the link below.</span></div></div>'+
+      linkBox(ref)+'</div>');
+    wireCopy();
+    setTimeout(()=>showAlbum(ref),7000);
+    return;
+  }
+  const m=d.matches||[];
+  if(!m.length){
+    const e=new URLSearchParams(location.search).get("e");
+    paint(hdr("Your private album",d.event,"")+
+      '<div class=card><div class=note>We could not find you this time. '+
+      'A straight-on selfie in good light works best.</div>'+
+      (e?'<button class="btn wide" id=retry>Try another selfie</button>':'')+'</div>');
+    if(e)el("retry").onclick=()=>{location.href="/?e="+encodeURIComponent(e);};
+    return;
+  }
+  paint(hdr("Your private album",d.event,
+      "You appear in <b>"+m.length+"</b> photograph"+(m.length>1?"s":"")+
+      ". Tap any photo to save it in full quality.")+
+    '<div class=grid>'+m.map(x=>{
+      const u="/api/photo?a="+encodeURIComponent(ref)+"&i="+x.i;
+      return '<a class=tile href="'+u+'&dl=1" download>'+
+        (x.has_img?'<img loading=lazy src="'+u+'" alt="">':'')+
+        '<span class=dl>'+IC_DL+'</span></a>';}).join("")+'</div>'+
+    linkBox(ref));
+  wireCopy();
+}
 (async()=>{
-  const a=qs.get('a');
+  const qs=new URLSearchParams(location.search);
+  const a=qs.get("a");
   if(a){showAlbum(a);return;}
-  const ev=qs.get('e');
-  if(ev){try{const d=await api('/api/event/public?e='+encodeURIComponent(ev));showRegister({id:ev,name:d.name});}
-    catch(e){app.innerHTML='<div class=card><div class=callout>Event not found.</div></div>';}return;}
-  app.innerHTML='<div class=card><div class=callout>Open the event link your host shared with you.</div></div>';
+  const e=qs.get("e");
+  if(e){try{const d=await api("/api/event/public?e="+encodeURIComponent(e));
+      showRegister({id:e,name:d.name});}
+    catch(err){paint('<div class=card><div class=note>This event link is not active yet. '+
+      'Please ask your host for a fresh link.</div></div>');}return;}
+  paint('<div class=card><div class=note>Open the link or QR code your event host shared with you.</div></div>');
 })();
 </script></body></html>"""
 

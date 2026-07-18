@@ -3,277 +3,304 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<meta name="theme-color" content="#000062"/>
+<meta name="theme-color" content="#F5F5F7"/>
 <title>Hapzea — find every guest's photos</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 <style>
+/* ============================================================
+   Hapzea design system — calm, precise, near-monochrome.
+   One accent (bronze) shared with the guest keepsake page.
+   Spacing on an 8px scale; type locked to 12/14/16/20/24/32.
+   ============================================================ */
 :root{
-  /* Hapzea brand — dark black/navy + cyan→blue gradient */
-  --bg0:#000000; --navy:#091e4c; --navy2:#0a0f1c;
-  --card:rgba(255,255,255,.045); --card2:rgba(255,255,255,.09); --line:rgba(255,255,255,.12);
-  --txt:#eaf1fb; --mut:#9fb0c9; --mut2:#6f7f9c;
-  --accent:#38bdf8; --accent2:#2563eb; --good:#10b981; --warn:#f59e0b; --bad:#ef4444;
-  --grad:linear-gradient(135deg,var(--accent),var(--accent2));
-  --ring:rgba(56,189,248,.35);
-  --shadow:0 20px 45px rgba(0,0,0,.55);
+  --surface:#FFFFFF;            /* cards */
+  --surface2:#F5F5F7;           /* page + wells */
+  --txt:#1D1D1F;
+  --mut:rgba(29,29,31,.62);     /* secondary = same ink, reduced presence */
+  --mut2:rgba(29,29,31,.4);
+  --hair:rgba(29,29,31,.1);     /* hairlines, never heavy borders */
+  --accent:#A3803C;             /* the one accent — ties host to guest page */
+  --accent-tint:rgba(163,128,60,.1);
+  --ring:rgba(163,128,60,.28);
+  --good:#3E7C4F; --warn:#9A6B1F; --bad:#B3402E;
+  --good-bg:rgba(62,124,79,.08); --warn-bg:rgba(154,107,31,.08); --bad-bg:rgba(179,64,46,.08);
+  /* a millimetre of elevation, no more */
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 4px 12px rgba(0,0,0,.04);
+  --shadow-2:0 2px 6px rgba(0,0,0,.06),0 12px 32px rgba(0,0,0,.07);
+  --ease:cubic-bezier(.4,0,.2,1);
+}
+body.dark{
+  --surface:#1C1C1E; --surface2:#000000;
+  --txt:#F5F5F7; --mut:rgba(245,245,247,.62); --mut2:rgba(245,245,247,.4);
+  --hair:rgba(245,245,247,.12);
+  --accent:#C9A25E; --accent-tint:rgba(201,162,94,.14); --ring:rgba(201,162,94,.3);
+  --good:#6FBF85; --warn:#D9A94F; --bad:#E07B6A;
+  --good-bg:rgba(111,191,133,.1); --warn-bg:rgba(217,169,79,.1); --bad-bg:rgba(224,123,106,.1);
+  --shadow:none; --shadow-2:none;   /* dark mode layers by surface, not shadow */
 }
 *{box-sizing:border-box}
 html,body{height:100%}
 html{scroll-behavior:smooth}
-body{margin:0;color:var(--txt);
-  font:14px/1.55 'Inter',system-ui,-apple-system,Segoe UI,Arial,sans-serif;
-  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
-  background:linear-gradient(160deg,#000 0%,var(--navy) 48%,#000 100%);
-  background-attachment:fixed;}
-::selection{background:#38bdf855}
+body{margin:0;color:var(--txt);background:var(--surface2);
+  font:14px/1.55 -apple-system,'SF Pro Text',BlinkMacSystemFont,'Segoe UI',Inter,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+::selection{background:var(--accent-tint)}
 a{color:var(--accent);text-decoration:none}
-button{font:inherit;cursor:pointer}
+button{font:inherit;cursor:pointer;color:inherit}
 .hidden{display:none!important}
+svg{vertical-align:-3px}
 
-/* ambient brand background — grid + glowing blobs */
-.bg-decor{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
-.bg-decor::before{content:"";position:absolute;inset:0;
-  background:linear-gradient(to right,#ffffff08 1px,transparent 1px),
-             linear-gradient(to bottom,#ffffff08 1px,transparent 1px);
-  background-size:64px 64px;
-  -webkit-mask-image:radial-gradient(ellipse 90% 60% at 50% 0%,#000 25%,transparent 78%);
-          mask-image:radial-gradient(ellipse 90% 60% at 50% 0%,#000 25%,transparent 78%);}
-.blob{position:absolute;border-radius:50%;filter:blur(90px);opacity:.5;animation:pulseSlow 8s ease-in-out infinite}
-.blob.b1{width:520px;height:520px;left:-130px;top:-150px;background:radial-gradient(circle,rgba(56,189,248,.55),transparent 70%)}
-.blob.b2{width:560px;height:560px;right:-170px;top:-90px;background:radial-gradient(circle,rgba(37,99,235,.5),transparent 70%);animation-delay:1.6s}
-.blob.b3{width:480px;height:480px;left:38%;bottom:-240px;background:radial-gradient(circle,rgba(168,85,247,.32),transparent 70%);animation-delay:3.2s}
-@keyframes pulseSlow{0%,100%{opacity:.42}50%{opacity:.72}}
+/* layout — 720px column keeps the 3-step journey a single readable spine */
+.main{padding:56px 32px 112px;max-width:920px;width:100%;margin:0 auto}
+.brand{display:flex;align-items:center;gap:8px;margin:0 0 40px}
+.brandlogo{height:28px;width:auto;object-fit:contain}
+.brandname{font-size:12px;font-weight:700;letter-spacing:.24em;text-transform:uppercase;color:var(--mut)}
+.page{animation:fadeIn .3s var(--ease)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+h1{font-size:40px;line-height:1.08;margin:0 0 12px;font-weight:600;letter-spacing:-.03em}
+.lead{color:var(--mut);margin:0 0 40px;font-size:16px;line-height:1.55;max-width:52ch}
 
-/* layout — single, centered Hapzea surface */
-.main{padding:34px 24px 80px;max-width:840px;width:100%;margin:0 auto}
-.brand{display:flex;align-items:center;gap:14px;margin:4px 2px 26px}
-.brandlogo{height:40px;width:auto;object-fit:contain;
-  filter:drop-shadow(0 6px 18px rgba(56,189,248,.28));transition:transform .3s;cursor:default}
-.brandlogo:hover{transform:scale(1.05)}
-.brandbadge{font-size:12px;font-weight:700;letter-spacing:.5px;color:#fff;text-transform:uppercase;
-  background:var(--grad);padding:6px 13px;border-radius:999px;box-shadow:0 8px 20px rgba(37,99,235,.4)}
-.mainbadge{font-size:9.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#fff;
-  background:var(--grad);padding:3px 9px;border-radius:999px;box-shadow:0 4px 12px rgba(37,99,235,.4)}
-/* legacy .logo chip (guest portal fallback) */
-.logo{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:22px;
-  background:var(--grad);box-shadow:0 8px 20px rgba(37,99,235,.4)}
-.page{animation:fadeIn .32s ease}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px) scale(.99)}to{opacity:1;transform:none}}
-h1{font-size:30px;line-height:1.15;margin:0 0 6px;font-weight:800;letter-spacing:-.02em;
-  background:linear-gradient(120deg,#fff,#cfe4ff 55%,#c7b6ff);
-  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.lead{color:var(--mut);margin:0 0 26px;font-size:14.5px;line-height:1.6;max-width:62ch}
-
-/* step tracker */
-.steps{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 24px}
-.step{display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:500;color:var(--mut2);cursor:pointer;user-select:none;
-  background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:999px;padding:7px 15px 7px 8px;transition:.2s}
-.step:hover{background:rgba(255,255,255,.08);color:#fff;transform:translateY(-1px)}
-.step .sd{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:700;
-  background:rgba(255,255,255,.1);color:var(--mut);transition:.25s}
-.step.active{color:#fff;border-color:transparent;background:rgba(56,189,248,.13);box-shadow:0 0 0 1px var(--accent) inset}
-.step.active .sd{background:var(--grad);color:#fff}
+/* step tracker — quiet wayfinding, never louder than the content it points to */
+.steps{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 32px}
+.step{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;
+  color:var(--mut2);cursor:pointer;user-select:none;background:none;border:0;
+  padding:8px 0;transition:color .2s var(--ease)}
+.step:hover{color:var(--txt)}
+.step .sd{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  font-size:12px;font-weight:600;border:1px solid var(--hair);color:var(--mut);
+  transition:all .25s var(--ease)}
+.step.active{color:var(--txt)}
+.step.active .sd{background:var(--accent);border-color:var(--accent);color:#fff}
 .step.done{color:var(--mut)}
-.step.done .sd{background:rgba(16,185,129,.25);color:#8ff0c4}
-@media(max-width:520px){.step .lbl{display:none}}
-.prewarm{margin-top:10px;font-size:12px;color:#bfe3ff;display:flex;align-items:center;gap:7px}
+.step.done .sd{color:var(--accent);border-color:var(--ring)}
+.step+.step::before{content:"";width:24px;height:1px;background:var(--hair);margin-right:8px}
+@media(max-width:640px){.step .lbl{display:none}.step+.step::before{width:16px}}
+.prewarm{margin-top:8px;font-size:12px;color:var(--mut);display:flex;align-items:center;gap:8px}
 .prewarm:empty{display:none}
 
-/* glass cards */
-.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;
-  box-shadow:var(--shadow);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
-.card+.card{margin-top:18px}
+/* cards — hierarchy by elevation and spacing, not decoration */
+.card{background:var(--surface);border:1px solid var(--hair);border-radius:20px;
+  padding:28px;box-shadow:var(--shadow)}
+.card+.card{margin-top:16px}
+.card.hero{box-shadow:var(--shadow-2)}   /* the QR card is the payoff — one step up */
+body.dark .card.hero{border-color:rgba(245,245,247,.2)}
 
-label.fld{display:block;margin:16px 0 6px;font-size:12.5px;color:var(--mut);font-weight:600}
-input[type=text],select{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--txt);
-  border-radius:12px;padding:12px 14px;font-size:13.5px;font-family:inherit;transition:.18s}
+label.fld{display:block;margin:16px 0 8px;font-size:12px;color:var(--mut);font-weight:600;
+  text-transform:uppercase;letter-spacing:.04em}
+.optl{color:var(--mut2);font-weight:400;text-transform:none;letter-spacing:0}
+input[type=text],select{width:100%;background:var(--surface2);border:1px solid var(--hair);
+  color:var(--txt);border-radius:12px;padding:12px 16px;font-size:14px;font-family:inherit;
+  transition:border-color .2s var(--ease),box-shadow .2s var(--ease)}
 input[type=text]::placeholder{color:var(--mut2)}
-input[type=text]:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--ring);
-  background:rgba(255,255,255,.06)}
-.row{display:flex;gap:10px;align-items:center}
+input[type=text]:focus,select:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--ring)}
+.row{display:flex;gap:8px;align-items:center}
 .row input[type=text]{flex:1}
 
-.btn{background:var(--grad);color:#fff;border:0;padding:12px 22px;border-radius:999px;
-  font-weight:600;font-size:13.5px;letter-spacing:.2px;transition:all .3s;
-  box-shadow:0 10px 24px rgba(37,99,235,.35);display:inline-flex;align-items:center;gap:8px}
-.btn:hover{transform:scale(1.04);box-shadow:0 14px 30px rgba(56,189,248,.42)}
-.btn:active{transform:scale(1)}
-.btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none;filter:saturate(.6)}
-.btn.ghost{background:rgba(255,255,255,.06);color:var(--txt);box-shadow:none;
-  border:1.5px solid var(--line);backdrop-filter:blur(6px)}
-.btn.ghost:hover{border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.1)}
-.btn.warn{background:linear-gradient(135deg,#fb923c,#ef4444);box-shadow:0 10px 24px rgba(239,68,68,.35)}
-.btn.sm{padding:8px 16px;font-size:12.5px}
-.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+/* buttons — one filled per view; everything else tinted or text */
+.btn{background:var(--accent);color:#fff;border:0;padding:12px 24px;border-radius:980px;
+  font-weight:600;font-size:14px;min-height:44px;display:inline-flex;align-items:center;
+  justify-content:center;gap:8px;transition:opacity .2s var(--ease),transform .2s var(--ease)}
+.btn:hover{opacity:.9}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn.ghost{background:var(--accent-tint);color:var(--accent)}
+.btn.ghost:hover{opacity:.82}
+.btn.warn{background:var(--accent)}      /* save = the primary of its view */
+.btn.sm{padding:8px 16px;font-size:13px;min-height:36px}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:24px}
 
 /* toggles */
-.toggle{display:flex;align-items:center;gap:11px;padding:9px 0;font-size:13px;cursor:pointer}
+.toggle{display:flex;align-items:center;gap:12px;padding:8px 0;font-size:14px;cursor:pointer}
 .toggle input{display:none}
-.tk{width:42px;height:23px;border-radius:20px;background:rgba(255,255,255,.14);position:relative;transition:.2s;flex:none}
-.tk::after{content:"";position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;border-radius:50%;
-  background:#fff;transition:.2s;box-shadow:0 2px 5px rgba(0,0,0,.4)}
-.toggle input:checked+.tk{background:var(--grad)}
-.toggle input:checked+.tk::after{left:21px}
-.toggle .desc{color:var(--mut);font-size:11.5px}
-.opts{display:grid;grid-template-columns:1fr 1fr;gap:2px 22px;margin-top:6px}
+.tk{width:42px;height:24px;border-radius:20px;background:var(--hair);position:relative;
+  transition:background .2s var(--ease);flex:none}
+.tk::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
+  background:var(--surface);transition:transform .2s var(--ease);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.toggle input:checked+.tk{background:var(--accent)}
+.toggle input:checked+.tk::after{transform:translateX(18px)}
+.toggle .desc{color:var(--mut);font-size:12px}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:2px 24px;margin-top:8px}
 
-/* preview */
-.preview{margin-top:18px;border:1px solid var(--line);border-radius:16px;overflow:hidden;
-  background:rgba(255,255,255,.03)}
-.preview .ph{padding:14px 18px;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+/* progress surfaces */
+.preview{margin-top:16px;border:1px solid var(--hair);border-radius:16px;overflow:hidden;
+  background:var(--surface)}
+.preview .ph{padding:16px;background:var(--surface2);display:flex;align-items:center;
+  justify-content:space-between;gap:8px;flex-wrap:wrap}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
-.chip{background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.25);border-radius:999px;padding:4px 12px;font-size:11.5px;color:#bfe3ff}
-.chip b{color:#fff}
+.chip{background:var(--surface);border:1px solid var(--hair);border-radius:980px;
+  padding:4px 12px;font-size:12px;color:var(--mut)}
+.chip b{color:var(--txt)}
+.track{display:block;height:6px;border-radius:980px;background:var(--surface2);
+  border:1px solid var(--hair);overflow:hidden}
+.fill{display:block;height:100%;width:0%;background:var(--accent);
+  transition:width .3s var(--ease)}
 
-.callout{border-radius:14px;padding:13px 16px;font-size:12.8px;line-height:1.55}
-.callout .ic{margin-right:2px}
-.callout.flex{display:flex;gap:10px;align-items:center}
-.callout.safe{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#9ff0cd}
-.callout.warn{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:#f5d59a}
-.callout.info{background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.3);color:#b6e2ff}
-.callout.bad{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f6acac}
-.callout code{background:rgba(255,255,255,.09);padding:1px 6px;border-radius:6px;font-size:11.5px}
+.callout{border-radius:12px;padding:12px 16px;font-size:13px;line-height:1.55;
+  background:var(--surface2);border:1px solid var(--hair);color:var(--txt)}
+.callout.flex{display:flex;gap:8px;align-items:center}
+.callout.safe{background:var(--good-bg);border-color:transparent;color:var(--good)}
+.callout.warn{background:var(--warn-bg);border-color:transparent;color:var(--warn)}
+.callout.info{background:var(--accent-tint);border-color:transparent;color:var(--txt)}
+.callout.bad{background:var(--bad-bg);border-color:transparent;color:var(--bad)}
+.callout code{background:var(--hair);padding:1px 6px;border-radius:6px;font-size:12px}
 
 /* modal */
-.overlay{position:fixed;inset:0;background:#01040bcc;backdrop-filter:blur(6px);display:grid;place-items:center;z-index:50}
-.modal{width:min(560px,92vw);max-height:82vh;background:linear-gradient(180deg,#0b1220f2,#070b14f5);
-  border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden;
-  backdrop-filter:blur(20px)}
-.modal .mh{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
-.modal .mh h3{margin:0;font-size:16px;font-weight:700}
-.modal .mb{padding:12px 12px;overflow:auto}
-.modal .mf{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:center}
-.crumbs{padding:2px 8px 10px;color:var(--mut);font-size:12px;word-break:break-all}
-.fitem{display:flex;align-items:center;gap:11px;padding:10px 14px;border-radius:12px;cursor:pointer;transition:.14s}
-.fitem:hover{background:rgba(56,189,248,.1)}
-.fitem .fi{font-size:16px}
-.x{background:transparent;border:0;color:var(--mut);font-size:20px;line-height:1;padding:4px 8px;border-radius:8px}
-.x:hover{background:#ffffff14;color:var(--txt)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:grid;place-items:center;z-index:50}
+.modal{width:min(560px,92vw);max-height:82vh;background:var(--surface);
+  border:1px solid var(--hair);border-radius:16px;box-shadow:var(--shadow-2);
+  display:flex;flex-direction:column;overflow:hidden}
+.modal .mh{padding:16px 24px;border-bottom:1px solid var(--hair);display:flex;
+  justify-content:space-between;align-items:center}
+.modal .mh h3{margin:0;font-size:16px;font-weight:600}
+.modal .mb{padding:8px;overflow:auto}
+.modal .mf{padding:16px 24px;border-top:1px solid var(--hair);display:flex;
+  justify-content:space-between;gap:8px;align-items:center}
+.crumbs{padding:8px 24px 0;color:var(--mut);font-size:12px;word-break:break-all}
+.fitem{display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:12px;
+  cursor:pointer;transition:background .15s var(--ease)}
+.fitem:hover{background:var(--surface2)}
+.fitem .fi{color:var(--mut);display:flex}
+.x{background:transparent;border:0;color:var(--mut);font-size:20px;line-height:1;
+  padding:8px;border-radius:8px;min-width:36px;min-height:36px}
+.x:hover{background:var(--surface2);color:var(--txt)}
 
 /* toast */
-#toasts{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:10px;z-index:80}
-.toast{min-width:240px;max-width:360px;padding:13px 16px;border-radius:14px;box-shadow:var(--shadow);
-  font-size:13px;display:flex;gap:10px;align-items:flex-start;animation:slide .25s ease;
-  border:1px solid rgba(255,255,255,.1);background:#1f2937}
-.toast.good{border-color:#10b98188}.toast.bad{border-color:#ef444488}.toast.info{border-color:#38bdf888}
-@keyframes slide{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
+#toasts{position:fixed;right:24px;bottom:24px;display:flex;flex-direction:column;gap:8px;z-index:80}
+.toast{min-width:240px;max-width:360px;padding:12px 16px;border-radius:12px;
+  box-shadow:var(--shadow-2);font-size:13px;display:flex;gap:8px;align-items:flex-start;
+  animation:slide .25s var(--ease);border:1px solid var(--hair);background:var(--surface)}
+body.dark .toast{background:#2C2C2E}
+.tdot{width:8px;height:8px;border-radius:50%;background:var(--mut2);flex:none;margin-top:5px}
+.tdot.good{background:var(--good)}.tdot.bad{background:var(--bad)}.tdot.info{background:var(--accent)}
+@keyframes slide{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
 
-.spin{width:16px;height:16px;border:2.5px solid #ffffff33;border-top-color:var(--accent);border-radius:50%;
-  display:inline-block;animation:sp .7s linear infinite;vertical-align:-3px}
+.spin{width:14px;height:14px;border:2px solid var(--hair);border-top-color:var(--accent);
+  border-radius:50%;display:inline-block;animation:sp .7s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
-.empty{color:var(--mut);text-align:center;padding:40px 10px}
-.empty .big{font-size:44px;opacity:.5}
-.sect-t{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);margin:26px 0 12px}
+.empty{color:var(--mut);text-align:center;padding:40px 8px}
+.sect-t{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:24px 0 8px;font-weight:600}
 details.advbox{margin:8px 0 0}
-details.advbox>summary{cursor:pointer;color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.6px;margin:18px 0 10px;list-style:none;user-select:none}
+details.advbox>summary{cursor:pointer;color:var(--mut);font-size:14px;margin:16px 0 8px;
+  list-style:none;user-select:none;padding:8px 0}
+details.advbox>summary:hover{color:var(--txt)}
 details.advbox>summary::-webkit-details-marker{display:none}
-details.advbox>summary::before{content:"▸ ";color:var(--accent)}
-details.advbox[open]>summary::before{content:"▾ "}
-.cardh{margin:0 0 10px;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
-.subhint{color:var(--mut);font-size:11.8px;margin-top:8px;line-height:1.5}
+details.advbox>summary::before{content:"› ";color:var(--accent)}
+details.advbox[open]>summary::before{content:"⌄ "}
+.cardh{margin:0 0 8px;font-size:20px;font-weight:600;display:flex;align-items:center;gap:8px;letter-spacing:-.01em}
+.subhint{color:var(--mut);font-size:12px;margin-top:8px;line-height:1.55}
 
-/* thumbnail grid */
-.thumbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(116px,1fr));gap:10px;margin-top:8px}
-.thumb{position:relative;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;padding:6px;cursor:pointer;user-select:none;transition:all .3s cubic-bezier(.4,0,.2,1)}
-.thumb:hover{transform:translateY(-2px);box-shadow:0 16px 24px rgba(0,0,0,.35)}
-.thumb.sel{outline:2px solid var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
-.thumb img{width:100%;height:92px;object-fit:cover;border-radius:8px;background:#0a1220;display:block}
-.thumb .nm{color:var(--mut);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:5px 2px 4px}
+/* thumbnails */
+.thumbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(116px,1fr));gap:8px;margin-top:8px}
+.thumb{position:relative;background:var(--surface);border:1px solid var(--hair);border-radius:12px;
+  padding:4px;cursor:pointer;user-select:none;transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+.thumb:hover{transform:translateY(-2px);box-shadow:var(--shadow-2)}
+.thumb.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--ring)}
+.thumb img{width:100%;height:92px;object-fit:cover;border-radius:8px;background:var(--surface2);display:block}
+.thumb .nm{color:var(--mut);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:4px 4px 2px}
 
-/* Hapzea selfie */
-.ffselfie{display:flex;gap:14px;align-items:center;margin-top:6px}
-.ffprev{width:88px;height:88px;border-radius:16px;border:2px dashed var(--line);flex:none;
-  display:flex;align-items:center;justify-content:center;font-size:34px;overflow:hidden;background:rgba(255,255,255,.04);transition:.2s}
-.ffprev.drag{border-color:var(--accent);background:rgba(56,189,248,.12)}
-.ffprev img{width:100%;height:100%;object-fit:cover}
-
-/* history / guest rows */
-.histrow{display:flex;align-items:center;gap:10px;padding:9px 2px;border-top:1px solid var(--line);font-size:13px}
+/* guest rows */
+.histrow{display:flex;align-items:center;gap:8px;padding:12px 0;border-top:1px solid var(--hair);font-size:14px}
 .histrow:first-child{border-top:0}
-.histrow .hl{flex:1} .histrow .ht{color:var(--mut2);font-size:11.5px}
+.histrow .hl{flex:1} .histrow .ht{color:var(--mut2);font-size:12px}
 
 /* sliders */
-.slider{margin:12px 0}
-.slider label{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mut);margin-bottom:6px}
+.slider{margin:16px 0}
+.slider label{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-bottom:8px}
 .slider label b{color:var(--txt)}
 .slider input[type=range]{width:100%;accent-color:var(--accent)}
-.slider .ends{display:flex;justify-content:space-between;font-size:11px;color:var(--mut2);margin-top:2px}
+.slider .ends{display:flex;justify-content:space-between;font-size:12px;color:var(--mut2);margin-top:2px}
 
 /* drag-drop overlay */
-#dropOverlay{position:fixed;inset:0;z-index:120;display:none;align-items:center;justify-content:center;background:#01040bd0;backdrop-filter:blur(6px)}
+#dropOverlay{position:fixed;inset:0;z-index:120;display:none;align-items:center;
+  justify-content:center;background:rgba(0,0,0,.4)}
 #dropOverlay.on{display:flex}
-#dropOverlay .dropinner{border:3px dashed var(--accent);border-radius:20px;padding:48px 70px;text-align:center;color:var(--txt);font-size:52px;background:rgba(255,255,255,.05)}
-#dropOverlay .dropinner div{font-size:16px;margin-top:12px;color:var(--mut)}
+#dropOverlay .dropinner{border:2px dashed var(--accent);border-radius:16px;padding:48px 64px;
+  text-align:center;color:var(--txt);font-size:16px;font-weight:600;background:var(--surface)}
 
-/* custom scrollbar */
 ::-webkit-scrollbar{width:8px;height:8px}
-::-webkit-scrollbar-track{background:rgba(255,255,255,.04)}
-::-webkit-scrollbar-thumb{background:rgba(148,163,184,.5);border-radius:4px}
-::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.7)}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--hair);border-radius:4px}
 
-@media(max-width:760px){.opts{grid-template-columns:1fr}h1{font-size:25px}}
-
-/* --- multi-selfie gallery --- */
-.selfies{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px}
-.selfie{position:relative;width:74px;height:74px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--bg1,rgba(255,255,255,.04))}
+/* selfie gallery */
+.selfies{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.selfie{position:relative;width:74px;height:74px;border-radius:12px;overflow:hidden;
+  border:1px solid var(--hair);background:var(--surface2)}
 .selfie img{width:100%;height:100%;object-fit:cover;display:block}
-.selfie .rm{position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;border:0;background:#000a;color:#fff;font-size:12px;line-height:1;display:grid;place-items:center;cursor:pointer}
-.selfieadd{width:74px;height:74px;border-radius:14px;border:2px dashed var(--line);background:rgba(255,255,255,.03);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--mut);font-size:22px;transition:.2s}
+.selfie .rm{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;border:0;
+  background:rgba(0,0,0,.6);color:#fff;font-size:12px;line-height:1;display:grid;place-items:center;cursor:pointer}
+.selfieadd{width:74px;height:74px;border-radius:12px;border:1px dashed var(--hair);
+  background:var(--surface2);display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;cursor:pointer;color:var(--mut);transition:border-color .2s var(--ease),color .2s var(--ease)}
 .selfieadd:hover{border-color:var(--accent);color:var(--accent)}
-.selfieadd span{font-size:10px;font-weight:600}
+.selfieadd span{font-size:11px;font-weight:600}
 
-/* --- confidence bands --- */
-.band{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.3px;padding:2px 7px;border-radius:999px;text-transform:uppercase}
-.band.sure{background:rgba(16,185,129,.22);color:#7ff0c4}
-.band.likely{background:rgba(56,189,248,.2);color:#bfe3ff}
-.band.maybe{background:rgba(245,158,11,.2);color:#f5d59a}
+/* confidence bands — informational, so they stay quiet */
+.band{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.02em;
+  padding:2px 8px;border-radius:980px;text-transform:uppercase}
+.band.sure{background:var(--good-bg);color:var(--good)}
+.band.likely{background:var(--accent-tint);color:var(--accent)}
+.band.maybe{background:var(--warn-bg);color:var(--warn)}
 .thumb .kp{position:absolute;top:8px;left:8px;width:20px;height:20px;accent-color:var(--accent);cursor:pointer;z-index:3}
 .thumb .bd{position:absolute;bottom:26px;left:8px;z-index:2}
-.thumb .zoom{position:absolute;top:8px;right:8px;z-index:3;width:22px;height:22px;border-radius:50%;border:0;background:#000a;color:#fff;font-size:12px;cursor:pointer;display:grid;place-items:center}
+.thumb .zoom{position:absolute;top:8px;right:8px;z-index:3;width:24px;height:24px;border-radius:50%;
+  border:0;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;display:grid;place-items:center}
 
-/* --- lightbox --- */
-.lbov{position:fixed;inset:0;background:#01040bee;backdrop-filter:blur(6px);display:flex;flex-direction:column;z-index:130}
-.lbtop{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;gap:10px}
-.lbtop .lbn{font-size:13px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lbmain{flex:1;display:flex;align-items:center;justify-content:center;gap:14px;padding:0 12px;min-height:0}
-.lbmain img{max-width:84vw;max-height:78vh;object-fit:contain;border-radius:12px;box-shadow:var(--shadow);background:#0a1220}
-.lbnav{background:#ffffff16;border:1px solid var(--line);color:#fff;width:46px;height:46px;border-radius:50%;font-size:22px;flex:none;cursor:pointer}
-.lbnav:hover{background:#ffffff2b}
-.lbfoot{display:flex;gap:8px;justify-content:center;padding:12px 18px 20px;flex-wrap:wrap}
+/* lightbox */
+.lbov{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;flex-direction:column;z-index:130}
+.lbtop{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;gap:8px}
+.lbtop .lbn{font-size:13px;color:#F5F5F7;opacity:.62;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lbtop .x{color:#F5F5F7}
+.lbmain{flex:1;display:flex;align-items:center;justify-content:center;gap:16px;padding:0 16px;min-height:0}
+.lbmain img{max-width:84vw;max-height:78vh;object-fit:contain;border-radius:12px;background:#1C1C1E}
+.lbnav{background:rgba(255,255,255,.12);border:0;color:#fff;width:44px;height:44px;
+  border-radius:50%;font-size:20px;flex:none;cursor:pointer;transition:opacity .2s var(--ease)}
+.lbnav:hover{opacity:.8}
+.lbfoot{display:flex;gap:8px;justify-content:center;align-items:center;padding:16px 24px 24px;flex-wrap:wrap}
+.lbfoot .chip{background:transparent;border-color:rgba(255,255,255,.24);color:#F5F5F7}
 
-/* --- theme toggle --- */
-.themebtn{position:fixed;top:16px;right:18px;z-index:40;background:rgba(255,255,255,.08);border:1px solid var(--line);
-  color:var(--txt);border-radius:999px;padding:8px 12px;font-size:12.5px;cursor:pointer;backdrop-filter:blur(8px)}
-.themebtn:hover{border-color:var(--accent)}
+/* theme toggle */
+.themebtn{position:fixed;top:16px;right:16px;z-index:40;background:var(--surface);
+  border:1px solid var(--hair);color:var(--mut);border-radius:980px;padding:10px 16px;
+  font-size:13px;min-height:40px;cursor:pointer;transition:color .2s var(--ease)}
+.themebtn:hover{color:var(--txt)}
 
-/* --- light theme --- */
-body.light{--bg0:#eef3fb;--navy:#dbe7fb;--navy2:#eaf1fb;
-  --card:rgba(255,255,255,.72);--card2:rgba(20,40,90,.06);--line:rgba(20,40,90,.14);
-  --txt:#0d1f47;--mut:#41568a;--mut2:#6b7fa8;--shadow:0 14px 34px rgba(20,40,90,.14)}
-body.light{background:linear-gradient(160deg,#eaf1fb 0%,#dbe7fb 50%,#eef3fb 100%)}
-body.light .toast{background:#ffffff}
-body.light .modal,body.light .lbov{background:#eef3fbf2}
-body.light .bg-decor::before{background:linear-gradient(to right,#0a2a6608 1px,transparent 1px),linear-gradient(to bottom,#0a2a6608 1px,transparent 1px)}
-
-/* --- QR brand mark --- */
+/* QR — always on white so every phone camera reads it */
 .qrwrap{position:relative;display:inline-block}
-.qrwrap .qrlogo{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:44px;height:44px;border-radius:9px;
-  background:#fff;padding:4px;box-shadow:0 2px 8px #0004}
+.qrwrap .qrlogo{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:44px;height:44px;border-radius:9px;background:#fff;padding:4px;box-shadow:0 1px 4px rgba(0,0,0,.2)}
 
-/* --- accessibility --- */
+/* ============================================================
+   Guest pages served from this computer (?g= / ?a=) wear the
+   same warm stationery language as the cloud guest page, so a
+   guest never feels a seam between the two.
+   ============================================================ */
+body.guest{--surface:#fffdf9;--surface2:#f6f1e7;--txt:#2a231b;
+  --mut:rgba(42,35,27,.62);--mut2:rgba(42,35,27,.4);--hair:rgba(42,35,27,.12);
+  --accent:#A3803C;--accent-tint:rgba(163,128,60,.12);--ring:rgba(163,128,60,.3);
+  background:#f6f1e7}
+body.guest h1{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:500}
+body.guest .btn{background:#28211a;color:#f8f3e9}
+body.guest .btn.ghost{background:transparent;border:1px solid #d5c7ac;color:#4a4133}
+.gbrand{text-align:center;font-family:Georgia,'Times New Roman',serif;letter-spacing:.34em;
+  font-size:12px;color:#8a6b30;margin:8px 0 24px}
+.eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:#a3803c;
+  margin:0 0 4px;font-weight:700}
+
+/* accessibility */
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+
+/* responsive rhythm */
+@media(max-width:768px){.main{padding:32px 16px 64px}}
+@media(max-width:640px){h1{font-size:24px}.lead{font-size:14px;margin-bottom:24px}
+  .card{padding:16px;border-radius:12px}.opts{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<div class="bg-decor" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
 <main class="main" id="main"></main>
 
 <div id="modalHost"></div>
-<div id="dropOverlay"><div class="dropinner">📂<div>Drop your event folder to open it</div></div></div>
+<div id="dropOverlay"><div class="dropinner">Drop the folder to open it</div></div>
 <div id="toasts"></div>
 
 <script src="/qrcode.min.js"></script>
@@ -292,6 +319,14 @@ const S = {
 const $ = (s,r=document)=>r.querySelector(s);
 const el = (t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
 const esc = s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+// Thin-stroke inline icons (20px grid) — never emoji in interface chrome.
+const IC={
+  folder:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 6.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>',
+  drive:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="8" width="17" height="8" rx="2"/><path d="M7.5 12h.01M11 12h.01"/></svg>',
+  home:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5 12 4.5l7.5 6V19a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z"/></svg>',
+  cam:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5h2.8l1.6-2.3h7.2l1.6 2.3H20a.9.9 0 0 1 .9.9V18a.9.9 0 0 1-.9.9H4a.9.9 0 0 1-.9-.9V9.4a.9.9 0 0 1 .9-.9z"/><circle cx="12" cy="13.4" r="3.4"/></svg>',
+  expand:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>',
+};
 function fmtKb(kb){kb=+kb||0;if(kb>=1048576)return (kb/1048576).toFixed(2)+" GB";
   if(kb>=1024)return (kb/1024).toFixed(1)+" MB";return kb+" KB";}
 function num(n){return (+n||0).toLocaleString();}
@@ -314,8 +349,7 @@ async function api(path,body){
 }
 function toast(msg,kind="info",ms=3800){
   const host=$("#toasts");const t=el("div","toast "+kind);
-  const ic={good:"✅",bad:"⚠️",info:"ℹ️"}[kind]||"ℹ️";
-  t.innerHTML=`<span>${ic}</span><span>${msg}</span>`;host.appendChild(t);
+  t.innerHTML=`<span class="tdot ${kind}"></span><span>${msg}</span>`;host.appendChild(t);
   setTimeout(()=>{t.style.opacity=0;t.style.transform="translateX(30px)";
     setTimeout(()=>t.remove(),250);},ms);
 }
@@ -338,11 +372,11 @@ async function openBrowser(onPick, startPath){
   let cur=(startPath!=null?startPath:S.root)||"";
   const host=$("#modalHost");
   host.innerHTML=`<div class="overlay"><div class="modal">
-    <div class="mh"><h3>📂 Choose the event folder</h3><button class="x" id="mClose">×</button></div>
+    <div class="mh"><h3>Choose the event folder</h3><button class="x" id="mClose">×</button></div>
     <div class="crumbs" id="crumbs"></div>
     <div class="mb" id="fileList"></div>
     <div class="mf"><span style="color:var(--mut);font-size:12px" id="selPath"></span>
-      <div class="row"><button class="btn ghost sm" id="upBtn">↑ Up</button>
+      <div class="row"><button class="btn ghost sm" id="upBtn">Up one level</button>
       <button class="btn sm" id="pickBtn">Select this folder</button></div></div>
   </div></div>`;
   const close=()=>host.innerHTML="";
@@ -361,14 +395,14 @@ async function openBrowser(onPick, startPath){
       else{S.root=d.path;const ri=$("#rootIn");if(ri)ri.value=d.path;}
       close();};
     if(d.drives&&d.drives.length){d.drives.forEach(dr=>{
-      const it=el("div","fitem",`<span class="fi">💽</span><span>${esc(dr.name)}</span>`);
+      const it=el("div","fitem",`<span class="fi">${IC.drive}</span><span>${esc(dr.name)}</span>`);
       it.onclick=()=>load(dr.path);list.appendChild(it);});}
-    if(d.home){const it=el("div","fitem",`<span class="fi">🏠</span><span>Home</span>`);
+    if(d.home){const it=el("div","fitem",`<span class="fi">${IC.home}</span><span>Home</span>`);
       it.onclick=()=>load(d.home);list.appendChild(it);}
     if(!d.dirs.length&&!(d.drives||[]).length)
       list.appendChild(el("div","empty","No sub-folders here."));
     d.dirs.forEach(f=>{const it=el("div","fitem",
-      `<span class="fi">📁</span><span>${esc(f.name)}</span>`);
+      `<span class="fi">${IC.folder}</span><span>${esc(f.name)}</span>`);
       it.onclick=()=>load(f.path);list.appendChild(it);});
   }
   load(cur);
@@ -379,14 +413,13 @@ function pageHost(m){
   const p=el("div","page");
   p.innerHTML=`
     <div class="brand">
-      <img class="brandlogo" src="/logo.png" alt="Hapzea"/>
-      <span class="brandbadge">Hapzea</span>
+      <span class="brandname">Hapzea</span>
     </div>
-    <h1>Find every guest's photos</h1>
-    <p class="lead">Share a QR link — guests add a selfie and instantly get their photos. 100% on your PC.</p>
+    <h1>Every guest finds their photos</h1>
+    <p class="lead">Share one QR — guests take a selfie and get every photo they're in.</p>
     <div class="steps" id="steps">
       <div class="step" data-step="1"><span class="sd">1</span><span class="lbl">Choose folder</span></div>
-      <div class="step" data-step="2"><span class="sd">2</span><span class="lbl">Share the QR link</span></div>
+      <div class="step" data-step="2"><span class="sd">2</span><span class="lbl">Share the guest QR</span></div>
       <div class="step" data-step="3"><span class="sd">3</span><span class="lbl">Guests find their photos</span></div>
     </div>
     <div class="card" id="folderCard"></div>
@@ -417,7 +450,7 @@ function renderFolderCard(){
   const c=$("#folderCard");if(!c)return;
   if(S.connected){
     const files=(S.scan&&S.scan.meta&&S.scan.meta.rootFiles)||0;
-    c.innerHTML=`<div class="callout safe flex">📂 <div style="flex:1">Event folder: <b>${esc(S.root)}</b>
+    c.innerHTML=`<div class="callout safe flex"><div style="flex:1">Event folder: <b>${esc(S.root)}</b>
         <span style="opacity:.8">· ${num(files)} files</span></div>
       <button class="btn ghost sm" id="changeFolder">Change</button></div>
       <div id="prewarm" class="prewarm"></div>`;
@@ -430,17 +463,17 @@ function renderFolderCard(){
   }
   const recent=loadRecent();
   c.innerHTML=`
-    <h4 class="cardh">📂 1 · Choose the event folder</h4>
+    <h4 class="cardh">1 · Choose the event folder</h4>
     <div class="row">
       <input type="text" id="rootIn" placeholder="e.g. C:\\Users\\me\\Pictures\\Wedding" value="${esc(S.root||'')}"/>
-      <button class="btn ghost" id="browseBtn">📂 Browse</button>
+      <button class="btn ghost" id="browseBtn">Browse…</button>
     </div>
     ${recent.length?`<div style="margin-top:10px">
       <div style="color:var(--mut);font-size:11.5px;margin-bottom:5px">Recent folders</div>
       <div class="chips">${recent.map(r=>`<span class="chip" data-recent="${esc(r)}"
-        style="cursor:pointer" title="${esc(r)}">📁 ${esc(r.split(/[\\/]/).pop()||r)}</span>`).join("")}</div></div>`:""}
-    <div class="btn-row"><button class="btn" id="openBtn">Open event →</button></div>
-    <div class="subhint">Or drag a folder onto the window.</div>`;
+        style="cursor:pointer" title="${esc(r)}">${esc(r.split(/[\\/]/).pop()||r)}</span>`).join("")}</div></div>`:""}
+    <div class="btn-row"><button class="btn" id="openBtn">Open the event</button></div>
+    <div class="subhint">Tip: you can also drop the folder anywhere on this window.</div>`;
   $("#browseBtn").onclick=()=>openBrowser(path=>{S.root=path;const ri=$("#rootIn");if(ri)ri.value=path;connectFolder(path);});
   const ri=$("#rootIn");
   ri.oninput=e=>S.root=e.target.value.trim();
@@ -475,14 +508,14 @@ async function pollPrewarm(forRoot){
   const wrap=$("#prewarm");
   if(!wrap||S.root!==forRoot)return;
   let d;try{d=await api("cluster/progress",{jobId:S.prewarmJob});}catch(e){wrap.innerHTML="";return;}
-  if(d.phase==="downloading"){wrap.innerHTML=`<span class="spin"></span> Preparing AI…`;}
+  if(d.phase==="downloading"){wrap.innerHTML=`<span class="spin"></span> Preparing face matching…`;}
   else if(d.finished){
-    wrap.innerHTML=d.error?"":`⚡ Ready — searches are now instant.`;
+    wrap.innerHTML=d.error?"":`Ready — guest searches will be instant.`;
     if(!d.error)setTimeout(()=>{const w=$("#prewarm");if(w&&S.root===forRoot)w.innerHTML="";},5000);
     return;
   }else{
     const t=d.total||0,dn=d.done||0,pct=t?Math.round(dn/t*100):0;
-    wrap.innerHTML=`<span class="spin"></span> Indexing photos for instant search… ${pct}%`;
+    wrap.innerHTML=`<span class="spin"></span> Getting photos ready for instant search… ${pct}%`;
   }
   setTimeout(()=>pollPrewarm(forRoot),900);
 }
@@ -492,9 +525,8 @@ async function renderHapzea(){
     card.innerHTML=`<div class="callout warn">🙋 Hapzea works on a local folder. Copy the event photos to your PC first.</div>`;return;}
   let st;try{st=await api("cluster/status",{});}catch(err){card.innerHTML=`<div class="callout bad">${esc(err.message)}</div>`;return;}
   if(!st.available){
-    card.innerHTML=`<div class="callout warn flex">🧩 <div style="flex:1">Hapzea needs the face-recognition tools.
-      Run <code>pip install -r requirements-vision.txt</code>, or (from source) click below.</div>
-      <button class="btn ghost sm" id="ffInstall">Install AI support</button></div>`;
+    card.innerHTML=`<div class="callout warn flex"><div style="flex:1"><b>One-time setup.</b> This computer needs the face-matching engine before guests can search.</div>
+      <button class="btn sm" id="ffInstall">Install it now</button></div>`;
     const ib=$("#ffInstall");if(ib)ib.onclick=async e=>{busy(e.target,true,"Installing…");
       try{await api("vision/install",{});toast("AI support installed","good");renderHapzea();}
       catch(err){toast(err.message,"bad");busy(e.target,false);}};
@@ -502,24 +534,24 @@ async function renderHapzea(){
   S.ffSelfies=S.ffSelfies||[];
   const hasSelfie=S.ffSelfies.length>0;
   card.innerHTML=`
-    <div class="callout info">🔒 100% local — nothing is uploaded. Photos are <b>copied</b>, never moved.</div>
-    <div class="card" id="shareCard" style="margin-top:14px">
-      <h4 class="cardh">🔗 Share a guest link + QR <span class="mainbadge">Main</span></h4>
-      <div class="subhint" style="margin-top:0">Guests scan the QR, add a selfie, and get their photos — from <b>any phone</b>.</div>
+    <div class="callout info">Private by design — matching happens on this computer. Photos are <b>copied</b>, never moved.</div>
+    <div class="card hero" id="shareCard" style="margin-top:16px">
+      <h4 class="cardh">2 · Share the guest QR</h4>
+      <div class="subhint" style="margin-top:0">Guests scan it, take a selfie, and their photos find them — on any phone.</div>
       <div id="shareBox" style="margin-top:12px"><div class="empty" style="padding:14px"><span class="spin"></span></div></div>
     </div>
     <details class="advbox" style="margin-top:16px">
-      <summary style="text-transform:none;font-size:13px;color:var(--txt);letter-spacing:0">🙋 Or find one guest yourself (add a selfie)</summary>
+      <summary style="text-transform:none;font-size:14px;color:var(--txt);letter-spacing:0">Find one guest yourself (manual search)</summary>
       <div class="card" style="margin-top:6px">
         <label class="fld">Guest name <span style="color:var(--mut2);font-weight:400">(optional — names the album)</span></label>
         <input type="text" id="ffName" placeholder="e.g. Anjali" value="${esc(S.ffName||"")}"/>
         <label class="fld" style="margin-top:14px">Their selfie <span style="color:var(--mut2);font-weight:400">— add up to 3 for better accuracy</span></label>
         <div class="selfies" id="ffSelfies"></div>
-        <div class="btn-row" style="margin-top:12px"><button class="btn ghost sm" id="ffCam">📷 Use camera</button></div>
+        <div class="btn-row" style="margin-top:12px"><button class="btn ghost sm" id="ffCam">Use the camera</button></div>
         <input type="file" id="ffFile" accept="image/*" multiple style="display:none"/>
         <label class="toggle" style="margin-top:14px"><input type="checkbox" id="ffRec" checked/>
           <span class="tk"></span><span>Include sub-folders<span class="desc"> — whole event tree</span></span></label>
-        <div class="btn-row"><button class="btn" id="ffFind" ${hasSelfie?"":"disabled"}>🔎 Find their photos</button></div>
+        <div class="btn-row"><button class="btn" id="ffFind" ${hasSelfie?"":"disabled"}>Find their photos</button></div>
         <div class="subhint" id="ffHint">${hasSelfie?"Ready to search.":"Add a selfie to start."}</div>
       </div>
     </details>
@@ -541,41 +573,40 @@ async function refreshShareBox(){
   if(st.enabled){
     const primary=st.production_url||(st.urls||[])[0]||relay.guest_url||"";
     const rs=relay.stats||{};
-    const origLine=(rs.originals||rs.originals_pending)?`<div class="subhint" style="text-align:center;margin-top:2px">Full-quality photos on the helper: ${num(rs.originals||0)}${rs.originals_pending?` · ${num(rs.originals_pending)} uploading…`:" · all matched albums upgraded"}</div>`:"";
-    box.innerHTML=`<div class="callout safe"><b>${esc(st.event)}</b> is ready for guests.</div>
-      ${primary?`<label class="fld">Hapzea guest link</label>
+    const origLine=(rs.originals||rs.originals_pending)?`<div class="subhint" style="text-align:center;margin-top:2px">Full-quality photos on your cloud: ${num(rs.originals||0)}${rs.originals_pending?` · ${num(rs.originals_pending)} still uploading…`:" · every album has full quality"}</div>`:"";
+    box.innerHTML=`<div class="callout safe"><b>${esc(st.event)}</b> is live — guests can use the QR now, even when this computer is off.</div>
+      ${primary?`<label class="fld">Guest link</label>
         <div class="row"><input type="text" readonly value="${esc(primary)}" style="flex:1;font-size:13px"/>
           <button class="btn sm" data-copy="${esc(primary)}">Copy</button></div>
         <div id="shareQr" style="text-align:center;margin:12px 0 4px"></div>
-        <div class="subhint" style="text-align:center;margin-top:2px">One QR. One production URL. Guests can use it even when this computer is off.</div>${origLine}`
-        :`<div class="callout warn" style="margin-top:8px">Production URL is not configured. Add your Hapzea production URL and enable sharing again.</div>`}
+        <div class="subhint" style="text-align:center;margin-top:2px">One QR for the whole event — print it or put it on a screen.</div>${origLine}`
+        :`<div class="callout warn" style="margin-top:8px">Your Hapzea cloud link isn't set yet — add it below and create the QR again.</div>`}
       <div class="sect-t" style="margin-top:14px">Guests who have searched <span id="guestCount" style="color:var(--mut)"></span></div>
       <div id="guestList"><div class="subhint">No one yet.</div></div>`;
     box.querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>{
       navigator.clipboard.writeText(b.dataset.copy).then(()=>toast("Link copied","good")).catch(()=>toast("Select the link and copy manually","bad"));});
-    if(primary){renderQR($("#shareQr"),primary,6,2,"H");
-      const wrap=$("#shareQr .qrwrap");
-      if(wrap){const lg=el("img","qrlogo");lg.src="/logo.png";lg.alt="";wrap.appendChild(lg);}}
+    if(primary){renderQR($("#shareQr"),primary,6,2,"H");}
     pollGuests();
   }else{
     const last=st.last||{};
     if(!S.shareEvent&&last.event)S.shareEvent=last.event;
     const savedBase=relay.base||last.relay_base||last.base||"";
     if(!S.productionUrl&&savedBase)S.productionUrl=savedBase;
-    box.innerHTML=`<div class="subhint">Create one Hapzea QR for this event. The QR points to the production relay, so guests keep the same link after your computer is closed.</div>
-      <label class="fld" style="margin-top:10px">Event name (shown to guests)</label>
+    box.innerHTML=`<div class="subhint" style="margin-top:0">One QR for the whole event. It points to your always-on Hapzea cloud, so the link keeps working after you shut this computer down.</div>
+      <label class="fld" style="margin-top:16px">Event name <span class="optl">· guests will see this</span></label>
       <input type="text" id="shareEvent" placeholder="e.g. Priya &amp; Arjun's Wedding" value="${esc(S.shareEvent||"")}"/>
-      <label class="fld" style="margin-top:12px">Production URL</label>
-      <input type="text" id="productionUrl" placeholder="https://your-hapzea-relay.example.com" value="${esc(S.productionUrl||savedBase)}"/>
-      <div class="btn-row"><button class="btn" id="shareGo">Create Hapzea QR</button></div>`;
+      <label class="fld" style="margin-top:16px">Your Hapzea cloud link <span class="optl">· paste once, it stays saved</span></label>
+      <input type="text" id="productionUrl" placeholder="https://photos.yourstudio.com" value="${esc(S.productionUrl||savedBase)}"/>
+      <div class="subhint">The address where your always-on Hapzea helper runs. Set it up once and reuse it for every event.</div>
+      <div class="btn-row"><button class="btn" id="shareGo">Create the guest QR</button></div>`;
     $("#shareEvent").oninput=e=>S.shareEvent=e.target.value;
     $("#productionUrl").oninput=e=>S.productionUrl=e.target.value.trim();
     $("#shareGo").onclick=async e=>{
       const base=($("#productionUrl").value||"").trim();
-      if(!base){toast("Enter the Hapzea production URL first","bad");return;}
-      busy(e.target,true,"Creating production QR...");
+      if(!base){toast("Add your Hapzea cloud link first","bad");return;}
+      busy(e.target,true,"Creating the QR…");
       try{await api("share/enable",{root:S.root,event:S.shareEvent||"Our Event",base});
-        toast("Hapzea QR is ready","good");
+        toast("The guest QR is ready","good");
         startPrewarm();}
       catch(err){toast(err.message,"bad");}
       refreshShareBox();
@@ -601,20 +632,20 @@ function renderGuestList(d){
     if(!g.done)right="<span class='spin'></span> searching";
     else if(g.count==null)right="—";
     else right=`${num(g.count)} photo(s)${g.scanned?` <span style="opacity:.7">/ ${num(g.scanned)} scanned</span>`:""}`;
-    const prevBtn=canPrev?`<button class="btn ghost sm gPrevBtn" data-job="${esc(g.job)}">${open?"✕ Hide":"👁 Preview"}</button>`:"";
+    const prevBtn=canPrev?`<button class="btn ghost sm gPrevBtn" data-job="${esc(g.job)}">${open?"Hide":"Preview"}</button>`:"";
     const grid=open?`<div class="thumbgrid" style="margin-top:10px">${g.matches.map(p=>`<a class="thumb" href="/api/download?path=${encodeURIComponent(p)}" download>
-      <img loading="lazy" src="/api/thumb?size=300&path=${encodeURIComponent(p)}" alt=""/><div class="nm">⬇️ download</div></a>`).join("")}</div>`:"";
+      <img loading="lazy" src="/api/thumb?size=300&path=${encodeURIComponent(p)}" alt=""/><div class="nm">Download</div></a>`).join("")}</div>`:"";
     let deliver="";
     if(g.contact){
       const ok=g.notified==="sent";
       const tried=g.done&&g.count>0;
-      const badge=ok?`<span style="color:var(--good)">✅ sent</span>`
-        :(tried?`<span style="color:var(--warn)" title="${esc(g.notified||"")}">✉️ not sent</span>`:"");
-      deliver=`<div class="ht" style="margin-top:3px">✉️ ${esc(g.contact)} ${badge}</div>`;
+      const badge=ok?`<span style="color:var(--good)">· sent</span>`
+        :(tried?`<span style="color:var(--warn)" title="${esc(g.notified||"")}">· not sent yet</span>`:"");
+      deliver=`<div class="ht" style="margin-top:3px">${esc(g.contact)} ${badge}</div>`;
     }
     return `<div class="histrow" style="display:block">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-        <span class="hl">🙂 <b>${esc(g.name)}</b> <span class="ht">· ${time}</span></span>
+        <span class="hl"><b>${esc(g.name)}</b> <span class="ht">· ${time}</span></span>
         <span style="color:var(--mut);display:flex;gap:10px;align-items:center">${right}${prevBtn}</span>
       </div>${deliver}${grid}</div>`;
   }).join("");
@@ -624,6 +655,7 @@ function renderGuestList(d){
 }
 // ---- guest portal (opened via ?g=<token> on a phone) ----
 async function initGuestPortal(token){
+  document.body.classList.add("guest");
   const main=$("#main");
   let st;try{st=await api("share/status",{token,pin:S.guestPin||""});}catch(e){st={enabled:false};}
   if(!st.enabled){
@@ -646,6 +678,7 @@ async function initGuestPortal(token){
 // Reopen a saved album from a signed link (?a=rid.token). Works any time the
 // host is sharing, even after the app was restarted (durable registrations).
 async function initGuestAlbum(ref){
+  document.body.classList.add("guest");
   const main=$("#main");
   let d;try{d=await api("share/album",{a:ref});}catch(e){d=null;}
   if(!d){
@@ -655,16 +688,17 @@ async function initGuestAlbum(ref){
   const m=d.matches||[];
   const nm=(d.name&&d.name!=="Guest")?(", "+esc(d.name)):"";
   main.innerHTML=`<div class="page" style="max-width:620px;margin:18px auto">
-    <div class="brand"><img class="brandlogo" src="/logo.png" alt="Hapzea"/><span class="brandbadge">Hapzea</span></div>
-    <h1>📸 ${esc(d.event||"Your photos")}</h1>
-    <p class="lead">Your private album${nm} — tap any photo to download.</p>
-    ${m.length?`<div class="callout safe">✅ Found <b>${num(m.length)}</b> photo(s) you're in.</div>
-      <div class="btn-row"><a class="btn" href="/api/download/zip?a=${encodeURIComponent(ref)}" download>⬇️ Download all (${num(m.length)})</a></div>
+    <div class="gbrand">HAPZEA</div>
+    <p class="eyebrow">Your private album</p>
+    <h1>${esc(d.event||"Your photos")}</h1>
+    <p class="lead">Welcome back${nm} — tap any photo to download it.</p>
+    ${m.length?`<div class="callout safe">You appear in <b>${num(m.length)}</b> photograph${m.length>1?"s":""}.</div>
+      <div class="btn-row"><a class="btn" href="/api/download/zip?a=${encodeURIComponent(ref)}" download>Download all (${num(m.length)})</a></div>
       <div class="thumbgrid">${m.map((x,i)=>`<div class="thumb" data-ai="${i}">
-        <button class="zoom" data-az="${i}" aria-label="Zoom">⤢</button>
+        <button class="zoom" data-az="${i}" aria-label="Zoom">${IC.expand}</button>
         <a href="/api/download?path=${encodeURIComponent(x.path)}" download>
           <img loading="lazy" src="/api/thumb?size=400&path=${encodeURIComponent(x.path)}" alt=""/>
-          <div class="nm">⬇️ download</div></a></div>`).join("")}</div>`
+          <div class="nm">Download</div></a></div>`).join("")}</div>`
       :`<div class="callout info">Your photos aren't ready yet, or none were found. Please check back a little later.</div>`}
     </div>`;
   main.querySelectorAll("[data-az]").forEach(z=>z.onclick=e=>{e.preventDefault();e.stopPropagation();
@@ -673,8 +707,8 @@ async function initGuestAlbum(ref){
 function renderGuestPin(token){
   const main=$("#main");
   main.innerHTML=`<div class="page" style="max-width:440px;margin:40px auto"><div class="card" style="text-align:center">
-    <div class="brand" style="justify-content:center"><img class="brandlogo" src="/logo.png" alt="Hapzea"/><span class="brandbadge">Hapzea</span></div>
-    <h3 style="margin:8px 0 2px">🔒 Enter event PIN</h3>
+    <div class="gbrand">HAPZEA</div>
+    <h3 style="margin:8px 0 2px">Enter the event PIN</h3>
     <p class="subhint">Ask the host for the event PIN.</p>
     <input type="text" id="gPin" inputmode="numeric" maxlength="12" placeholder="PIN" style="text-align:center;font-size:20px;letter-spacing:5px;margin-top:12px"/>
     <div class="btn-row" style="justify-content:center"><button class="btn" id="gPinGo">Continue →</button></div>
@@ -700,9 +734,10 @@ function guestCid(){
 function renderGuestPortal(){
   const main=$("#main");
   main.innerHTML=`<div class="page" style="max-width:620px;margin:18px auto">
-    <div class="brand"><img class="brandlogo" src="/logo.png" alt="Hapzea"/><span class="brandbadge">Hapzea</span></div>
-    <h1>📸 ${esc(S.guestEvent)}</h1>
-    <p class="lead">Add a selfie to find every photo you're in. Matched privately — never uploaded.</p>
+    <div class="gbrand">HAPZEA</div>
+    <p class="eyebrow">Find your photographs</p>
+    <h1>${esc(S.guestEvent)}</h1>
+    <p class="lead">One selfie is all it takes — we gather every photo you appear in, privately.</p>
     <div class="card">
       <label class="fld">Your name (optional)</label>
       <input type="text" id="gName" placeholder="e.g. Anjali"/>
@@ -710,10 +745,10 @@ function renderGuestPortal(){
       <input type="text" id="gContact" placeholder="you@email.com"/>
       <label class="fld" style="margin-top:12px">Your selfie <span style="color:var(--mut2);font-weight:400">— add up to 3 for better accuracy</span></label>
       <div class="selfies" id="gSelfies"></div>
-      <div class="btn-row" style="margin-top:12px"><button class="btn ghost sm" id="gCam">📷 Use camera</button></div>
+      <div class="btn-row" style="margin-top:12px"><button class="btn ghost sm" id="gCam">Take a selfie</button></div>
       <input type="file" id="gFile" accept="image/*" multiple style="display:none"/>
       <div class="subhint">A clear, front-facing selfie works best.</div>
-      <div class="btn-row"><button class="btn" id="gFind">🔎 Find my photos</button></div>
+      <div class="btn-row"><button class="btn" id="gFind">Find my photographs</button></div>
     </div>
     <div id="gProgress"></div><div id="gOut"></div>`;
   $("#gFile").onchange=e=>{[...e.target.files].forEach(f=>guestSelfie(f));e.target.value="";};
@@ -726,7 +761,7 @@ function renderGuestSelfies(){
   const arr=S.guestSelfies||[];
   host.innerHTML=arr.map((pth,i)=>`<div class="selfie"><img src="/api/thumb?size=160&path=${encodeURIComponent(pth)}&t=${Date.now()}" alt="selfie"/>
     <button class="rm" data-i="${i}" aria-label="Remove selfie">✕</button></div>`).join("")
-    +(arr.length<3?`<div class="selfieadd" id="gAdd" role="button" tabindex="0">📷<span>Add</span></div>`:"");
+    +(arr.length<3?`<div class="selfieadd" id="gAdd" role="button" tabindex="0">${IC.cam}<span>Add</span></div>`:"");
   host.querySelectorAll(".rm").forEach(b=>b.onclick=()=>{S.guestSelfies.splice(+b.dataset.i,1);renderGuestSelfies();});
   const add=$("#gAdd");if(add){add.onclick=()=>$("#gFile").click();add.onkeydown=e=>{if(e.key==="Enter")$("#gFile").click();};}
 }
@@ -774,9 +809,9 @@ async function guestCamera(){
   }
   const host=$("#modalHost");
   host.innerHTML=`<div class="overlay"><div class="modal" style="max-width:420px">
-    <div class="mh"><h3>📷 Take a selfie</h3><button class="x" id="gcamX">×</button></div>
+    <div class="mh"><h3>Take a selfie</h3><button class="x" id="gcamX">×</button></div>
     <div class="mb" style="padding:14px;text-align:center"><video id="gcamV" autoplay playsinline style="width:100%;border-radius:12px;background:#000"></video><canvas id="gcamC" style="display:none"></canvas></div>
-    <div class="mf"><span></span><div class="row"><button class="btn ghost sm" id="gcamCancel">Cancel</button><button class="btn sm" id="gcamSnap">📸 Capture</button></div></div>
+    <div class="mf"><span></span><div class="row"><button class="btn ghost sm" id="gcamCancel">Cancel</button><button class="btn sm" id="gcamSnap">Capture</button></div></div>
   </div></div>`;
   let stream;const close=()=>{if(stream)stream.getTracks().forEach(t=>t.stop());host.innerHTML="";};
   $("#gcamX").onclick=close;$("#gcamCancel").onclick=close;
@@ -802,8 +837,8 @@ async function guestFind(e){
       name:($("#gName")?$("#gName").value:""),contact:($("#gContact")?$("#gContact").value:""),cid:guestCid()});
     S.gJob=d.jobId;S.gRid=d.rid;S.gAtoken=d.atoken;
     prog.innerHTML=`<div class="preview" style="margin-top:14px"><div class="ph"><div class="chips" id="gTally"><span class="chip">Starting…</span></div></div>
-      <div style="padding:14px 18px"><div class="track" style="display:block;height:14px;border-radius:8px;background:#0d1424;border:1px solid #23324e;overflow:hidden">
-        <div id="gBar" class="fill" style="display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
+      <div style="padding:16px"><div class="track">
+        <div id="gBar" class="fill"></div></div>
         <div id="gCount" style="color:var(--mut);font-size:12px;margin-top:8px">Preparing…</div></div></div>`;
     guestPoll(btn);
   }catch(err){toast(err.message,"bad");busy(btn,false);}
@@ -827,22 +862,22 @@ async function guestPoll(btn){
     if(bar)bar.style.width=mp+"%";if(pc)pc.textContent=`Getting ready ${mp}%…`;}
   else{const total=d.total||0,done=d.done||0,pct=total?Math.round(done/total*100):0;
     if(bar)bar.style.width=pct+"%";if(pc)pc.textContent=total?`Checked ${num(done)} of ${num(total)} (${pct}%)`:"Scanning…";
-    if(tally)tally.innerHTML=`<span class="chip">🙂 ${num(d.clusters||0)} so far</span>`;}
+    if(tally)tally.innerHTML=`<span class="chip"><b>${num(d.clusters||0)}</b> so far</span>`;}
   if(d.error){$("#gProgress").innerHTML=`<div class="callout bad" style="margin-top:14px">${esc(d.error)}</div>`;busy(btn,false);return;}
   if(!d.finished){setTimeout(()=>guestPoll(btn),700);return;}
   busy(btn,false);$("#gProgress").innerHTML="";
   const res=d.result||{};
-  if(res.error==="no_face_in_selfie"){$("#gOut").innerHTML=`<div class="callout warn" style="margin-top:14px">😕 No face found in your selfie. Try a clearer, front-facing photo.</div>`;return;}
+  if(res.error==="no_face_in_selfie"){$("#gOut").innerHTML=`<div class="callout warn" style="margin-top:14px">We couldn't see a face in that selfie. A straight-on photo in good light works best.</div>`;return;}
   const m=(res.matches||[]);
   if(!m.length){$("#gOut").innerHTML=`<div class="callout info" style="margin-top:14px">No photos found yet. Try a clearer selfie.</div>`;return;}
-  $("#gOut").innerHTML=`<div class="callout safe" style="margin-top:14px">✅ Found <b>${num(m.length)}</b> photo(s) you're in — tap to download, or grab them all.</div>
-    <div class="btn-row"><a class="btn" href="/api/download/zip?job=${encodeURIComponent(S.gJob)}&token=${encodeURIComponent(S.guestToken)}" download>⬇️ Download all (${num(m.length)})</a>
-      <button class="btn ghost" id="gShare" style="display:none">📤 Share event</button></div>
+  $("#gOut").innerHTML=`<div class="callout safe" style="margin-top:14px">You appear in <b>${num(m.length)}</b> photograph${m.length>1?"s":""} — tap to download, or save them all.</div>
+    <div class="btn-row"><a class="btn" href="/api/download/zip?job=${encodeURIComponent(S.gJob)}&token=${encodeURIComponent(S.guestToken)}" download>Download all (${num(m.length)})</a>
+      <button class="btn ghost" id="gShare" style="display:none">Share this event</button></div>
     <div class="thumbgrid">${m.map((x,i)=>`<div class="thumb" data-gi="${i}">
-      <button class="zoom" data-gz="${i}" aria-label="Zoom">⤢</button>
+      <button class="zoom" data-gz="${i}" aria-label="Zoom">${IC.expand}</button>
       <a href="/api/download?path=${encodeURIComponent(x.path)}" download>
         <img loading="lazy" src="/api/thumb?size=400&path=${encodeURIComponent(x.path)}" alt=""/>
-        <div class="nm">⬇️ download</div></a></div>`).join("")}</div>`;
+        <div class="nm">Download</div></a></div>`).join("")}</div>`;
   const gs=$("#gShare");
   if(gs&&navigator.share){gs.style.display="";gs.onclick=()=>navigator.share(
     {title:S.guestEvent,text:"Find your photos from "+S.guestEvent,url:location.href}).catch(()=>{});}
@@ -851,7 +886,7 @@ async function guestPoll(btn){
   if(S.gRid&&S.gAtoken){
     const link=location.origin+"/?a="+S.gRid+"."+S.gAtoken;
     $("#gOut").insertAdjacentHTML("beforeend",
-      `<div class="callout info" style="margin-top:12px">🔖 Save your private album link to come back anytime:
+      `<div class="callout info" style="margin-top:12px">Save your private album link — your photos will be waiting here:
         <div class="btn-row" style="margin-top:8px"><input id="gLink" readonly value="${esc(link)}" style="flex:1;min-width:0"/>
         <button class="btn ghost sm" id="gCopy">Copy</button></div></div>`);
     const cp=$("#gCopy");if(cp)cp.onclick=()=>{try{navigator.clipboard.writeText(link);toast("Link copied","good");}catch(e){const i=$("#gLink");if(i){i.select();document.execCommand("copy");toast("Link copied","good");}}};
@@ -879,7 +914,7 @@ function renderFfSelfies(){
   const arr=S.ffSelfies||[];
   host.innerHTML=arr.map((pth,i)=>`<div class="selfie"><img src="/api/thumb?size=160&path=${encodeURIComponent(pth)}&t=${Date.now()}" alt="selfie"/>
     <button class="rm" data-i="${i}" aria-label="Remove selfie">✕</button></div>`).join("")
-    +(arr.length<3?`<div class="selfieadd" id="ffAdd" title="Add a selfie" role="button" tabindex="0">📷<span>Add</span></div>`:"");
+    +(arr.length<3?`<div class="selfieadd" id="ffAdd" title="Add a selfie" role="button" tabindex="0">${IC.cam}<span>Add</span></div>`:"");
   host.querySelectorAll(".rm").forEach(b=>b.onclick=()=>{S.ffSelfies.splice(+b.dataset.i,1);renderFfSelfies();});
   const add=$("#ffAdd");if(add){add.onclick=()=>$("#ffFile").click();add.onkeydown=e=>{if(e.key==="Enter")$("#ffFile").click();};}
   host.ondragover=e=>{e.preventDefault();};
@@ -911,7 +946,7 @@ function openLightbox(list,i){
         <button class="lbnav" id="lbNext" aria-label="Next">›</button></div>
       <div class="lbfoot"><span class="band ${b.k}">${b.t}</span>
         <span class="chip">${Math.round((it.score||0)*100)}% match</span>
-        <a class="btn sm" href="/api/download?path=${encodeURIComponent(it.path)}" download>⬇️ Download</a></div>
+        <a class="btn sm" href="/api/download?path=${encodeURIComponent(it.path)}" download>Download</a></div>
     </div>`;
     $("#lbX").onclick=close;
     $("#lbov").onclick=e=>{if(e.target===$("#lbov"))close();};
@@ -926,14 +961,14 @@ async function openSelfieCamera(){
   }
   const host=$("#modalHost");
   host.innerHTML=`<div class="overlay"><div class="modal" style="max-width:460px">
-    <div class="mh"><h3>📷 Take a selfie</h3><button class="x" id="camX">×</button></div>
+    <div class="mh"><h3>Take a selfie</h3><button class="x" id="camX">×</button></div>
     <div class="mb" style="padding:16px 18px;text-align:center">
       <video id="camV" autoplay playsinline style="width:100%;border-radius:12px;background:#000"></video>
       <canvas id="camC" style="display:none"></canvas>
     </div>
     <div class="mf"><span></span><div class="row">
       <button class="btn ghost sm" id="camCancel">Cancel</button>
-      <button class="btn sm" id="camSnap">📸 Capture</button></div></div>
+      <button class="btn sm" id="camSnap">Capture</button></div></div>
   </div></div>`;
   let stream;
   const close=()=>{if(stream)stream.getTracks().forEach(t=>t.stop());host.innerHTML="";};
@@ -959,8 +994,8 @@ async function runHapzea(e){
     prog.innerHTML=`<div class="preview" style="margin-top:14px"><div class="ph">
       <div class="chips" id="ffTally"><span class="chip">Starting…</span></div>
       <button class="btn ghost sm" id="ffCancel">Stop</button></div>
-      <div style="padding:14px 18px"><div class="track" style="display:block;height:14px;border-radius:8px;background:#0d1424;border:1px solid #23324e;overflow:hidden">
-        <div id="ffBar" class="fill" style="display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
+      <div style="padding:16px"><div class="track">
+        <div id="ffBar" class="fill"></div></div>
         <div id="ffCount" style="color:var(--mut);font-size:12px;margin-top:8px">Preparing…</div>
         <div class="thumbgrid" id="ffStream" style="margin-top:12px"></div></div></div>`;
     $("#ffCancel").onclick=()=>{if(S.ffJob)api("cluster/cancel",{jobId:S.ffJob});};
@@ -979,7 +1014,7 @@ async function pollHapzea(btn){
     const total=d.total||0,done=d.done||0,pct=total?Math.round(done/total*100):0;
     if(bar)bar.style.width=pct+"%";
     if(pc)pc.textContent=total?`Checked ${num(done)} of ${num(total)} photos (${pct}%)`:"Scanning…";
-    if(tally)tally.innerHTML=`<span class="chip">🙂 ${num(d.clusters||0)} match(es) so far</span>`;
+    if(tally)tally.innerHTML=`<span class="chip"><b>${num(d.clusters||0)}</b> match(es) so far</span>`;
   }
   const stream=$("#ffStream");
   if(stream && d.preview && d.preview.length){
@@ -990,7 +1025,7 @@ async function pollHapzea(btn){
   if(!d.finished){setTimeout(()=>pollHapzea(btn),700);return;}
   busy(btn,false);$("#ffProgress").innerHTML="";
   const res=d.result||{};
-  if(res.error==="no_face_in_selfie"){$("#ffOut").innerHTML=`<div class="callout warn" style="margin-top:14px">😕 No face found in the selfie. Try a clearer, front-facing photo.</div>`;return;}
+  if(res.error==="no_face_in_selfie"){$("#ffOut").innerHTML=`<div class="callout warn" style="margin-top:14px">No face found in the selfie — try a clearer, front-facing photo.</div>`;return;}
   renderHapzeaResults(res);
 }
 function renderHapzeaResults(res){
@@ -1001,24 +1036,24 @@ function renderHapzeaResults(res){
   matches.forEach(m=>{m.drop=(m.score<0.50);});
   S.ffMatches=matches;
   const keep=matches.filter(m=>!m.drop).length;
-  out.innerHTML=`<div class="callout safe" style="margin-top:14px">✅ Found <b>${num(matches.length)}</b> photo(s). Low-confidence ones are pre-unticked — tap a photo to zoom, tick/untick, then save.</div>
+  out.innerHTML=`<div class="callout safe" style="margin-top:14px">Found <b>${num(matches.length)}</b> photo(s). Unsure ones start unticked — zoom to check, tick what to keep, then save.</div>
     <div class="thumbgrid" id="ffGrid"></div>
     <div class="btn-row">
-      <button class="btn warn" id="ffSave">💾 Save album (${num(keep)} copies)</button>
+      <button class="btn warn" id="ffSave">Save the album (${num(keep)} photos)</button>
     </div><div id="ffSaveOut"></div>`;
   drawHapzeaGrid();
   $("#ffSave").onclick=saveHapzeaAlbum;
 }
 function refreshFfSave(){
   const keep=S.ffMatches.filter(x=>!x.drop).length;
-  const b=$("#ffSave");if(b){b.innerHTML=`💾 Save album (${num(keep)} copies)`;b.disabled=!keep;}
+  const b=$("#ffSave");if(b){b.innerHTML=`Save the album (${num(keep)} photos)`;b.disabled=!keep;}
 }
 function drawHapzeaGrid(){
   const grid=$("#ffGrid");if(!grid)return;
   grid.innerHTML=S.ffMatches.map((mm,i)=>{const b=confBand(mm.score);
     return `<div class="thumb ${mm.drop?'':'sel'}" data-ffi="${i}" title="${esc(mm.path)}">
     <input type="checkbox" class="kp" data-kp="${i}" ${mm.drop?'':'checked'} aria-label="Keep photo"/>
-    <button class="zoom" data-zoom="${i}" aria-label="Zoom">⤢</button>
+    <button class="zoom" data-zoom="${i}" aria-label="Zoom">${IC.expand}</button>
     <span class="bd"><span class="band ${b.k}">${b.t}</span></span>
     <img loading="lazy" src="/api/thumb?size=300&path=${encodeURIComponent(mm.path)}" alt=""/>
     <div class="nm">${Math.round(mm.score*100)}% match</div></div>`;}).join("");
@@ -1043,9 +1078,9 @@ async function saveHapzeaAlbum(e){
     const d=await runApplyJob("categorize/apply/start",
       {backend:S.backend,root:S.root,assignments,copy:true,_verb:"Copied"},out);
     const album=(S.root.replace(/[\\/]+$/,""))+"\\"+folder;
-    out.innerHTML=`<div class="callout safe" style="margin-top:12px">✅ Saved <b>${num(d.copied||d.applied)}</b> photo(s) to
-      <code>${esc(folder)}</code>. Share it via WhatsApp/email.
-      <div class="btn-row" style="margin-top:8px"><button class="btn ghost sm" id="ffOpen">📂 Open album folder</button></div></div>`;
+    out.innerHTML=`<div class="callout safe" style="margin-top:12px">Saved <b>${num(d.copied||d.applied)}</b> photo(s) to
+      <code>${esc(folder)}</code> — ready to share over WhatsApp or email.
+      <div class="btn-row" style="margin-top:8px"><button class="btn ghost sm" id="ffOpen">Open the album folder</button></div></div>`;
     $("#ffOpen").onclick=()=>api("open",{path:album}).catch(()=>toast("Couldn't open folder","bad"));
     toast("Album saved","good");
     api("scan",{backend:S.backend,root:S.root,depth:S.depth}).then(sc=>S.scan=sc).catch(()=>{});
@@ -1059,10 +1094,10 @@ function runApplyJob(startPath,body,host){
     const jobId=d.jobId;
     const verb=(body&&body._verb)||"Moved";
     host.innerHTML=`<div class="preview" style="margin-top:16px"><div class="ph">
-      <div class="chips"><span class="chip" id="apStat">⚡ Working…</span></div>
+      <div class="chips"><span class="chip" id="apStat">Working…</span></div>
       <button class="btn ghost sm" id="apCancel">Stop</button></div>
-      <div style="padding:14px 18px"><div class="track" style="display:block;height:14px;border-radius:8px;background:#0d1424;border:1px solid #23324e;overflow:hidden">
-        <div id="apBar" class="fill" style="display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
+      <div style="padding:16px"><div class="track">
+        <div id="apBar" class="fill"></div></div>
         <div id="apCount" style="color:var(--mut);font-size:12px;margin-top:8px">Preparing…</div></div></div>`;
     $("#apCancel").onclick=()=>{api("apply/cancel",{jobId}).catch(()=>{});const s=$("#apStat");if(s)s.textContent="Stopping…";};
     const poll=async()=>{
@@ -1078,19 +1113,21 @@ function runApplyJob(startPath,body,host){
 }
 
 // ---------------------------------------------------------------- theme
-function applyTheme(t){document.body.classList.toggle("light",t==="light");
-  const b=$("#themeBtn");if(b)b.textContent=t==="light"?"🌙 Dark":"☀️ Light";}
-function initTheme(){let t="dark";try{t=localStorage.getItem("phorg-theme")||"dark";}catch(e){}applyTheme(t);}
+function applyTheme(t){document.body.classList.toggle("dark",t==="dark");
+  const b=$("#themeBtn");if(b)b.textContent=t==="dark"?"Light":"Dark";}
+function initTheme(){let t="";try{t=localStorage.getItem("phorg-theme")||"";}catch(e){}
+  if(!t)t=(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";
+  applyTheme(t);}
 (function(){const b=el("button","themebtn");b.id="themeBtn";b.type="button";
   b.setAttribute("aria-label","Toggle light or dark theme");
-  b.onclick=()=>{const t=document.body.classList.contains("light")?"dark":"light";
+  b.onclick=()=>{const t=document.body.classList.contains("dark")?"light":"dark";
     try{localStorage.setItem("phorg-theme",t);}catch(e){}applyTheme(t);};
   document.body.appendChild(b);})();
 initTheme();
 function maybeOnboard(){
   let seen=1;try{seen=localStorage.getItem("phorg-onboarded");}catch(e){}
   if(seen)return;
-  toast("👋 Open your event folder, share the QR — guests find their own photos.","info",6500);
+  toast("Open your event folder, then share the QR — guests do the rest.","info",6500);
   try{localStorage.setItem("phorg-onboarded","1");}catch(e){}
 }
 
@@ -1129,7 +1166,7 @@ async function tryAutoConnect(){
     if(_guestToken)return;                     // guests don't pick folders
     const f=(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0])||null;
     const path=f&&f.path;                      // available in Electron/VS Code browser
-    if(!path){toast("Drop couldn't read the folder path here — use 📂 Browse instead.","info");return;}
+    if(!path){toast("Drop couldn't read the folder path here — use Browse instead.","info");return;}
     let root=path;
     if(f.type||/\.[A-Za-z0-9]{1,6}$/.test(path.split(/[\\/]/).pop()||"")){
       root=path.replace(/[\\/][^\\/]*$/,"")||path;}
