@@ -199,6 +199,54 @@ def test_metacache_roundtrip_and_invalidation(tmproot):
 
 
 # --------------------------------------------------------------------------
+# guest-sharing access control (server) — token + match confinement
+# --------------------------------------------------------------------------
+@pytest.fixture()
+def share_reset():
+    """Snapshot and restore the server's shared module state around a test."""
+    from phorg import server
+    share_before = dict(server._SHARE)
+    jobs_before = dict(server._JOBS)
+    try:
+        yield server
+    finally:
+        server._SHARE.clear(); server._SHARE.update(share_before)
+        server._JOBS.clear(); server._JOBS.update(jobs_before)
+
+
+def test_guest_fetch_requires_active_token(share_reset, tmproot):
+    server = share_reset
+    match = _mk(tmproot, "event/IMG_matched.jpg", b"me")
+    server._JOBS["job1"] = {"finished": True,
+                            "result": {"matches": [{"path": match}]}}
+    server._SHARE.update({"enabled": True, "root": os.path.abspath(tmproot),
+                          "token": "good-token",
+                          "guests": [{"job": "job1"}]})
+    # correct token + a genuinely matched photo -> allowed
+    assert server._guest_may_fetch(match, "good-token")
+    # wrong / missing token -> denied even for a real match
+    assert not server._guest_may_fetch(match, "bad-token")
+    assert not server._guest_may_fetch(match, "")
+    # sharing off -> denied regardless of token
+    server._SHARE["enabled"] = False
+    assert not server._guest_may_fetch(match, "good-token")
+
+
+def test_guest_cannot_enumerate_unmatched_files(share_reset, tmproot):
+    server = share_reset
+    match = _mk(tmproot, "event/IMG_0001.jpg", b"me")
+    other = _mk(tmproot, "event/IMG_0002.jpg", b"someone else")   # never matched
+    server._JOBS["job1"] = {"finished": True,
+                            "result": {"matches": [{"path": match}]}}
+    server._SHARE.update({"enabled": True, "root": os.path.abspath(tmproot),
+                          "token": "tok", "guests": [{"job": "job1"}]})
+    # a valid guest may pull their match, but not a sibling file under the same
+    # event folder just by guessing its (sequential) name.
+    assert server._guest_may_fetch(match, "tok")
+    assert not server._guest_may_fetch(other, "tok")
+
+
+# --------------------------------------------------------------------------
 # peopledb (needs numpy)
 # --------------------------------------------------------------------------
 def test_peopledb_roundtrip(tmproot, monkeypatch):

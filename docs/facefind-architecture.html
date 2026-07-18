@@ -290,9 +290,9 @@ flowchart TB
     <h2><span class="n">6</span> Security model</h2>
     <div class="grid two">
       <div class="tile"><h4>🔒 Local-first default</h4><p>Bound on all interfaces so LAN phones can reach it, but non-local requests are refused unless sharing is explicitly on.</p></div>
-      <div class="tile"><h4>🎫 Token-gated</h4><p>Every link carries a per-session token (<code>?g=…</code>). The guest whitelist and downloads validate it.</p></div>
+      <div class="tile"><h4>🎫 Token-gated</h4><p>Every link carries a per-session token (<code>?g=…</code>). The guest whitelist, thumbnails, single-file downloads and the zip all validate it.</p></div>
       <div class="tile"><h4>🚧 Route whitelist</h4><p>Guests can only hit <code>share/status</code>, <code>facefind/selfie</code>, <code>share/find/start</code>, <code>cluster/progress|cancel</code>, thumbs &amp; downloads. Scan/plan/apply/undo stay host-only.</p></div>
-      <div class="tile"><h4>📁 Path confinement</h4><p><code>_guest_can_access()</code> allows reading only files inside the shared event folder — never elsewhere on disk.</p></div>
+      <div class="tile"><h4>📁 Match confinement</h4><p><code>_guest_may_fetch()</code> lets a guest read only the photos <em>their own search matched</em> — not arbitrary files under the event folder — so sequential filenames can't be enumerated.</p></div>
       <div class="tile"><h4>🛡️ DNS-rebind guard</h4><p><code>Host</code>-header checks accept only localhost, private IPs, or the app's own tunnel hostname.</p></div>
       <div class="tile"><h4>🌐 HTTPS when online</h4><p>The Cloudflare tunnel terminates TLS, so guest traffic is encrypted end-to-end and phone cameras are unlocked.</p></div>
     </div>

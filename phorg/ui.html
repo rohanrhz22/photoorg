@@ -2668,7 +2668,7 @@ async function initGuestPortal(token){
     S._guestUnloadHook=true;
     window.addEventListener("pagehide",()=>{
       if(S.gJob){try{navigator.sendBeacon("/api/cluster/cancel",
-        JSON.stringify({jobId:S.gJob}));}catch(e){}}
+        new Blob([JSON.stringify({jobId:S.gJob})],{type:"application/json"}));}catch(e){}}
     });
   }
   renderGuestPortal();
@@ -2820,8 +2820,8 @@ async function guestPoll(btn){
   if(!m.length){$("#gOut").innerHTML=`<div class="callout info" style="margin-top:14px">No photos found${res.scanned?` in <b>${num(res.scanned)}</b> scanned`:""} yet. Try a clearer selfie.</div>`;return;}
   $("#gOut").innerHTML=`<div class="callout safe" style="margin-top:14px">✅ Found <b>${num(m.length)}</b> photo(s) you're in${res.scanned?` out of <b>${num(res.scanned)}</b> scanned`:""} — tap any to download, or grab them all.</div>
     <div class="btn-row"><a class="btn" href="/api/download/zip?job=${encodeURIComponent(S.gJob)}&token=${encodeURIComponent(S.guestToken)}" download>⬇️ Download all (${num(m.length)})</a></div>
-    <div class="thumbgrid">${m.map(x=>`<a class="thumb" href="/api/download?path=${encodeURIComponent(x.path)}" download>
-      <img loading="lazy" src="/api/thumb?size=400&path=${encodeURIComponent(x.path)}" alt=""/>
+    <div class="thumbgrid">${m.map(x=>`<a class="thumb" href="/api/download?path=${encodeURIComponent(x.path)}&token=${encodeURIComponent(S.guestToken)}" download>
+      <img loading="lazy" src="/api/thumb?size=400&path=${encodeURIComponent(x.path)}&token=${encodeURIComponent(S.guestToken)}" alt=""/>
       <div class="nm">⬇️ download</div></a>`).join("")}</div>`;
 }
 

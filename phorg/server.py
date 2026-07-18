@@ -144,19 +144,37 @@ def _share_urls(token):
     return urls
 
 
-def _guest_can_access(fp, is_local):
-    """Whether a request may read *fp*: host can read any allowed root; a guest
-    may only read files under the shared event folder."""
-    if is_local:
-        return _under_allowed(fp)
+def _guest_allowed_paths():
+    """Absolute paths a guest is permitted to fetch: the match results of every
+    search run under the *active* share.
+
+    This is what enforces the product promise — a guest only ever downloads the
+    photos a face search actually matched, never an arbitrary file that merely
+    happens to sit under the event folder.  (The host is loopback and bypasses
+    this entirely.)
+    """
+    allowed = set()
     with _SHARE_LOCK:
-        root = _SHARE["root"] if _SHARE["enabled"] else None
-    if not root:
-        return False
-    try:
-        return os.path.commonpath([os.path.abspath(fp), root]) == root
-    except ValueError:
-        return False
+        if not _SHARE["enabled"]:
+            return allowed
+        jobs = [g.get("job") for g in (_SHARE.get("guests") or [])]
+    for jid in jobs:
+        with _JOBS_LOCK:
+            job = _JOBS.get(jid)
+        for m in ((job or {}).get("result") or {}).get("matches") or []:
+            pth = m.get("path")
+            if pth:
+                allowed.add(os.path.abspath(pth))
+    return allowed
+
+
+def _guest_may_fetch(fp, token):
+    """A guest may fetch *fp* only with the current share token *and* only when
+    it is one of their matched photos (see :func:`_guest_allowed_paths`)."""
+    with _SHARE_LOCK:
+        if not _SHARE["enabled"] or not token or token != _SHARE["token"]:
+            return False
+    return os.path.abspath(fp) in _guest_allowed_paths()
 
 
 
@@ -2797,16 +2815,24 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send(404, {"error": "Not found"})
 
+    def _may_read(self, fp, token):
+        """Authorize a file GET (thumb/download/zip): the host (loopback) can
+        read any registered root; a guest needs the current share token and may
+        only read a photo their own search matched."""
+        if self._is_local_req():
+            return _under_allowed(fp)
+        return _guest_may_fetch(fp, token)
+
     def _serve_thumb(self):
         from urllib.parse import urlparse, parse_qs, unquote
         qs = parse_qs(urlparse(self.path).query)
         fp = unquote((qs.get("path") or [""])[0])
+        token = unquote((qs.get("token") or [""])[0])
         try:
             size = max(64, min(1400, int((qs.get("size") or ["200"])[0])))
         except ValueError:
             size = 200
-        if not fp or not _guest_can_access(fp, self._is_local_req()) \
-                or not os.path.isfile(fp):
+        if not fp or not self._may_read(fp, token) or not os.path.isfile(fp):
             self._send(404, {"error": "Not found"})
             return
         ext = fp.rsplit(".", 1)[-1].lower() if "." in fp else ""
@@ -2850,8 +2876,8 @@ class Handler(BaseHTTPRequestHandler):
         from urllib.parse import urlparse, parse_qs, unquote
         qs = parse_qs(urlparse(self.path).query)
         fp = unquote((qs.get("path") or [""])[0])
-        if not fp or not _guest_can_access(fp, self._is_local_req()) \
-                or not os.path.isfile(fp):
+        token = unquote((qs.get("token") or [""])[0])
+        if not fp or not self._may_read(fp, token) or not os.path.isfile(fp):
             self._send(404, {"error": "Not found"})
             return
         try:
@@ -2893,7 +2919,7 @@ class Handler(BaseHTTPRequestHandler):
             seen = set()
             for m in matches:
                 fp = m.get("path")
-                if fp and _guest_can_access(fp, local) and os.path.isfile(fp):
+                if fp and self._may_read(fp, token) and os.path.isfile(fp):
                     arc = os.path.basename(fp)
                     if arc in seen:
                         arc = f"{len(seen)}_{arc}"
@@ -2919,6 +2945,17 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if not self._is_local_req() and path not in _GUEST_ROUTES:
             self._send(403, {"error": "Not available"})
+            return
+        # CSRF hardening.  A browser only lets a cross-origin POST skip the
+        # preflight when its Content-Type is a "simple" value (text/plain,
+        # form-urlencoded, multipart).  Requiring application/json forces a
+        # preflight that this server never answers with CORS headers, so a
+        # malicious web page the user is browsing cannot drive this local
+        # file-moving API.  Every legitimate caller — the app's fetch() helper
+        # and its sendBeacon Blob — already sends application/json.
+        ctype = (self.headers.get("Content-Type") or "").split(";", 1)[0]
+        if ctype.strip().lower() != "application/json":
+            self._send(415, {"error": "Unsupported Media Type"})
             return
         fn = ROUTES.get(path)
         if not fn:
