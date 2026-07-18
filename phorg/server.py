@@ -1370,7 +1370,9 @@ def _relay_identity(base, event_name):
 
 def _production_relay_status():
     cfg = _relay_load_cfg()
-    base = _RELAY.get("base") or cfg.get("base")
+    # Fall back to the packaged default (HAPZEA_PRODUCTION_URL et al.) so the
+    # UI pre-fills the cloud link on a fresh install.
+    base = _RELAY.get("base") or cfg.get("base") or _production_relay_base()
     event = _RELAY.get("event") or cfg.get("event")
     key = _RELAY.get("key") or cfg.get("key")
     guest_url = _RELAY.get("guest_url")
