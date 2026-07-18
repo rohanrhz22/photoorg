@@ -209,6 +209,52 @@ def test_relay_store_forward_results_carry_pid(relay):
         relay_client.originals_needed(base, "sfp", "WRONG")
 
 
+def test_relay_rejects_unsafe_event_id_collision(relay):
+    """An attacker must not be able to create an event whose id collapses to
+    the same on-disk originals directory as a real event (which would let them
+    delete/expire someone else's stored originals)."""
+    base = relay
+    import urllib.error
+    # a legitimate event with path-safe id works
+    relay_client.publish_event(base, "real-event-abc123", "Real", "K")
+    # an id that only differs by a path-stripped char is refused outright,
+    # so it can never share "real-event-abc123"'s originals folder
+    with pytest.raises(urllib.error.HTTPError):
+        relay_client._post(base, "/api/event",
+                           {"id": "real-event-abc123!", "name": "x", "key": "attacker"})
+    with pytest.raises(urllib.error.HTTPError):
+        relay_client._post(base, "/api/event",
+                           {"id": "../../etc/passwd", "name": "x", "key": "attacker"})
+    # the colliding id is refused, so no second event can ever share the real
+    # event's originals directory and delete/expire it out from under it
+    assert relay_server._valid_event_id("real-event-abc123")
+    assert not relay_server._valid_event_id("real-event-abc123!")
+    assert not relay_server._valid_event_id("../../etc/passwd")
+
+
+def test_relay_match_scores_matches_scalar():
+    """The vectorised matcher must be numerically identical to the pure-Python
+    path, so instant-match thresholds behave the same with or without numpy."""
+    import random
+    random.seed(7)
+
+    for _ in range(30):
+        d = random.choice([64, 128, 512])
+        queries = [[random.gauss(0, 1) for _ in range(d)]
+                   for _ in range(random.randint(1, 3))]
+        photos = [[[random.gauss(0, 1) for _ in range(d)]
+                   for _ in range(random.randint(0, 4))]
+                  for _ in range(random.randint(1, 6))]
+        fast = relay_server._match_scores(queries, photos)
+        slow = [relay_server._best_cos(queries, embeds) for embeds in photos]
+        assert len(fast) == len(slow)
+        assert all(abs(a - b) < 1e-9 for a, b in zip(fast, slow))
+    # degenerate inputs
+    assert relay_server._match_scores([], [[[1.0, 0.0]]]) == [0.0]
+    assert relay_server._match_scores([[1.0, 0.0]], []) == []
+    assert relay_server._match_scores([[1.0, 0.0]], [[]]) == [0.0]
+
+
 def test_relay_event_stats(relay):
     base = relay
     relay_client.publish_event(base, "stats", "Stats Event", "KEY")

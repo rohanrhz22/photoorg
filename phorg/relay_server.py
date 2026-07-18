@@ -141,6 +141,16 @@ def _safe_component(s):
     return "".join(c for c in str(s or "") if c.isalnum() or c in "-_")[:80]
 
 
+# Event ids become on-disk directory names for stored originals.  If two
+# distinct ids collapsed to the same directory (via the lossy _safe_component
+# above), one tenant could delete/expire another tenant's originals.  Requiring
+# ids to already be path-safe means the sanitiser is never lossy, so distinct
+# ids can never collide.  All legitimately generated ids already conform.
+def _valid_event_id(event_id):
+    s = str(event_id or "")
+    return bool(s) and len(s) <= 80 and s == _safe_component(s)
+
+
 # Full-quality originals live on the filesystem (they can be 10-30 MB each);
 # the DB keeps only the medium deliverables so it stays small and fast.
 def _orig_dir(event_id, create=False):
@@ -168,7 +178,10 @@ def _original_bytes(event_id, pid):
 # --------------------------------------------------------------------------
 def upsert_event(event_id, name, key):
     """Create the event, or verify the key if it already exists.  Returns the
-    event dict, or None when the key does not match an existing event."""
+    event dict, or None when the key does not match an existing event (or the
+    id is not path-safe)."""
+    if not _valid_event_id(event_id):
+        return None
     with _LOCK:
         conn = _connect()
         try:
@@ -506,6 +519,12 @@ def result_image(rid, atoken, idx, prefer_original=False):
 # --------------------------------------------------------------------------
 # Tier B: instant matching from a published embedding index
 # --------------------------------------------------------------------------
+try:
+    import numpy as _np
+except Exception:                        # relay runs stdlib-only if numpy absent
+    _np = None
+
+
 def _cos(a, b):
     s = da = db = 0.0
     for x, y in zip(a, b):
@@ -515,6 +534,56 @@ def _cos(a, b):
     if da <= 0 or db <= 0:
         return 0.0
     return s / ((da ** 0.5) * (db ** 0.5))
+
+
+def _best_cos(queries, embeds):
+    """Highest cosine similarity between any query vector and any of one
+    photo's face vectors (pure-Python reference; see _match_scores)."""
+    best = 0.0
+    for q in queries:
+        for e in embeds:
+            c = _cos(q, e)
+            if c > best:
+                best = c
+    return best
+
+
+def _match_scores(queries, photo_embeds):
+    """Best cosine similarity per photo, for every photo in the event at once.
+
+    A guest match compares one selfie against every face at the event, so this
+    is the relay's hot path.  When numpy is present every face across every
+    photo is compared in a single matrix multiply (orders of magnitude faster
+    than looping on a large event); the pure-Python fallback is numerically
+    equivalent, so match thresholds are unchanged either way.  Returns a list
+    of best scores aligned with *photo_embeds* (0.0 where nothing matched)."""
+    n = len(photo_embeds)
+    if not queries or not n:
+        return [0.0] * n
+    if _np is not None:
+        try:
+            flat = []
+            owner = []
+            for i, embeds in enumerate(photo_embeds):
+                for e in embeds:
+                    flat.append(e)
+                    owner.append(i)
+            if not flat:
+                return [0.0] * n
+            Q = _np.asarray(queries, dtype=_np.float64)
+            E = _np.asarray(flat, dtype=_np.float64)
+            if Q.ndim == 2 and E.ndim == 2 and Q.shape[1] == E.shape[1]:
+                qn = _np.linalg.norm(Q, axis=1, keepdims=True)
+                en = _np.linalg.norm(E, axis=1, keepdims=True)
+                qn[qn == 0] = 1.0
+                en[en == 0] = 1.0
+                face_best = ((Q / qn) @ (E / en).T).max(axis=0)  # per face
+                out = _np.zeros(n)                    # init 0 == scalar floor
+                _np.maximum.at(out, _np.asarray(owner), face_best)
+                return out.tolist()
+        except Exception:
+            pass                          # fall through to the scalar path
+    return [_best_cos(queries, embeds) for embeds in photo_embeds]
 
 
 def _as_query_vectors(x):
@@ -618,20 +687,15 @@ def match_guest(event_id, name, contact, selfie_bytes=None,
             rows = conn.execute(
                 "SELECT pid,name,embeds FROM photos WHERE event_id=?",
                 (event_id,)).fetchall()
-            matches = []
+            parsed = []
             for r in rows:
                 try:
-                    embeds = json.loads(r["embeds"] or "[]")
+                    parsed.append(json.loads(r["embeds"] or "[]"))
                 except (ValueError, TypeError):
-                    embeds = []
-                best = 0.0
-                for q in queries:
-                    for e in embeds:
-                        c = _cos(q, e)
-                        if c > best:
-                            best = c
-                if best >= threshold:
-                    matches.append((r["pid"], r["name"], best))
+                    parsed.append([])
+            scores = _match_scores(queries, parsed)
+            matches = [(r["pid"], r["name"], best)
+                       for r, best in zip(rows, scores) if best >= threshold]
             matches.sort(key=lambda x: -x[2])
             rid = _uid()
             atoken = _uid(16)
