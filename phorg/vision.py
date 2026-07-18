@@ -1,5 +1,5 @@
 """
-Face analysis engine for FaceFind.
+Face analysis engine for Hapzea.
 
 This is the part of the app that looks *inside* images: it detects faces and
 computes a compact embedding for each, so a guest's selfie can be matched

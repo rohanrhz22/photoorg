@@ -1,7 +1,7 @@
 """
-FaceFind — command-line entry point.
+Hapzea — command-line entry point.
 
-FaceFind is a desktop app: running it launches the friendly web interface in
+Hapzea is a desktop app: running it launches the friendly web interface in
 your browser.  Point it at an event folder, add a selfie, and it finds every
 photo that person appears in.
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>phorg · How FaceFind (Face ID) works — architecture &amp; step-by-step</title>
+<title>phorg · How Hapzea (Face ID) works — architecture &amp; step-by-step</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
   :root{
@@ -125,8 +125,8 @@
 
   <header class="hero">
     <span class="badge">Feature Guide · Architecture + Steps</span>
-    <h1>How <span class="g">FaceFind (Face ID)</span> works</h1>
-    <p class="sub">FaceFind lets anyone find every photo they appear in — even inside big group shots — from a single
+    <h1>How <span class="g">Hapzea (Face ID)</span> works</h1>
+    <p class="sub">Hapzea lets anyone find every photo they appear in — even inside big group shots — from a single
     selfie. All face detection and matching runs <b>100% on the host PC</b> using on-device ONNX models; no photo
     and no selfie is ever uploaded to a cloud service for the matching itself. This page walks the full architecture,
     the matching pipeline, and every screen the host and guest see.</p>
@@ -149,7 +149,7 @@
       <div class="tile">
         <h4>👤 Host (event owner)</h4>
         <p>Runs phorg, points it at the event folder, and turns on a <b>guest portal</b>. Shares a link or QR code —
-        on the same Wi-Fi, or over a secure internet tunnel. Can also run FaceFind directly for a named guest.</p>
+        on the same Wi-Fi, or over a secure internet tunnel. Can also run Hapzea directly for a named guest.</p>
       </div>
       <div class="tile">
         <h4>🙋 Guest</h4>
@@ -301,8 +301,8 @@ sequenceDiagram
     <!-- H1 -->
     <div class="steprow">
       <div class="stepnote">
-        <h3><span class="sn">1</span> Open the FaceFind page</h3>
-        <p>In the phorg sidebar, click <b>🙋 FaceFind</b> (enabled once a local folder is connected). The page confirms
+        <h3><span class="sn">1</span> Open the Hapzea page</h3>
+        <p>In the phorg sidebar, click <b>🙋 Hapzea</b> (enabled once a local folder is connected). The page confirms
         the privacy stance and offers two routes: run it yourself, or open a guest self-service portal.</p>
         <ul>
           <li>Requires the AI tools (<code>opencv-contrib-python</code>, NumPy, Pillow).</li>
@@ -314,12 +314,12 @@ sequenceDiagram
           <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
             <span class="u">localhost:8765 · phorg</span></div>
           <div class="scr">
-            <div class="m-h1">FaceFind <span style="font-size:11px;color:var(--mut);font-weight:400">· find your photos</span></div>
+            <div class="m-h1">Hapzea <span style="font-size:11px;color:var(--mut);font-weight:400">· find your photos</span></div>
             <div class="m-lead">Point it at a big event folder, add a selfie, and it finds every photo that person appears in.</div>
             <div class="m-cal info">🔒 Runs 100% on your PC. Faces are matched locally; nothing is uploaded. Matched photos are <b>copied</b> into an album — your originals are never moved.</div>
           </div>
         </div>
-        <div class="cap">Step 1 — the FaceFind landing card</div>
+        <div class="cap">Step 1 — the Hapzea landing card</div>
       </div>
     </div>
 
@@ -404,7 +404,7 @@ sequenceDiagram
     <div class="steprow rev">
       <div class="stepnote">
         <h3><span class="sn">4</span> (Optional) Run it yourself for a named guest</h3>
-        <p>Below the portal, the host can run FaceFind directly: type the guest's name, drop in a selfie, tune
+        <p>Below the portal, the host can run Hapzea directly: type the guest's name, drop in a selfie, tune
         <b>match strictness</b>, and hit <b>Find their photos</b>. Matches are copied into a personal album.</p>
         <ul>
           <li>Selfie via file picker, drag-drop, or camera.</li>
@@ -439,7 +439,7 @@ sequenceDiagram
             <div><span class="m-btn">🔎 Find their photos</span></div>
           </div>
         </div>
-        <div class="cap">Step 4 — host-driven FaceFind with strictness control</div>
+        <div class="cap">Step 4 — host-driven Hapzea with strictness control</div>
       </div>
     </div>
   </section>
@@ -549,7 +549,7 @@ sequenceDiagram
     <div class="card">
       <div class="filerow">phorg/vision.py      → FaceEmbedder, facefind(), embed()/embed_all(), model download</div>
       <div class="filerow">phorg/server.py      → /api/facefind/selfie, /api/facefind/start, share/* endpoints, _JOBS</div>
-      <div class="filerow">phorg/ui.html        → pageFaceFind(), renderGuestPortal(), guestFind()/guestPoll()</div>
+      <div class="filerow">phorg/ui.html        → pageHapzea(), renderGuestPortal(), guestFind()/guestPoll()</div>
       <div class="filerow">phorg/peopledb.py    → remember/refs — persistent named faces (~/.phorg/people.json)</div>
       <div class="filerow">phorg/tunnel.py      → optional Cloudflare quick tunnel</div>
       <div class="filerow">~/.phorg/models/     → YuNet + SFace ONNX (downloaded once)</div>
@@ -559,7 +559,7 @@ sequenceDiagram
   </section>
 
   <footer>
-    phorg · FaceFind (Face ID) — architecture &amp; step-by-step. All matching runs locally on the host PC.
+    phorg · Hapzea (Face ID) — architecture &amp; step-by-step. All matching runs locally on the host PC.
     <br/>Screens are faithful mockups of the live phorg UI; QR code shown is illustrative.
   </footer>
 </div>

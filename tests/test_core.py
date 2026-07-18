@@ -1,4 +1,4 @@
-"""Core regression tests for FaceFind — pure logic, no cv2 required.
+"""Core regression tests for Hapzea — pure logic, no cv2 required.
 
 Run with:  python -m pytest -q
 """

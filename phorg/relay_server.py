@@ -32,12 +32,15 @@ import json
 import time
 import hmac
 import base64
+import shutil
 import sqlite3
+import mimetypes
 import threading
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 _MAX_IMG = 10 * 1024 * 1024          # 10 MB per uploaded image
+_MAX_ORIG = 60 * 1024 * 1024         # 60 MB per full-quality original
 _LOCK = threading.Lock()
 
 
@@ -133,6 +136,33 @@ def _uid(n=12):
     return base64.urlsafe_b64encode(os.urandom(n)).decode().rstrip("=")
 
 
+def _safe_component(s):
+    """A string safe to use as a single path component (no traversal)."""
+    return "".join(c for c in str(s or "") if c.isalnum() or c in "-_")[:80]
+
+
+# Full-quality originals live on the filesystem (they can be 10-30 MB each);
+# the DB keeps only the medium deliverables so it stays small and fast.
+def _orig_dir(event_id, create=False):
+    d = os.path.join(_home(), "originals", _safe_component(event_id))
+    if create:
+        os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _orig_path(event_id, pid):
+    return os.path.join(_orig_dir(event_id), _safe_component(pid))
+
+
+def _original_bytes(event_id, pid):
+    p = _orig_path(event_id, pid)
+    try:
+        with open(p, "rb") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
 # --------------------------------------------------------------------------
 # data operations
 # --------------------------------------------------------------------------
@@ -175,6 +205,7 @@ def _delete_event_data(conn, event_id):
     conn.execute("DELETE FROM registrations WHERE event_id=?", (event_id,))
     conn.execute("DELETE FROM photos WHERE event_id=?", (event_id,))
     conn.execute("DELETE FROM events WHERE id=?", (event_id,))
+    shutil.rmtree(_orig_dir(event_id), ignore_errors=True)
 
 
 def _purge_if_expired(event_id):
@@ -243,7 +274,12 @@ def event_stats(event_id, key):
             def c(sql):
                 return conn.execute(sql, (event_id,)).fetchone()[0]
 
-            return {
+            matched_pids = {r["pid"] for r in conn.execute(
+                "SELECT DISTINCT res.pid AS pid FROM results res "
+                "JOIN registrations r ON r.id=res.reg_id "
+                "WHERE r.event_id=? AND res.pid IS NOT NULL",
+                (event_id,)).fetchall()}
+            out = {
                 "event": ev["name"], "expires_at": ev["expires_at"] or 0,
                 "registrations": c("SELECT COUNT(*) FROM registrations "
                                    "WHERE event_id=?"),
@@ -255,6 +291,12 @@ def event_stats(event_id, key):
             }
         finally:
             conn.close()
+    d = _orig_dir(event_id)
+    have = set(os.listdir(d)) if os.path.isdir(d) else set()
+    out["originals"] = len(have)
+    out["originals_pending"] = len(
+        [p for p in matched_pids if _safe_component(p) not in have])
+    return out
 
 
 def delete_event(event_id, key):
@@ -347,10 +389,10 @@ def save_results(event_id, key, rid, status, count, matches):
                 if blob and len(blob) > _MAX_IMG:
                     blob = None
                 conn.execute(
-                    "INSERT OR REPLACE INTO results(reg_id,idx,name,score,image)"
-                    " VALUES(?,?,?,?,?)",
+                    "INSERT OR REPLACE INTO results(reg_id,idx,name,score,pid,image)"
+                    " VALUES(?,?,?,?,?,?)",
                     (rid, i, m.get("name") or f"photo_{i}.jpg",
-                     float(m.get("score") or 0), blob))
+                     float(m.get("score") or 0), m.get("pid") or None, blob))
             conn.execute(
                 "UPDATE registrations SET status=?,count=?,matched_at=? WHERE id=?",
                 (status or "matched", count if count is not None
@@ -359,6 +401,47 @@ def save_results(event_id, key, rid, status, count, matches):
             return True
         finally:
             conn.close()
+
+
+def save_original(event_id, key, pid, data):
+    """Host: store the full-quality file for one matched photo.  Guests get it
+    on download; the medium copy keeps serving the gallery view."""
+    if not pid or not data or len(data) > _MAX_ORIG:
+        return {"error": "bad original"}
+    with _LOCK:
+        conn = _connect()
+        try:
+            if not _event_key_ok(conn, event_id, key):
+                return None
+        finally:
+            conn.close()
+    p = _orig_path(event_id, pid)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    tmp = p + ".part"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, p)
+    return {"ok": True}
+
+
+def originals_needed(event_id, key):
+    """Host: matched photo ids that still lack a full-quality file, so the PC
+    can upgrade albums created while it was off."""
+    with _LOCK:
+        conn = _connect()
+        try:
+            if not _event_key_ok(conn, event_id, key):
+                return None
+            rows = conn.execute(
+                "SELECT DISTINCT res.pid AS pid FROM results res "
+                "JOIN registrations r ON r.id=res.reg_id "
+                "WHERE r.event_id=? AND res.pid IS NOT NULL",
+                (event_id,)).fetchall()
+        finally:
+            conn.close()
+    d = _orig_dir(event_id)
+    have = set(os.listdir(d)) if os.path.isdir(d) else set()
+    return [r["pid"] for r in rows if _safe_component(r["pid"]) not in have]
 
 
 def album(rid, atoken):
@@ -387,7 +470,7 @@ def album(rid, atoken):
             conn.close()
 
 
-def result_image(rid, atoken, idx):
+def result_image(rid, atoken, idx, prefer_original=False):
     with _LOCK:
         conn = _connect()
         try:
@@ -401,17 +484,23 @@ def result_image(rid, atoken, idx):
                 (rid, int(idx))).fetchone()
             if not row:
                 return None, None
-            if row["image"] is not None:
-                return row["name"], row["image"]
-            if row["pid"]:                       # Tier B: image lives on the photo
+            medium = row["image"]
+            if medium is None and row["pid"]:    # Tier B: image lives on the photo
                 ph = conn.execute(
                     "SELECT image FROM photos WHERE event_id=? AND pid=?",
                     (reg["event_id"], row["pid"])).fetchone()
-                if ph and ph["image"] is not None:
-                    return row["name"], ph["image"]
-            return None, None
+                medium = ph["image"] if ph else None
         finally:
             conn.close()
+    # Downloads get the full-quality file when the PC has sent it; the gallery
+    # view keeps the fast medium copy.
+    if prefer_original and row["pid"]:
+        orig = _original_bytes(reg["event_id"], row["pid"])
+        if orig is not None:
+            return row["name"], orig
+    if medium is not None:
+        return row["name"], medium
+    return None, None
 
 
 # --------------------------------------------------------------------------
@@ -569,7 +658,7 @@ def match_guest(event_id, name, contact, selfie_bytes=None,
 # --------------------------------------------------------------------------
 _PORTAL = """<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>FaceFind</title><style>
+<title>Hapzea</title><style>
 body{margin:0;font-family:'Segoe UI',Roboto,Arial,sans-serif;background:#0b1020;color:#e8ecf8}
 .wrap{max-width:620px;margin:18px auto;padding:0 16px}
 .card{background:#161f3d;border:1px solid #28345c;border-radius:16px;padding:18px;margin-top:14px}
@@ -722,19 +811,28 @@ class RelayHandler(BaseHTTPRequestHandler):
             d = album(rid, tok)
             self._json(200 if d else 404, d or {"error": "not found"})
             return
+        if path == "/api/originals/needed":
+            ev = (qs.get("event") or [""])[0]
+            pids = originals_needed(ev, self._key())
+            if pids is None:
+                self._json(403, {"error": "bad event key"})
+            else:
+                self._json(200, {"pids": pids})
+            return
         if path == "/api/photo":
             rid, tok = _split_ref((qs.get("a") or [""])[0])
             try:
                 idx = int((qs.get("i") or ["0"])[0])
             except ValueError:
                 idx = 0
-            name, blob = result_image(rid, tok, idx)
+            dl = (qs.get("dl") or [""])[0] == "1"
+            name, blob = result_image(rid, tok, idx, prefer_original=dl)
             if blob is None:
                 self._json(404, {"error": "not found"})
                 return
-            dl = (qs.get("dl") or [""])[0] == "1"
             self.send_response(200)
-            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Type",
+                             mimetypes.guess_type(name or "")[0] or "image/jpeg")
             if dl:
                 safe = "".join(c for c in name if c.isalnum() or c in "._- ")
                 self.send_header("Content-Disposition",
@@ -748,6 +846,9 @@ class RelayHandler(BaseHTTPRequestHandler):
     # ---- POST ----
     def do_POST(self):
         path = self.path.split("?", 1)[0]
+        if path == "/api/original":     # raw bytes, not JSON (files are big)
+            self._post_original()
+            return
         body = self._read_json()
         if path == "/api/event":
             ev = upsert_event(body.get("id") or _uid(8),
@@ -816,6 +917,26 @@ class RelayHandler(BaseHTTPRequestHandler):
             return
         self._json(404, {"error": "not found"})
 
+    def _post_original(self):
+        qs = self._qs()
+        ev = (qs.get("event") or [""])[0]
+        pid = (qs.get("pid") or [""])[0]
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            n = 0
+        if n <= 0 or n > _MAX_ORIG:
+            self._json(413 if n > _MAX_ORIG else 400, {"error": "bad size"})
+            return
+        data = self.rfile.read(n)
+        r = save_original(ev, self._key(), pid, data)
+        if r is None:
+            self._json(403, {"error": "bad event key"})
+        elif r.get("error"):
+            self._json(400, r)
+        else:
+            self._json(200, r)
+
 
 def _split_ref(ref):
     ref = ref or ""
@@ -852,7 +973,7 @@ def serve(port=8080, host="0.0.0.0"):
                 pass
             time.sleep(300)
     threading.Thread(target=_purge_loop, daemon=True).start()
-    print(f"\n  FaceFind relay running on http://{host}:{port}/")
+    print(f"\n  Hapzea relay running on http://{host}:{port}/")
     print(f"  Data dir: {_home()}")
     print("  Keep this always on so guest links never die. Ctrl+C to stop.\n")
     try:
@@ -864,7 +985,7 @@ def serve(port=8080, host="0.0.0.0"):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="FaceFind always-on relay")
+    ap = argparse.ArgumentParser(description="Hapzea always-on relay")
     ap.add_argument("--port", type=int, default=8080)
     ap.add_argument("--host", default="0.0.0.0")
     args = ap.parse_args(argv)

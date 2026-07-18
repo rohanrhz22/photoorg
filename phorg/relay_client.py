@@ -111,20 +111,41 @@ def publish_index(base, event_id, key, photos, chunk=20):
 def post_results(base, event_id, key, rid, matches, status="matched",
                  count=None):
     """Send a guest's results back.  *matches* is a list of
-    ``{"name", "score", "image_bytes"}`` — image bytes are the deliverable
-    (medium) JPEG the guest downloads."""
+    ``{"name", "score", "pid", "image_bytes"}`` — image bytes are the
+    deliverable (medium) JPEG; *pid* lets the relay attach the full-quality
+    original once the host uploads it."""
     payload = []
     for m in matches:
         img = m.get("image_bytes")
         payload.append({
             "name": m.get("name"),
             "score": m.get("score"),
+            "pid": m.get("pid"),
             "image_b64": base64.b64encode(img).decode() if img else None,
         })
     return _post(base, "/api/results",
                  {"event": event_id, "rid": rid, "status": status,
                   "count": count if count is not None else len(payload),
                   "matches": payload}, key=key)
+
+
+def originals_needed(base, event_id, key):
+    """Matched photo ids on the relay that still lack a full-quality file."""
+    from urllib.parse import quote
+    d = _get(base, "/api/originals/needed?event=" + quote(event_id), key=key)
+    return d.get("pids") or []
+
+
+def upload_original(base, event_id, key, pid, data):
+    """Send one full-quality photo file (raw bytes) to the relay."""
+    from urllib.parse import quote
+    req = urllib.request.Request(
+        base.rstrip("/") + "/api/original?event=" + quote(event_id)
+        + "&pid=" + quote(pid), data=data, method="POST")
+    req.add_header("Content-Type", "application/octet-stream")
+    req.add_header("X-Event-Key", key)
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.loads(r.read() or b"{}")
 
 
 def sync_once(base, event_id, key, matcher):

@@ -1,4 +1,4 @@
-"""Async delivery for FaceFind guests (Phase 2 of always-on availability).
+"""Async delivery for Hapzea guests (Phase 2 of always-on availability).
 
 When a guest registers a selfie and then closes their phone, we still want to
 send them their album once the host has matched it.  This module sends that

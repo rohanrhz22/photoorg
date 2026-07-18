@@ -1,7 +1,7 @@
 """
-FaceFind web UI — a zero-dependency local server.
+Hapzea web UI — a zero-dependency local server.
 
-Serves the FaceFind single-page interface (``ui.html``) and a small JSON API:
+Serves the Hapzea single-page interface (``ui.html``) and a small JSON API:
 point it at an event folder, add a selfie, and it finds every photo a person
 appears in — then copies them into a personal album.  An optional guest portal
 lets people scan a QR/link and find "photos of me" from their own phone.
@@ -77,12 +77,13 @@ def _under_allowed(path):
 
 
 # --------------------------------------------------------------------------
-# Guest sharing ("FaceFind portal") — let people scan a link, submit a selfie,
+# Guest sharing ("Hapzea portal") — let people scan a link, submit a selfie,
 # and get their own photos.  Off by default.
 # --------------------------------------------------------------------------
 _SHARE = {"enabled": False, "root": None, "event": "", "token": None,
           "guests": [], "online": False, "public_url": None,
-          "public_host": None, "threshold": 0.45, "pin": None, "expires": 0}
+          "public_host": None, "production_url": None, "threshold": 0.45,
+          "pin": None, "expires": 0}
 _SHARE_LOCK = threading.Lock()
 _SERVER_PORT = 8765
 
@@ -185,9 +186,12 @@ def _is_private_host(host):
 
 
 def _share_urls(token):
-    urls = [f"http://{ip}:{_SERVER_PORT}/?g={token}" for ip in _lan_ips()]
     with _SHARE_LOCK:
+        prod = _SHARE.get("production_url")
         pub = _SHARE.get("public_url") if _SHARE.get("online") else None
+    if prod:
+        return [prod]
+    urls = [f"http://{ip}:{_SERVER_PORT}/?g={token}" for ip in _lan_ips()]
     if pub:
         urls.insert(0, f"{pub}/?g={token}")
     return urls
@@ -327,7 +331,7 @@ def api_vision_install(_p):
     """Install the optional face-recognition packages via pip (source only)."""
     if getattr(sys, "frozen", False):
         raise ValueError("Automatic install isn't available in the packaged app. "
-                         "Run FaceFind from source to install AI support.")
+                         "Run Hapzea from source to install AI support.")
     import subprocess
     pkgs = ["numpy", "opencv-contrib-python", "Pillow"]
     try:
@@ -344,7 +348,7 @@ def api_vision_install(_p):
 
 
 def api_cluster_status(_p):
-    """Whether the face tools needed by FaceFind are available."""
+    """Whether the face tools needed by Hapzea are available."""
     from . import vision
     missing = vision.check_deps()
     return {
@@ -357,7 +361,7 @@ def api_cluster_status(_p):
 
 
 def api_cluster_progress(p):
-    """Poll a running FaceFind job."""
+    """Poll a running Hapzea job."""
     with _JOBS_LOCK:
         job = _JOBS.get(p.get("jobId"))
     if not job:
@@ -473,7 +477,7 @@ def _start_apply_job(be, ops, label, copy_mode=False):
 def api_categorize_apply_start(p):
     """Copy the chosen matches into the guest's album folder (background job)."""
     if (p.get("backend") or "local").lower() != "local":
-        raise ValueError("FaceFind works on local folders only.")
+        raise ValueError("Hapzea works on local folders only.")
     be, ops, skipped = _build_photo_ops(p)
     if not ops:
         job_id = uuid.uuid4().hex
@@ -505,7 +509,7 @@ def api_apply_cancel(p):
 
 
 # ==========================================================================
-# FaceFind — find every photo a guest appears in, from one selfie
+# Hapzea — find every photo a guest appears in, from one selfie
 # ==========================================================================
 def api_facefind_selfie(p):
     """Save an uploaded selfie (data URL) to a temp file; return its path."""
@@ -536,7 +540,7 @@ def _selfie_list(p):
 
 
 def _start_facefind_job(root, selfie, threshold, recursive=True, on_done=None):
-    """Start a background FaceFind job over *root*; returns {'jobId'}.
+    """Start a background Hapzea job over *root*; returns {'jobId'}.
 
     *selfie* may be a single path or a list of selfie paths (averaged).
     *on_done*, if given, is called with the finished job dict (success or
@@ -553,7 +557,8 @@ def _start_facefind_job(root, selfie, threshold, recursive=True, on_done=None):
         name = posixpath.basename(fp)
         rel = be.relpath(posixpath.dirname(fp)).replace("\\", "/")
         segs = [s for s in rel.split("/") if s and s != "."]
-        if segs and (segs[0] in skip_top or segs[0].startswith("FaceFind_")
+        if segs and (segs[0] in skip_top
+                     or segs[0].startswith(("Hapzea_", "FaceFind_"))
                      or saf.is_protected_dir("/".join(segs))):
             continue
         if not recursive and segs:
@@ -626,7 +631,7 @@ def _start_facefind_job(root, selfie, threshold, recursive=True, on_done=None):
 
 def api_facefind_start(p):
     if (p.get("backend") or "local").lower() != "local":
-        raise ValueError("FaceFind works on local folders only.")
+        raise ValueError("Hapzea works on local folders only.")
     from . import vision
     missing = vision.check_deps()
     if missing:
@@ -644,7 +649,7 @@ def api_facefind_start(p):
 
 def _gather_event_images(root, recursive=True):
     """Return (backend, [native image paths]) for an event folder, applying the
-    same skips FaceFind uses (backup/album/protected folders, non-images)."""
+    same skips Hapzea uses (backup/album/protected folders, non-images)."""
     from . import vision
     from .backends import LocalBackend
     be = LocalBackend(root)
@@ -655,7 +660,8 @@ def _gather_event_images(root, recursive=True):
         name = posixpath.basename(fp)
         rel = be.relpath(posixpath.dirname(fp)).replace("\\", "/")
         segs = [s for s in rel.split("/") if s and s != "."]
-        if segs and (segs[0] in skip_top or segs[0].startswith("FaceFind_")
+        if segs and (segs[0] in skip_top
+                     or segs[0].startswith(("Hapzea_", "FaceFind_"))
                      or saf.is_protected_dir("/".join(segs))):
             continue
         if not recursive and segs:
@@ -752,13 +758,10 @@ def api_share_enable(p):
         raise ValueError("Face matching needs the AI tools installed "
                          "(click 'Install AI support' once).")
     _register_root(root)
-    online = bool(p.get("online"))
-    public_url = public_host = None
-    if online:
-        from . import tunnel
-        info = tunnel.start(_SERVER_PORT)     # raises on failure
-        public_url = info["url"]
-        public_host = info["host"]
+    base = _production_relay_base(p.get("base") or p.get("production_url"))
+    if not base:
+        raise ValueError("Enter the Hapzea production URL once, or set "
+                         "HAPZEA_PRODUCTION_URL / PHORG_RELAY_URL.")
     token = uuid.uuid4().hex[:10]
     try:
         thr = float(p.get("threshold"))
@@ -771,20 +774,25 @@ def api_share_enable(p):
     except (TypeError, ValueError):
         exp_min = 0
     expires = int(time.time()) + exp_min * 60 if exp_min > 0 else 0
+    event_name = (p.get("event") or "Our Event").strip()[:80]
+    relay = _ensure_production_relay(base, event_name, os.path.abspath(root),
+                                     threshold=thr, expires_at=expires)
     with _SHARE_LOCK:
         _SHARE.update({"enabled": True, "root": os.path.abspath(root),
-                       "event": (p.get("event") or "Our Event").strip()[:80],
-                       "token": token, "guests": [], "online": online,
-                       "public_url": public_url, "public_host": public_host,
-                       "threshold": thr, "pin": pin, "expires": expires})
+                       "event": event_name, "token": token, "guests": [],
+                       "online": True, "public_url": None, "public_host": None,
+                       "production_url": relay["guest_url"], "threshold": thr,
+                       "pin": pin, "expires": expires})
         event = _SHARE["event"]
     _persist_share_cfg({"root": os.path.abspath(root), "event": event,
-                        "online": online, "pin": pin or "",
-                        "expiry_minutes": exp_min})
-    ips = _lan_ips()
+                        "online": True, "pin": pin or "",
+                        "expiry_minutes": exp_min,
+                        "production_url": relay["guest_url"],
+                        "relay_base": base})
     return {"ok": True, "token": token, "event": event, "port": _SERVER_PORT,
-            "ips": ips, "urls": _share_urls(token), "online": online,
-            "public_url": public_url, "pin": pin or "", "expires": expires}
+            "ips": [], "urls": [relay["guest_url"]], "online": True,
+            "public_url": relay["guest_url"], "production_url": relay["guest_url"],
+            "pin": pin or "", "expires": expires, "relay": relay}
 
 
 def api_share_disable(_p):
@@ -793,13 +801,15 @@ def api_share_disable(_p):
         _SHARE.update({"enabled": False, "root": None, "event": "",
                        "token": None, "guests": [], "online": False,
                        "public_url": None, "public_host": None,
-                       "threshold": 0.45, "pin": None, "expires": 0})
+                       "production_url": None, "threshold": 0.45, "pin": None,
+                       "expires": 0})
     if was_online:
         try:
             from . import tunnel
             tunnel.stop()
         except Exception:
             pass
+    _relay_stop()
     return {"ok": True, "enabled": False}
 
 
@@ -820,28 +830,32 @@ def api_share_status(p):
     token = p.get("token")
     if _share_expired():
         api_share_disable({})
+    relay = _production_relay_status()
     with _SHARE_LOCK:
         enabled = _SHARE["enabled"]
         event = _SHARE["event"]
         cur = _SHARE["token"]
         online = _SHARE.get("online")
-        public_url = _SHARE.get("public_url")
+        public_url = _SHARE.get("production_url") or _SHARE.get("public_url")
         threshold = _SHARE.get("threshold", 0.45)
         pin = _SHARE.get("pin")
         expires = _SHARE.get("expires", 0)
     if not enabled:
-        return {"enabled": False, "last": _load_share_cfg()}
+        last = _load_share_cfg()
+        return {"enabled": False, "last": last, "relay": relay,
+                "production_url": relay.get("guest_url")}
     if token is not None:                     # a guest checking their link
         if token != cur:
             return {"enabled": False}
         if pin and (str(p.get("pin") or "").strip() != pin):
             return {"enabled": True, "pin_required": True, "event": ""}
         return {"enabled": True, "event": event, "expires": expires}
-    ips = _lan_ips()                          # host asking for the link
+    urls = [public_url] if public_url else _share_urls(cur)
     return {"enabled": True, "event": event, "token": cur,
-            "port": _SERVER_PORT, "ips": ips, "urls": _share_urls(cur),
+            "port": _SERVER_PORT, "ips": [], "urls": urls,
             "online": bool(online), "public_url": public_url,
-            "threshold": threshold, "pin": pin or "", "expires": expires}
+            "production_url": public_url, "threshold": threshold,
+            "pin": pin or "", "expires": expires, "relay": relay}
 
 
 def api_share_find_start(p):
@@ -1155,7 +1169,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "Cannot read"})
 
     def _serve_zip(self):
-        """Zip up all matches from a finished FaceFind job (Download all), or the
+        """Zip up all matches from a finished Hapzea job (Download all), or the
         photos of a saved album when an ``a=<rid>.<token>`` link is used."""
         from urllib.parse import urlparse, parse_qs
         qs = parse_qs(urlparse(self.path).query)
@@ -1322,6 +1336,98 @@ def _relay_save_cfg(cfg):
         pass
 
 
+def _production_relay_base(candidate=None):
+    cfg = _relay_load_cfg()
+    choices = (
+        candidate,
+        os.environ.get("HAPZEA_PRODUCTION_URL"),
+        os.environ.get("PHORG_PRODUCTION_URL"),
+        os.environ.get("PHORG_RELAY_URL"),
+        cfg.get("base"),
+        cfg.get("production_url"),
+    )
+    for raw in choices:
+        base = (raw or "").strip().rstrip("/")
+        if base.startswith("http://") or base.startswith("https://"):
+            try:
+                from urllib.parse import urlparse
+                u = urlparse(base)
+                if u.scheme and u.netloc:
+                    return f"{u.scheme}://{u.netloc}"
+            except Exception:
+                return base
+    return ""
+
+
+def _relay_identity(base, event_name):
+    cfg = _relay_load_cfg()
+    same_base = (cfg.get("base") or "").strip().rstrip("/") == base
+    event_id = cfg.get("event") if same_base else None
+    key = cfg.get("key") if same_base else None
+    return (event_id or (_slug(event_name) + "-" + uuid.uuid4().hex[:6]),
+            key or uuid.uuid4().hex)
+
+
+def _production_relay_status():
+    cfg = _relay_load_cfg()
+    base = _RELAY.get("base") or cfg.get("base")
+    event = _RELAY.get("event") or cfg.get("event")
+    key = _RELAY.get("key") or cfg.get("key")
+    guest_url = _RELAY.get("guest_url")
+    if not guest_url and base and event:
+        try:
+            from . import relay_client
+            guest_url = relay_client.guest_url(base, event)
+        except Exception:
+            guest_url = None
+    out = {"configured": bool(base and event and key), "on": bool(_RELAY.get("on")),
+           "base": base, "event": event, "guest_url": guest_url,
+           "tier_b": bool(_RELAY.get("tier_b") or cfg.get("tier_b")),
+           "reachable": False, "error": _RELAY.get("error"), "stats": None}
+    if base and event and key:
+        try:
+            from . import relay_client
+            out["stats"] = relay_client.event_stats(base, event, key)
+            out["reachable"] = True
+            if out["error"] and str(out["error"]).startswith("connect failed"):
+                out["error"] = None
+        except Exception as e:
+            out["error"] = str(e)[:200]
+    return out
+
+
+def _ensure_production_relay(base, event_name, root, threshold=0.45,
+                             expires_at=0):
+    from . import relay_client
+    event_id, key = _relay_identity(base, event_name)
+    relay_client.publish_event(base, event_id, event_name, key)
+    if expires_at:
+        try:
+            relay_client.set_lifecycle(base, event_id, key, expires_at)
+        except Exception:
+            pass
+    # Production sharing must keep guest albums available while this PC is off,
+    # so the relay receives the searchable index and medium deliverable images.
+    tier_b = True
+    _relay_start(base, event_id, key, event_name, root, tier_b, expires_at,
+                 threshold=threshold)
+    guest_url = relay_client.guest_url(base, event_id)
+    _relay_save_cfg({"base": base, "event": event_id, "key": key,
+                     "name": event_name, "root": root, "tier_b": tier_b,
+                     "threshold": threshold, "expires_at": int(expires_at or 0),
+                     "production_url": guest_url})
+    return {"on": True, "base": base, "event": event_id, "guest_url": guest_url,
+            "tier_b": tier_b, "expires_at": int(expires_at or 0),
+            "reachable": True, "error": None}
+
+
+def _photo_pid(path):
+    """Stable id for one event photo, shared by the index publish, match
+    results and original uploads so the relay can join them."""
+    import hashlib
+    return hashlib.sha1(os.path.abspath(path).encode()).hexdigest()[:16]
+
+
 def _relay_build_matcher(root, threshold=0.44):
     """Build a matcher for the relay sync loop: given a guest's selfie bytes,
     run local face matching over *root* and return the delivered photos as
@@ -1329,6 +1435,7 @@ def _relay_build_matcher(root, threshold=0.44):
     from . import vision
     from PIL import Image
     import io as _io
+    import hashlib
 
     def matcher(selfie_bytes, _reg):
         d = os.path.join(tempfile.gettempdir(), "phorg_relay")
@@ -1351,6 +1458,7 @@ def _relay_build_matcher(root, threshold=0.44):
                     im.save(buf, "JPEG", quality=85)
                     out.append({"name": os.path.basename(p),
                                 "score": m.get("score"),
+                                "pid": _photo_pid(p),
                                 "image_bytes": buf.getvalue()})
                 except Exception:
                     continue
@@ -1364,7 +1472,7 @@ def _relay_build_matcher(root, threshold=0.44):
 
 
 def _relay_loop(base, event_id, key, name, root, interval=20,
-                stop=None, tier_b=None):
+                stop=None, tier_b=None, threshold=0.44):
     """Background loop: keep the event published on the always-on relay and
     drain queued guest sign-ups by matching them locally.  Stops when *stop*
     is set."""
@@ -1380,7 +1488,7 @@ def _relay_loop(base, event_id, key, name, root, interval=20,
         _RELAY["error"] = None
     except Exception as e:
         _RELAY["error"] = f"connect failed: {e}"
-    matcher = _relay_build_matcher(root)
+    matcher = _relay_build_matcher(root, threshold)
     i = 0
     while not (stop and stop.is_set()):
         if tier_b and i % 15 == 0:      # refresh the instant-match index
@@ -1393,6 +1501,10 @@ def _relay_loop(base, event_id, key, name, root, interval=20,
             _RELAY["error"] = None
         except Exception as e:
             _RELAY["error"] = str(e)[:200]
+        try:
+            _relay_upload_originals(base, event_id, key, root)
+        except Exception:
+            pass                        # relay busy/offline — retry next cycle
         i += 1
         for _ in range(int(max(5, interval))):   # responsive to stop
             if stop and stop.is_set():
@@ -1407,7 +1519,6 @@ def _relay_publish_index(base, event_id, key, root):
     from . import vision, relay_client
     from PIL import Image
     import io as _io
-    import hashlib
     if vision.check_deps() or not vision.models_present():
         return
     try:
@@ -1419,7 +1530,7 @@ def _relay_publish_index(base, event_id, key, root):
     emb = vision.FaceEmbedder()
     batch = []
     for p in native:
-        pid = hashlib.sha1(os.path.abspath(p).encode()).hexdigest()[:16]
+        pid = _photo_pid(p)
         if pid in have:
             continue
         try:
@@ -1452,6 +1563,31 @@ def _relay_publish_index(base, event_id, key, root):
             pass
 
 
+def _relay_upload_originals(base, event_id, key, root, limit=4):
+    """Send full-quality files for matched photos to the relay, a few per
+    cycle.  Guest downloads upgrade from the medium copy to the original —
+    including albums matched while this PC was off."""
+    from . import relay_client
+    needed = relay_client.originals_needed(base, event_id, key)
+    if not needed:
+        return 0
+    _be, native = _gather_event_images(root, True)
+    by_pid = {_photo_pid(p): p for p in native}
+    sent = 0
+    for pid in needed:
+        p = by_pid.get(pid)
+        if not p or not os.path.isfile(p):
+            continue
+        if os.path.getsize(p) > 60 * 1024 * 1024:   # relay's per-file cap
+            continue
+        with open(p, "rb") as f:
+            relay_client.upload_original(base, event_id, key, pid, f.read())
+        sent += 1
+        if sent >= limit:
+            break
+    return sent
+
+
 def _relay_stop():
     st = _RELAY.get("stop")
     if st:
@@ -1459,7 +1595,8 @@ def _relay_stop():
     _RELAY["on"] = False
 
 
-def _relay_start(base, event, key, name, root, tier_b, expires_at=0):
+def _relay_start(base, event, key, name, root, tier_b, expires_at=0,
+                 threshold=0.44):
     from . import relay_client
     _relay_stop()
     stop = threading.Event()
@@ -1469,7 +1606,8 @@ def _relay_start(base, event, key, name, root, tier_b, expires_at=0):
                    "guest_url": relay_client.guest_url(base, event),
                    "stop": stop})
     t = threading.Thread(target=_relay_loop, args=(base, event, key, name, root),
-                         kwargs={"stop": stop, "tier_b": bool(tier_b)},
+                         kwargs={"stop": stop, "tier_b": bool(tier_b),
+                                 "threshold": threshold},
                          daemon=True)
     _RELAY["thread"] = t
     t.start()
@@ -1477,59 +1615,42 @@ def _relay_start(base, event, key, name, root, tier_b, expires_at=0):
 
 def api_relay_status(_p):
     """Host-only: current relay state + live guest stats for the dashboard."""
-    on = bool(_RELAY.get("on"))
-    out = {"on": on, "base": _RELAY.get("base"), "event": _RELAY.get("event"),
-           "guest_url": _RELAY.get("guest_url"), "tier_b": _RELAY.get("tier_b"),
-           "expires_at": _RELAY.get("expires_at"), "error": _RELAY.get("error"),
-           "last": _relay_load_cfg(), "stats": None}
-    if on and _RELAY.get("base"):
-        try:
-            from . import relay_client
-            out["stats"] = relay_client.event_stats(
-                _RELAY["base"], _RELAY["event"], _RELAY["key"])
-        except Exception as e:
-            out["error"] = str(e)[:200]
+    out = _production_relay_status()
+    out.update({"expires_at": _RELAY.get("expires_at") or
+                (_relay_load_cfg().get("expires_at") or 0),
+                "last": _relay_load_cfg()})
     return out
 
 
 def api_relay_enable(p):
     """Host-only: connect the current shared event to an always-on relay."""
-    base = (p.get("base") or "").strip().rstrip("/")
-    if not base.startswith("http"):
+    base = _production_relay_base(p.get("base"))
+    if not base:
         raise ValueError("Enter the relay URL (https://\u2026).")
     with _SHARE_LOCK:
         root = _SHARE.get("root") if _SHARE.get("enabled") else None
         ev_name = _SHARE.get("event") or "Our Event"
+        threshold = _SHARE.get("threshold", 0.45)
     if not root:
         raise ValueError("Turn on the guest portal first, then enable the relay.")
-    from . import vision, relay_client
+    from . import vision
     if vision.check_deps() or not vision.cluster_api_available():
         raise ValueError("Face matching needs the AI tools installed "
                          "(click 'Install AI support' once).")
-    cfg = _relay_load_cfg()
-    # A stable event id + key per relay so re-enabling keeps the same guest link.
-    event_id = cfg.get("event") or (_slug(ev_name) + "-" + uuid.uuid4().hex[:6])
-    key = cfg.get("key") or uuid.uuid4().hex
-    tier_b = bool(p.get("tier_b"))
     try:
         exp_min = int(p.get("expiry_minutes") or 0)
     except (TypeError, ValueError):
         exp_min = 0
     expires_at = int(time.time()) + exp_min * 60 if exp_min > 0 else 0
     try:
-        relay_client.publish_event(base, event_id, ev_name, key)
+        relay = _ensure_production_relay(base, ev_name, root,
+                                         threshold=threshold,
+                                         expires_at=expires_at)
     except Exception as e:
         raise ValueError(f"Couldn't reach the relay: {e}")
-    if expires_at:
-        try:
-            relay_client.set_lifecycle(base, event_id, key, expires_at)
-        except Exception:
-            pass
-    _relay_start(base, event_id, key, ev_name, root, tier_b, expires_at)
-    _relay_save_cfg({"base": base, "event": event_id, "key": key,
-                     "tier_b": tier_b})
-    return {"ok": True, "guest_url": _RELAY["guest_url"], "event": event_id,
-            "tier_b": tier_b, "expires_at": expires_at}
+    return {"ok": True, "guest_url": relay["guest_url"],
+            "event": relay["event"], "tier_b": relay["tier_b"],
+            "expires_at": expires_at}
 
 
 def api_relay_disable(_p):
@@ -1554,6 +1675,46 @@ def api_relay_delete(_p):
         except Exception:
             pass
     return {"ok": True}
+
+
+def _resume_production_share():
+    """Restore the single production URL after an app restart.
+
+    The relay keeps the guest-facing page alive while this PC is off.  When the
+    desktop app returns, this reconnects the local matcher/indexer to the same
+    event without asking the photographer to pick connection modes again.
+    """
+    cfg = _relay_load_cfg()
+    last = _load_share_cfg()
+    base = _production_relay_base()
+    event_id = cfg.get("event")
+    key = cfg.get("key")
+    root = cfg.get("root") or last.get("root")
+    if not (base and event_id and key and root and os.path.isdir(root)):
+        return False
+    expires_at = int(cfg.get("expires_at") or 0)
+    if expires_at and time.time() > expires_at:
+        return False
+    name = cfg.get("name") or last.get("event") or "Our Event"
+    threshold = float(cfg.get("threshold") or 0.45)
+    try:
+        from . import relay_client
+        relay_client.publish_event(base, event_id, name, key)
+        guest_url = relay_client.guest_url(base, event_id)
+    except Exception:
+        guest_url = cfg.get("production_url")
+    _register_root(root)
+    with _SHARE_LOCK:
+        _SHARE.update({"enabled": True, "root": os.path.abspath(root),
+                       "event": name, "token": uuid.uuid4().hex[:10],
+                       "guests": [], "online": True, "public_url": None,
+                       "public_host": None, "production_url": guest_url,
+                       "threshold": threshold, "pin": None,
+                       "expires": expires_at})
+    _relay_start(base, event_id, key, name, os.path.abspath(root),
+                 bool(cfg.get("tier_b", True)), expires_at,
+                 threshold=threshold)
+    return True
 
 
 # Registered here (not in the ROUTES literal) because these handlers are defined
@@ -1584,14 +1745,15 @@ def serve(host="127.0.0.1", port=8765, open_browser=True):
     _SERVER_PORT = port
     httpd = ThreadingHTTPServer((bind_host, port), Handler)
     url = f"http://127.0.0.1:{port}/"
-    print("\n  FaceFind is running.")
+    print("\n  Hapzea is running.")
     print(f"  Open in your browser:  {url}")
     print("  Keep this window open while you use the app.")
     print("  Press Ctrl+C (or close this window) to stop.\n")
     threading.Thread(target=_resume_pending, daemon=True).start()
+    threading.Thread(target=_resume_production_share, daemon=True).start()
     # Opt-in always-on relay sync (Phase 3): match queued guest sign-ups locally
     # and post results to a relay that stays up while this PC is off.
-    _rb = os.environ.get("PHORG_RELAY_URL")
+    _rb = os.environ.get("HAPZEA_PRODUCTION_URL") or os.environ.get("PHORG_RELAY_URL")
     _re = os.environ.get("PHORG_RELAY_EVENT")
     _rk = os.environ.get("PHORG_RELAY_KEY")
     _rr = os.environ.get("PHORG_RELAY_ROOT")
@@ -1606,7 +1768,7 @@ def serve(host="127.0.0.1", port=8765, open_browser=True):
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n  Stopping FaceFind ...")
+        print("\n  Stopping Hapzea ...")
     finally:
         try:
             from . import tunnel

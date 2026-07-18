@@ -80,7 +80,7 @@
 <header class="hero">
   <span class="badge">Performance &amp; Scaling Analysis</span>
   <h1>Face&nbsp;ID under load: <span class="g">20 guests at once</span> on a low-RAM PC</h1>
-  <p class="sub">A plain-English look at what happens inside the <b>FaceFind</b> feature when a crowd searches for
+  <p class="sub">A plain-English look at what happens inside the <b>Hapzea</b> feature when a crowd searches for
   their photos at the same time, why a machine with little RAM struggles — and the cheapest ways to make it
   scale smoothly. Based on the actual code in <span class="mono">phorg/vision.py</span> and
   <span class="mono">phorg/server.py</span>.</p>
@@ -147,7 +147,7 @@ flowchart LR
 <section id="crowd">
   <h2><span class="n">2</span> What happens when ~20 people search at once</h2>
   <p class="lead">The built-in web server (<span class="mono">ThreadingHTTPServer</span>) starts a
-  <b>new thread per request</b>, and each FaceFind job spawns <b>another background thread</b>. There is
+  <b>new thread per request</b>, and each Hapzea job spawns <b>another background thread</b>. There is
   <b>no limit</b> on how many run at the same time.</p>
 
   <p class="lead">So 20 guests pressing "Find my photos" together means <b>20 identical heavy jobs running in
@@ -324,7 +324,7 @@ flowchart LR
 </section>
 
 <footer>
-  phorg · Face ID (FaceFind) scaling &amp; low-RAM analysis · runs 100% locally · no photo ever leaves the PC
+  phorg · Face ID (Hapzea) scaling &amp; low-RAM analysis · runs 100% locally · no photo ever leaves the PC
 </footer>
 
 </div>

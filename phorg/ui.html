@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="theme-color" content="#000062"/>
-<title>Hapzea FaceFind — find every guest's photos</title>
+<title>Hapzea — find every guest's photos</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
@@ -46,7 +46,7 @@ button{font:inherit;cursor:pointer}
 .blob.b3{width:480px;height:480px;left:38%;bottom:-240px;background:radial-gradient(circle,rgba(168,85,247,.32),transparent 70%);animation-delay:3.2s}
 @keyframes pulseSlow{0%,100%{opacity:.42}50%{opacity:.72}}
 
-/* layout — single, centered FaceFind surface */
+/* layout — single, centered Hapzea surface */
 .main{padding:34px 24px 80px;max-width:840px;width:100%;margin:0 auto}
 .brand{display:flex;align-items:center;gap:14px;margin:4px 2px 26px}
 .brandlogo{height:40px;width:auto;object-fit:contain;
@@ -182,7 +182,7 @@ details.advbox[open]>summary::before{content:"▾ "}
 .thumb img{width:100%;height:92px;object-fit:cover;border-radius:8px;background:#0a1220;display:block}
 .thumb .nm{color:var(--mut);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:5px 2px 4px}
 
-/* FaceFind selfie */
+/* Hapzea selfie */
 .ffselfie{display:flex;gap:14px;align-items:center;margin-top:6px}
 .ffprev{width:88px;height:88px;border-radius:16px;border:2px dashed var(--line);flex:none;
   display:flex;align-items:center;justify-content:center;font-size:34px;overflow:hidden;background:rgba(255,255,255,.04);transition:.2s}
@@ -283,7 +283,7 @@ const S = {
   connected:false, backend:"local", root:"", depth:3,
   scan:null,
   ffSelfie:"", ffSelfies:[], ffName:"", ffMatches:[], ffJob:null,
-  shareEvent:"", shareOnline:true, sharePin:"", shareExpiry:0,
+  shareEvent:"", productionUrl:"",
   guestToken:null, guestEvent:"", guestSelfie:null, guestSelfies:[], guestUpload:null, gJob:null, gFails:0,
   shareEnabled:false,
 };
@@ -374,13 +374,13 @@ async function openBrowser(onPick, startPath){
   load(cur);
 }
 
-// ================================================================ Host: FaceFind landing (3 clicks)
+// ================================================================ Host: Hapzea landing (3 clicks)
 function pageHost(m){
   const p=el("div","page");
   p.innerHTML=`
     <div class="brand">
       <img class="brandlogo" src="/logo.png" alt="Hapzea"/>
-      <span class="brandbadge">FaceFind</span>
+      <span class="brandbadge">Hapzea</span>
     </div>
     <h1>Find every guest's photos</h1>
     <p class="lead">Share a QR link — guests add a selfie and instantly get their photos. 100% on your PC.</p>
@@ -423,7 +423,7 @@ function renderFolderCard(){
       <div id="prewarm" class="prewarm"></div>`;
     $("#changeFolder").onclick=()=>{S.connected=false;S.ffSelfies=[];$("#ffHost").innerHTML="";renderFolderCard();renderSteps();};
     $("#ffHost").innerHTML=`<div class="card" id="ffCard" style="margin-top:16px"></div>`;
-    renderFaceFind();
+    renderHapzea();
     renderSteps();
     startPrewarm();
     return;
@@ -486,17 +486,17 @@ async function pollPrewarm(forRoot){
   }
   setTimeout(()=>pollPrewarm(forRoot),900);
 }
-async function renderFaceFind(){
+async function renderHapzea(){
   const card=$("#ffCard");
   if(S.backend!=="local"){
-    card.innerHTML=`<div class="callout warn">🙋 FaceFind works on a local folder. Copy the event photos to your PC first.</div>`;return;}
+    card.innerHTML=`<div class="callout warn">🙋 Hapzea works on a local folder. Copy the event photos to your PC first.</div>`;return;}
   let st;try{st=await api("cluster/status",{});}catch(err){card.innerHTML=`<div class="callout bad">${esc(err.message)}</div>`;return;}
   if(!st.available){
-    card.innerHTML=`<div class="callout warn flex">🧩 <div style="flex:1">FaceFind needs the face-recognition tools.
+    card.innerHTML=`<div class="callout warn flex">🧩 <div style="flex:1">Hapzea needs the face-recognition tools.
       Run <code>pip install -r requirements-vision.txt</code>, or (from source) click below.</div>
       <button class="btn ghost sm" id="ffInstall">Install AI support</button></div>`;
     const ib=$("#ffInstall");if(ib)ib.onclick=async e=>{busy(e.target,true,"Installing…");
-      try{await api("vision/install",{});toast("AI support installed","good");renderFaceFind();}
+      try{await api("vision/install",{});toast("AI support installed","good");renderHapzea();}
       catch(err){toast(err.message,"bad");busy(e.target,false);}};
     return;}
   S.ffSelfies=S.ffSelfies||[];
@@ -527,7 +527,7 @@ async function renderFaceFind(){
   $("#ffName").oninput=e=>S.ffName=e.target.value;
   $("#ffFile").onchange=e=>{[...e.target.files].forEach(f=>useSelfieFile(f));e.target.value="";};
   $("#ffCam").onclick=openSelfieCamera;
-  $("#ffFind").onclick=runFaceFind;
+  $("#ffFind").onclick=runHapzea;
   renderFfSelfies();
   refreshShareBox();
   renderSteps();
@@ -537,107 +537,51 @@ async function refreshShareBox(){
   const box=$("#shareBox");if(!box)return;
   let st;try{st=await api("share/status",{});}catch(e){box.innerHTML="";S.shareEnabled=false;renderSteps();return;}
   S.shareEnabled=!!st.enabled;renderSteps();
+  const relay=st.relay||{};
   if(st.enabled){
-    const links=(st.urls||[]);const primary=links[0];const others=links.slice(1);
-    const online=!!st.online;
-    box.innerHTML=`<div class="callout safe">🟢 <b>“${esc(st.event)}”</b> is live — ${online?`open from <b>any phone, anywhere</b>.`:`guests on the <b>same Wi-Fi</b> can open it.`}</div>
-      ${primary?`<label class="fld">${online?"🌐 Your internet share link":"Your share link"}</label>
+    const primary=st.production_url||(st.urls||[])[0]||relay.guest_url||"";
+    const rs=relay.stats||{};
+    const origLine=(rs.originals||rs.originals_pending)?`<div class="subhint" style="text-align:center;margin-top:2px">Full-quality photos on the helper: ${num(rs.originals||0)}${rs.originals_pending?` · ${num(rs.originals_pending)} uploading…`:" · all matched albums upgraded"}</div>`:"";
+    box.innerHTML=`<div class="callout safe"><b>${esc(st.event)}</b> is ready for guests.</div>
+      ${primary?`<label class="fld">Hapzea guest link</label>
         <div class="row"><input type="text" readonly value="${esc(primary)}" style="flex:1;font-size:13px"/>
-          <button class="btn sm" data-copy="${esc(primary)}">📋 Copy</button></div>`
-        :`<div class="callout warn" style="margin-top:8px">No network address found. Connect to the internet/Wi-Fi and re-enable.</div>`}
-      ${primary?`<div id="shareQr" style="text-align:center;margin:12px 0 4px"></div>
-        <div class="subhint" style="text-align:center;margin-top:2px">📷 Scan to open — no typing.</div>`:""}
-      ${others.length?`<details class="advbox" style="margin-top:8px"><summary>Other addresses</summary>
-        ${others.map(u=>`<div class="row" style="margin-top:8px"><input type="text" readonly value="${esc(u)}" style="flex:1;font-size:12.5px"/>
-          <button class="btn ghost sm" data-copy="${esc(u)}">📋 Copy</button></div>`).join("")}</details>`:""}
-      ${online?"":`<details class="advbox" style="margin-top:8px"><summary>📶 Wi-Fi join QR</summary>
-        <div class="subhint" style="margin-top:6px">Guests scan to join your Wi-Fi, then scan the link above.</div>
-        <div class="row" style="margin-top:8px"><input type="text" id="wifiSsid" placeholder="Wi-Fi name (SSID)" style="flex:1"/>
-          <input type="text" id="wifiPass" placeholder="Wi-Fi password" style="flex:1"/></div>
-        <div class="row" style="margin-top:8px;align-items:center;gap:10px">
-          <label class="toggle" style="margin:0"><input type="checkbox" id="wifiHidden"/><span class="tk"></span><span>Hidden network</span></label>
-          <button class="btn ghost sm" id="wifiGen">Make Wi-Fi QR</button></div>
-        <div id="wifiQr" style="text-align:center;margin-top:10px"></div></details>`}
-      <div class="subhint">Share via WhatsApp/email too. Stops when you close the app.</div>
-      ${st.pin?`<div class="subhint">🔒 PIN to open: <b>${esc(st.pin)}</b> — give it to trusted guests only.</div>`:""}
-      ${st.expires?`<div class="subhint">⏳ Auto-expires: <b>${esc(new Date(st.expires*1000).toLocaleString())}</b></div>`:""}
-      <div class="slider" style="margin-top:12px">
-        <label><span>🎯 Match strictness</span><span id="shareStrictVal">${ffStrictLabel(Math.round((st.threshold||0.45)*100))}</span></label>
-        <input type="range" id="shareStrict" min="30" max="60" step="1" value="${Math.round((st.threshold||0.45)*100)}"/>
-        <div class="ends"><span>Looser — more photos</span><span>Stricter — only sure matches</span></div>
-        <div class="subhint">Getting wrong people? Slide toward <b>Stricter</b>.</div>
-      </div>
-      <div class="sect-t" style="margin-top:14px">☁️ Always-on cloud relay</div>
-      <div id="relayBox"><div class="subhint">Loading…</div></div>
-      <div class="sect-t" style="margin-top:12px">👥 Guests who’ve searched <span id="guestCount" style="color:var(--mut)"></span></div>
-      <div id="guestList"><div class="subhint">No one yet.</div></div>
-      <div class="btn-row"><button class="btn warn" id="shareStop">⏹️ Stop sharing</button></div>`;
+          <button class="btn sm" data-copy="${esc(primary)}">Copy</button></div>
+        <div id="shareQr" style="text-align:center;margin:12px 0 4px"></div>
+        <div class="subhint" style="text-align:center;margin-top:2px">One QR. One production URL. Guests can use it even when this computer is off.</div>${origLine}`
+        :`<div class="callout warn" style="margin-top:8px">Production URL is not configured. Add your Hapzea production URL and enable sharing again.</div>`}
+      <div class="sect-t" style="margin-top:14px">Guests who have searched <span id="guestCount" style="color:var(--mut)"></span></div>
+      <div id="guestList"><div class="subhint">No one yet.</div></div>`;
     box.querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>{
       navigator.clipboard.writeText(b.dataset.copy).then(()=>toast("Link copied","good")).catch(()=>toast("Select the link and copy manually","bad"));});
     if(primary){renderQR($("#shareQr"),primary,6,2,"H");
       const wrap=$("#shareQr .qrwrap");
       if(wrap){const lg=el("img","qrlogo");lg.src="/logo.png";lg.alt="";wrap.appendChild(lg);}}
-    const wifiGen=$("#wifiGen");
-    if(wifiGen)wifiGen.onclick=()=>{
-      const s=($("#wifiSsid").value||"").trim();
-      if(!s){toast("Enter your Wi-Fi name first","bad");return;}
-      const p=$("#wifiPass").value||"";const h=$("#wifiHidden").checked;
-      const enc=v=>String(v).replace(/([\\;,:"])/g,"\\$1");
-      const payload=`WIFI:T:${p?"WPA":"nopass"};S:${enc(s)};${p?"P:"+enc(p)+";":""}${h?"H:true;":""};`;
-      renderQR($("#wifiQr"),payload,5);
-    };
-    $("#shareStop").onclick=async e=>{busy(e.target,true,"Stopping…");
-      try{await api("share/disable",{});toast("Sharing stopped","good");}catch(err){toast(err.message,"bad");}
-      refreshShareBox();};
-    const ss=$("#shareStrict");
-    if(ss){
-      ss.oninput=e=>{$("#shareStrictVal").textContent=ffStrictLabel(+e.target.value);};
-      ss.onchange=async e=>{try{await api("share/threshold",{threshold:(+e.target.value)/100});
-        toast("Strictness updated","good");}catch(err){toast(err.message,"bad");}};
-    }
     pollGuests();
-    renderRelayBox();
   }else{
     const last=st.last||{};
     if(!S.shareEvent&&last.event)S.shareEvent=last.event;
-    if(!S.sharePin&&last.pin)S.sharePin=last.pin;
-    box.innerHTML=`<div class="subhint">Turn on a portal — guests open the link, add a selfie, and get their photos.</div>
+    const savedBase=relay.base||last.relay_base||last.base||"";
+    if(!S.productionUrl&&savedBase)S.productionUrl=savedBase;
+    box.innerHTML=`<div class="subhint">Create one Hapzea QR for this event. The QR points to the production relay, so guests keep the same link after your computer is closed.</div>
       <label class="fld" style="margin-top:10px">Event name (shown to guests)</label>
       <input type="text" id="shareEvent" placeholder="e.g. Priya &amp; Arjun's Wedding" value="${esc(S.shareEvent||"")}"/>
-      <label class="toggle" style="margin-top:12px" title="Creates a secure public link via Cloudflare so guests can open it from anywhere — no shared Wi-Fi needed.">
-        <input type="checkbox" id="shareOnline" ${S.shareOnline?"checked":""}/>
-        <span class="tk"></span><span>🌐 Share over the internet<span class="desc"> — works without shared Wi-Fi</span></span></label>
-      <div class="subhint" id="onlineHint" style="display:${S.shareOnline?"block":"none"}">First run downloads a small helper. Link works only while the app is open.</div>
-      <div class="row" style="margin-top:12px">
-        <div style="flex:1"><label class="fld" style="margin-top:0">🔒 PIN (optional)</label>
-          <input type="text" id="sharePin" inputmode="numeric" maxlength="12" placeholder="e.g. 1234" value="${esc(S.sharePin||"")}"/></div>
-        <div style="flex:1"><label class="fld" style="margin-top:0">⏳ Auto-expire</label>
-          <select id="shareExpiry">
-            <option value="0">Never</option>
-            <option value="180">3 hours</option>
-            <option value="1440">24 hours</option>
-            <option value="4320">3 days</option>
-          </select></div>
-      </div>
-      <div class="subhint">A PIN keeps the link safe to post in a group chat; expiry auto-stops sharing.</div>
-      <div class="btn-row"><button class="btn" id="shareGo">🔗 Enable guest portal</button></div>`;
+      <label class="fld" style="margin-top:12px">Production URL</label>
+      <input type="text" id="productionUrl" placeholder="https://your-hapzea-relay.example.com" value="${esc(S.productionUrl||savedBase)}"/>
+      <div class="btn-row"><button class="btn" id="shareGo">Create Hapzea QR</button></div>`;
     $("#shareEvent").oninput=e=>S.shareEvent=e.target.value;
-    $("#sharePin").oninput=e=>S.sharePin=e.target.value.trim();
-    $("#shareOnline").onchange=e=>{S.shareOnline=e.target.checked;$("#onlineHint").style.display=e.target.checked?"block":"none";};
+    $("#productionUrl").oninput=e=>S.productionUrl=e.target.value.trim();
     $("#shareGo").onclick=async e=>{
-      const online=$("#shareOnline").checked;
-      const pin=($("#sharePin").value||"").trim();
-      const expiry_minutes=+($("#shareExpiry").value||0);
-      busy(e.target,true,online?"Creating online link…":"Starting…");
-      try{await api("share/enable",{root:S.root,event:S.shareEvent||"Our Event",online,pin,expiry_minutes});
-        toast(online?"Online guest portal is live":"Guest portal is live","good");
-        startPrewarm();}   // make sure the cache is warming so guests get instant results
+      const base=($("#productionUrl").value||"").trim();
+      if(!base){toast("Enter the Hapzea production URL first","bad");return;}
+      busy(e.target,true,"Creating production QR...");
+      try{await api("share/enable",{root:S.root,event:S.shareEvent||"Our Event",base});
+        toast("Hapzea QR is ready","good");
+        startPrewarm();}
       catch(err){toast(err.message,"bad");}
       refreshShareBox();
     };
   }
-}
-async function pollGuests(){
+}async function pollGuests(){
   const list=$("#guestList");if(!list)return;   // stop if box replaced
   let d;try{d=await api("share/guests",{});}catch(e){return;}
   renderGuestList(d);
@@ -678,59 +622,6 @@ function renderGuestList(d){
     const j=b.dataset.job;GUEST_OPEN.has(j)?GUEST_OPEN.delete(j):GUEST_OPEN.add(j);
     renderGuestList(d);});
 }
-function statCell(label,v){return `<div style="background:#0d1424;border:1px solid #23324e;border-radius:10px;padding:8px;text-align:center">
-  <div style="font-size:1.2rem;font-weight:700">${v==null?"—":num(v)}</div><div style="color:var(--mut);font-size:11px">${esc(label)}</div></div>`;}
-async function renderRelayBox(){
-  const box=$("#relayBox");if(!box)return;
-  let d;try{d=await api("share/relay/status",{});}catch(e){d={on:false};}
-  const last=d.last||{};
-  if(d.on){
-    const s=d.stats||{};
-    const exp=d.expires_at?`<div class="subhint">⏳ Auto-deletes: <b>${esc(new Date(d.expires_at*1000).toLocaleString())}</b></div>`:"";
-    box.innerHTML=`<div class="callout safe" style="margin-top:6px">🟢 Relay is ON — guests can find their photos even after you close the app.</div>
-      <div class="row" style="margin-top:8px"><input readonly value="${esc(d.guest_url||"")}" style="flex:1;min-width:0"/>
-        <button class="btn ghost sm" data-copy="${esc(d.guest_url||"")}">Copy</button></div>
-      <div id="relayQr" style="text-align:center;margin-top:8px"></div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px">
-        ${statCell("Registered",s.registrations)}${statCell("Matched",s.matched)}${statCell("Pending",s.pending)}${statCell("Indexed",s.photos)}</div>
-      ${d.tier_b?`<div class="subhint" style="margin-top:8px">⚡ Instant matching ON — face data + previews are uploaded to the relay.</div>`:`<div class="subhint" style="margin-top:8px">🔒 Strict mode — face matching stays on this PC.</div>`}
-      ${exp}
-      ${d.error?`<div class="callout warn" style="margin-top:8px">⚠️ ${esc(d.error)}</div>`:""}
-      <div class="btn-row"><button class="btn ghost sm" id="relayOff">⏹️ Turn off relay</button>
-        <button class="btn warn sm" id="relayDel">🗑️ Delete guest data</button></div>`;
-    box.querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>{
-      navigator.clipboard.writeText(b.dataset.copy).then(()=>toast("Link copied","good")).catch(()=>toast("Copy manually","bad"));});
-    if(d.guest_url&&typeof renderQR==="function")renderQR($("#relayQr"),d.guest_url,5,2,"H");
-    $("#relayOff").onclick=async e=>{busy(e.target,true,"Turning off…");
-      try{await api("share/relay/disable",{});toast("Relay turned off","good");}catch(err){toast(err.message,"bad");}
-      renderRelayBox();};
-    $("#relayDel").onclick=async e=>{
-      if(!confirm("Delete all guest sign-ups and photos from the relay? This can't be undone."))return;
-      busy(e.target,true,"Deleting…");
-      try{await api("share/relay/delete",{});toast("Guest data deleted","good");}catch(err){toast(err.message,"bad");}
-      renderRelayBox();};
-    clearTimeout(S._relayPoll);
-    if($("#relayBox"))S._relayPoll=setTimeout(renderRelayBox,6000);
-  }else{
-    box.innerHTML=`<div class="subhint">Point at a relay you run so the guest link stays live 24×7 — even after you close the app.</div>
-      <label class="fld" style="margin-top:8px">Relay URL</label>
-      <input type="text" id="relayUrl" placeholder="https://your-relay.example.com" value="${esc(last.base||"")}"/>
-      <label class="toggle" style="margin-top:10px"><input type="checkbox" id="relayTierB" ${last.tier_b?"checked":""}/>
-        <span class="tk"></span><span>⚡ Instant matching<span class="desc"> — uploads face data + previews so guests get results while your PC is off</span></span></label>
-      <label class="fld" style="margin-top:10px">⏳ Auto-delete guest data</label>
-      <select id="relayExpiry"><option value="0">Never</option><option value="1440">After 1 day</option><option value="4320">After 3 days</option><option value="10080">After 7 days</option></select>
-      <div class="btn-row"><button class="btn" id="relayOn">☁️ Enable relay</button></div>
-      ${d.error?`<div class="callout warn" style="margin-top:8px">⚠️ ${esc(d.error)}</div>`:""}`;
-    $("#relayOn").onclick=async e=>{
-      const base=($("#relayUrl").value||"").trim();
-      if(!base){toast("Enter the relay URL first","bad");return;}
-      const tier_b=$("#relayTierB").checked;const expiry_minutes=+($("#relayExpiry").value||0);
-      busy(e.target,true,"Connecting…");
-      try{await api("share/relay/enable",{base,tier_b,expiry_minutes});toast("Relay is live","good");}
-      catch(err){toast(err.message,"bad");}
-      renderRelayBox();};
-  }
-}
 // ---- guest portal (opened via ?g=<token> on a phone) ----
 async function initGuestPortal(token){
   const main=$("#main");
@@ -764,7 +655,7 @@ async function initGuestAlbum(ref){
   const m=d.matches||[];
   const nm=(d.name&&d.name!=="Guest")?(", "+esc(d.name)):"";
   main.innerHTML=`<div class="page" style="max-width:620px;margin:18px auto">
-    <div class="brand"><img class="brandlogo" src="/logo.png" alt="Hapzea"/><span class="brandbadge">FaceFind</span></div>
+    <div class="brand"><img class="brandlogo" src="/logo.png" alt="Hapzea"/><span class="brandbadge">Hapzea</span></div>
     <h1>📸 ${esc(d.event||"Your photos")}</h1>
     <p class="lead">Your private album${nm} — tap any photo to download.</p>
     ${m.length?`<div class="callout safe">✅ Found <b>${num(m.length)}</b> photo(s) you're in.</div>
@@ -782,7 +673,7 @@ async function initGuestAlbum(ref){
 function renderGuestPin(token){
   const main=$("#main");
   main.innerHTML=`<div class="page" style="max-width:440px;margin:40px auto"><div class="card" style="text-align:center">
-    <div class="brand" style="justify-content:center"><img class="brandlogo" src="/logo.png" alt="Hapzea"/><span class="brandbadge">FaceFind</span></div>
+    <div class="brand" style="justify-content:center"><img class="brandlogo" src="/logo.png" alt="Hapzea"/><span class="brandbadge">Hapzea</span></div>
     <h3 style="margin:8px 0 2px">🔒 Enter event PIN</h3>
     <p class="subhint">Ask the host for the event PIN.</p>
     <input type="text" id="gPin" inputmode="numeric" maxlength="12" placeholder="PIN" style="text-align:center;font-size:20px;letter-spacing:5px;margin-top:12px"/>
@@ -809,7 +700,7 @@ function guestCid(){
 function renderGuestPortal(){
   const main=$("#main");
   main.innerHTML=`<div class="page" style="max-width:620px;margin:18px auto">
-    <div class="brand"><img class="brandlogo" src="/logo.png" alt="Hapzea"/><span class="brandbadge">FaceFind</span></div>
+    <div class="brand"><img class="brandlogo" src="/logo.png" alt="Hapzea"/><span class="brandbadge">Hapzea</span></div>
     <h1>📸 ${esc(S.guestEvent)}</h1>
     <p class="lead">Add a selfie to find every photo you're in. Matched privately — never uploaded.</p>
     <div class="card">
@@ -1057,7 +948,7 @@ async function openSelfieCamera(){
     catch(err){toast(err.message,"bad");}
   };
 }
-async function runFaceFind(e){
+async function runHapzea(e){
   if(!(S.ffSelfies||[]).length){toast("Add a selfie first","bad");return;}
   const btn=e.target;busy(btn,true,"Scanning faces…");
   const prog=$("#ffProgress");$("#ffOut").innerHTML="";
@@ -1073,10 +964,10 @@ async function runFaceFind(e){
         <div id="ffCount" style="color:var(--mut);font-size:12px;margin-top:8px">Preparing…</div>
         <div class="thumbgrid" id="ffStream" style="margin-top:12px"></div></div></div>`;
     $("#ffCancel").onclick=()=>{if(S.ffJob)api("cluster/cancel",{jobId:S.ffJob});};
-    pollFaceFind(btn);
+    pollHapzea(btn);
   }catch(err){toast(err.message,"bad");busy(btn,false);}
 }
-async function pollFaceFind(btn){
+async function pollHapzea(btn){
   let d;try{d=await api("cluster/progress",{jobId:S.ffJob});}
   catch(err){toast(err.message,"bad");busy(btn,false);return;}
   const bar=$("#ffBar"),pc=$("#ffCount"),tally=$("#ffTally");
@@ -1096,13 +987,13 @@ async function pollFaceFind(btn){
       .map(m=>`<div class="thumb"><img loading="lazy" src="/api/thumb?size=200&path=${encodeURIComponent(m.path)}" alt=""/></div>`).join("");
   }
   if(d.error){$("#ffProgress").innerHTML=`<div class="callout bad" style="margin-top:14px">${esc(d.error)}</div>`;busy(btn,false);return;}
-  if(!d.finished){setTimeout(()=>pollFaceFind(btn),700);return;}
+  if(!d.finished){setTimeout(()=>pollHapzea(btn),700);return;}
   busy(btn,false);$("#ffProgress").innerHTML="";
   const res=d.result||{};
   if(res.error==="no_face_in_selfie"){$("#ffOut").innerHTML=`<div class="callout warn" style="margin-top:14px">😕 No face found in the selfie. Try a clearer, front-facing photo.</div>`;return;}
-  renderFaceFindResults(res);
+  renderHapzeaResults(res);
 }
-function renderFaceFindResults(res){
+function renderHapzeaResults(res){
   const out=$("#ffOut");
   const matches=(res.matches||[]).slice();
   if(!matches.length){out.innerHTML=`<div class="callout info" style="margin-top:14px">No matches for ${esc(S.ffName||"this person")}. Try a looser strictness or clearer selfie.</div>`;return;}
@@ -1115,14 +1006,14 @@ function renderFaceFindResults(res){
     <div class="btn-row">
       <button class="btn warn" id="ffSave">💾 Save album (${num(keep)} copies)</button>
     </div><div id="ffSaveOut"></div>`;
-  drawFaceFindGrid();
-  $("#ffSave").onclick=saveFaceFindAlbum;
+  drawHapzeaGrid();
+  $("#ffSave").onclick=saveHapzeaAlbum;
 }
 function refreshFfSave(){
   const keep=S.ffMatches.filter(x=>!x.drop).length;
   const b=$("#ffSave");if(b){b.innerHTML=`💾 Save album (${num(keep)} copies)`;b.disabled=!keep;}
 }
-function drawFaceFindGrid(){
+function drawHapzeaGrid(){
   const grid=$("#ffGrid");if(!grid)return;
   grid.innerHTML=S.ffMatches.map((mm,i)=>{const b=confBand(mm.score);
     return `<div class="thumb ${mm.drop?'':'sel'}" data-ffi="${i}" title="${esc(mm.path)}">
@@ -1139,12 +1030,12 @@ function drawFaceFindGrid(){
   grid.querySelectorAll("[data-ffi] img").forEach(im=>im.onclick=e=>{
     openLightbox(S.ffMatches,+e.target.closest("[data-ffi]").dataset.ffi);});
 }
-async function saveFaceFindAlbum(e){
+async function saveHapzeaAlbum(e){
   const keep=S.ffMatches.filter(m=>!m.drop);
   if(!keep.length){toast("Nothing selected","bad");return;}
   const nm=(S.ffName||"Guest").trim();
   const safe=nm.replace(/[^A-Za-z0-9 _-]/g,"").trim().replace(/\s+/g,"_")||"Guest";
-  const folder="FaceFind_"+safe;
+  const folder="Hapzea_"+safe;
   const assignments=keep.map(m=>({path:m.path,category:folder}));
   const btn=e.target;busy(btn,true,"Saving album…");
   const out=$("#ffSaveOut");

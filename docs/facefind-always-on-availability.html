@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>FaceFind — Always-On Availability: serving guests who register during & after the event</title>
+<title>Hapzea — Always-On Availability: serving guests who register during & after the event</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root{
@@ -87,7 +87,7 @@
 <div class="wrap">
 
   <header class="hero">
-    <h1>🕒 FaceFind — Always-On Availability</h1>
+    <h1>🕒 Hapzea — Always-On Availability</h1>
     <p>How to keep the guest portal working <strong>during the event and days after</strong> — when guests keep registering their faces but the photographer's PC gets shut down. Complete analysis: the problem, the options, the recommended architecture, how to implement it on the existing code, security, cost and a rollout plan.</p>
     <div class="tagpills">
       <span class="pill">Problem: host PC isn't always on</span>
@@ -114,7 +114,7 @@
   <!-- ============ PROBLEM ============ -->
   <section id="problem">
     <h2>1 · The problem — the availability window</h2>
-    <p class="lead">A wedding isn't a single moment. Guests scan your QR and add a selfie <strong>throughout the event and for days afterward</strong> — on the drive home, the next morning, when a relative forwards them the link. But FaceFind's engine runs on the photographer's laptop, and that laptop <strong>gets closed, sleeps, moves networks, or is powered off.</strong></p>
+    <p class="lead">A wedding isn't a single moment. Guests scan your QR and add a selfie <strong>throughout the event and for days afterward</strong> — on the drive home, the next morning, when a relative forwards them the link. But Hapzea's engine runs on the photographer's laptop, and that laptop <strong>gets closed, sleeps, moves networks, or is powered off.</strong></p>
     <div class="grid g4">
       <div class="card kpi"><span class="num">3–7 days</span><span class="lbl">Typical tail of late signups</span><span class="sub">after the event ends</span></div>
       <div class="card kpi"><span class="num">~40%</span><span class="lbl">Guests who register after day 0</span><span class="sub">illustrative, event-dependent</span></div>
@@ -408,11 +408,11 @@ POST /events/&lt;id&gt;/match          <span class="c"># guest: {selfie} -> inst
       </ul>
       <p style="margin-bottom:0"><strong>Avoid</strong> the full cloud gallery (option ⑤) as a default — it throws away the privacy + zero-cost edge that makes this product different. Keep it as a clearly-labelled premium tier only.</p>
     </div>
-    <div class="note">Companion to the FaceFind competitive battle plan and market analysis. Percentages, arrival curves and ₹ costs here are illustrative planning figures — validate with real events and confirm biometric/DPDP compliance before launch.</div>
+    <div class="note">Companion to the Hapzea competitive battle plan and market analysis. Percentages, arrival curves and ₹ costs here are illustrative planning figures — validate with real events and confirm biometric/DPDP compliance before launch.</div>
   </section>
 
   <footer>
-    <p>FaceFind always-on availability analysis · solving the "guests register while the host PC is off" problem with a store-and-forward relay + local engine. Architecture &amp; cost figures are directional, not financial or legal advice.</p>
+    <p>Hapzea always-on availability analysis · solving the "guests register while the host PC is off" problem with a store-and-forward relay + local engine. Architecture &amp; cost figures are directional, not financial or legal advice.</p>
   </footer>
 
 </div>

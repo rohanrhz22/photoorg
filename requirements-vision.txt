@@ -1,4 +1,4 @@
-# Packages FaceFind needs to detect & match faces (the face-recognition engine).
+# Packages Hapzea needs to detect & match faces (the face-recognition engine).
 # The app runs the web UI without these, but matching stays disabled until they
 # are installed. Everything runs locally; no image leaves your PC.
 #

@@ -144,6 +144,71 @@ def test_relay_match_multi_face_photo(relay):
     assert d["count"] == 1 and d["matches"][0]["name"] == "group.jpg"
 
 
+def test_relay_original_quality_upgrade(relay):
+    base = relay
+    relay_client.publish_event(base, "orig", "Originals Event", "KEY")
+    relay_client.publish_index(base, "orig", "KEY", [
+        {"pid": "pX", "name": "X.jpg", "embeds": [[1.0, 0.0]],
+         "image_bytes": b"MEDIUM-X"},
+    ])
+
+    # guest matches instantly while the PC is off -> medium copy is served,
+    # even for a download (no original on the relay yet)
+    d = relay_client._post(base, "/api/match", {
+        "event": "orig", "selfie_embedding": [1.0, 0.0], "threshold": 0.5})
+    assert d["count"] == 1
+    _, blob = relay_server.result_image(d["rid"], d["atoken"], 0,
+                                        prefer_original=True)
+    assert blob == b"MEDIUM-X"
+
+    # PC comes back on: it learns pX needs an original and uploads it
+    assert relay_client.originals_needed(base, "orig", "KEY") == ["pX"]
+    assert relay_client.upload_original(base, "orig", "KEY", "pX",
+                                        b"ORIGINAL-X")["ok"] is True
+    assert relay_client.originals_needed(base, "orig", "KEY") == []
+
+    # same album link now downloads full quality; gallery view stays medium
+    _, blob = relay_server.result_image(d["rid"], d["atoken"], 0,
+                                        prefer_original=True)
+    assert blob == b"ORIGINAL-X"
+    _, blob = relay_server.result_image(d["rid"], d["atoken"], 0)
+    assert blob == b"MEDIUM-X"
+
+    st = relay_client.event_stats(base, "orig", "KEY")
+    assert st["originals"] == 1 and st["originals_pending"] == 0
+
+    # deleting the event removes the stored originals too
+    relay_client.delete_event(base, "orig", "KEY")
+    assert not os.path.isdir(relay_server._orig_dir("orig"))
+
+
+def test_relay_store_forward_results_carry_pid(relay):
+    base = relay
+    relay_client.publish_event(base, "sfp", "SF Event", "KEY")
+    reg = relay_client._post(base, "/api/register", {
+        "event": "sfp", "name": "G",
+        "selfie": "data:image/png;base64," + base64.b64encode(b"s").decode()})
+
+    # PC-side matcher tags each result with the photo's pid
+    def matcher(_selfie, _r):
+        return [{"name": "A.jpg", "score": 0.9, "pid": "sfA",
+                 "image_bytes": b"MED-A"}]
+
+    relay_client.sync_once(base, "sfp", "KEY", matcher)
+    assert relay_client.originals_needed(base, "sfp", "KEY") == ["sfA"]
+    relay_client.upload_original(base, "sfp", "KEY", "sfA", b"ORIG-A")
+    _, blob = relay_server.result_image(reg["rid"], reg["atoken"], 0,
+                                        prefer_original=True)
+    assert blob == b"ORIG-A"
+
+    # wrong key can't push originals or list what's needed
+    import urllib.error
+    with pytest.raises(urllib.error.HTTPError):
+        relay_client.upload_original(base, "sfp", "WRONG", "sfA", b"X")
+    with pytest.raises(urllib.error.HTTPError):
+        relay_client.originals_needed(base, "sfp", "WRONG")
+
+
 def test_relay_event_stats(relay):
     base = relay
     relay_client.publish_event(base, "stats", "Stats Event", "KEY")

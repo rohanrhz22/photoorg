@@ -1,6 +1,6 @@
-# 🙋 FaceFind — find every photo a guest is in, from one selfie
+# 🙋 Hapzea — find every photo a guest is in, from one selfie
 
-FaceFind is a **local, private** desktop app for photographers and event hosts.
+Hapzea is a **local, private** desktop app for photographers and event hosts.
 Point it at an event folder, add a **selfie**, and it finds **every photo that
 person appears in** — then copies them into a personal album ready to share.
 
@@ -12,20 +12,20 @@ The whole flow is **3 clicks**:
 
 All face matching runs **100% on your PC** — nothing is ever uploaded, and your
 original photos are never moved (matches are **copied** into
-`FaceFind_<name>/`).
+`Hapzea_<name>/`).
 
 ---
 
 ## ✨ What it does
 
-- **FaceFind** — from a single selfie, scan the whole event tree and surface
+- **Hapzea** — from a single selfie, scan the whole event tree and surface
   every photo that guest is in (including group shots). A **Match strictness**
   slider trades off "more photos" vs. "only sure matches". Untick any wrong
-  matches, then **Save album** — the app copies them into `FaceFind_<name>/`
+  matches, then **Save album** — the app copies them into `Hapzea_<name>/`
   (originals untouched) so you can zip and send via WhatsApp / email.
 
 - **Shareable guest link + QR** — turn on the **guest self-service portal** and
-  FaceFind gives you a link and a **QR code**:
+  Hapzea gives you a link and a **QR code**:
   - **Same‑Wi‑Fi link** — guests on your network scan the QR, add a selfie on
     their own phone, and download the photos they're in.
   - **Internet link (optional)** — one toggle creates a secure **HTTPS** relay
@@ -41,7 +41,7 @@ original photos are never moved (matches are **copied** into
 
 ## 🖥️ Run it
 
-FaceFind is a desktop app — running it opens the interface in your browser.
+Hapzea is a desktop app — running it opens the interface in your browser.
 
 **Requirements**
 - **Python 3.8+**
@@ -69,7 +69,7 @@ No Python needed to *run* the result — just to build it:
 ```powershell
 .\build_app.bat
 ```
-Output: `dist\phorg.exe`. Double‑click it and FaceFind opens in the browser.
+Output: `dist\phorg.exe`. Double‑click it and Hapzea opens in the browser.
 
 ---
 
@@ -88,9 +88,9 @@ Output: `dist\phorg.exe`. Double‑click it and FaceFind opens in the browser.
 
 ```
 phorg/
-  server.py     # local HTTP server + FaceFind/guest/share JSON API
-  ui.html       # the FaceFind single-page interface
-  vision.py     # face detection & matching (the FaceFind engine)
+  server.py     # local HTTP server + Hapzea/guest/share JSON API
+  ui.html       # the Hapzea single-page interface
+  vision.py     # face detection & matching (the Hapzea engine)
   backends.py   # local (and ADB) file access + safe apply
   safety.py     # protected-folder rules
   tunnel.py     # optional Cloudflare relay for the internet share link

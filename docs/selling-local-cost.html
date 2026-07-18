@@ -319,7 +319,7 @@ flowchart LR
     <div class="callout"><b>Closest analogs — local AI photo apps:</b> these prove the exact phorg model (on-device AI on the user's own photos, sold as a licence).</div>
     <div class="grid three">
       <div class="tile"><h4>Topaz Labs <span class="tag">closest</span></h4><p>Gigapixel / Photo AI / Video AI. <b>Neural upscaling &amp; denoise run 100% locally</b> on your GPU/CPU. Sold as one-time licence + paid upgrades. A textbook example.</p></div>
-      <div class="tile"><h4>Excire Foto <span class="tag">closest</span></h4><p>Offline AI photo organizer with <b>on-device face &amp; content search</b> — almost the same idea as FaceFind. One-time licence.</p></div>
+      <div class="tile"><h4>Excire Foto <span class="tag">closest</span></h4><p>Offline AI photo organizer with <b>on-device face &amp; content search</b> — almost the same idea as Hapzea. One-time licence.</p></div>
       <div class="tile"><h4>Luminar Neo (Skylum)</h4><p>AI photo editing (sky replacement, masking) that runs locally. Sold as licence/subscription.</p></div>
       <div class="tile"><h4>ON1 Photo RAW</h4><p>Local AI masking, resize, NoNoise. Perpetual licence + upgrades.</p></div>
       <div class="tile"><h4>Mylio Photos</h4><p>Local-first photo organizer with on-device face recognition; no cloud required.</p></div>
@@ -353,13 +353,13 @@ flowchart LR
   <section id="licensing">
     <h2><span class="n">12</span> Making it "pay to use" — licensing &amp; trial</h2>
     <p class="lead">The recommended shape for phorg: a <b>14-day free trial</b>, after which only the <b>premium features
-    (FaceFind + online sharing)</b> lock until a licence key is entered. The rest of the app stays usable. No paid services required to start.</p>
+    (Hapzea + online sharing)</b> lock until a licence key is entered. The rest of the app stays usable. No paid services required to start.</p>
 
     <div class="diagram">
       <pre class="mermaid">
 flowchart TD
   A["App starts"] --> B{"Valid licence key?"}
-  B -- yes --> P["Premium unlocked:<br/>FaceFind + online sharing"]
+  B -- yes --> P["Premium unlocked:<br/>Hapzea + online sharing"]
   B -- no --> C{"Within 14-day trial?"}
   C -- yes --> P
   C -- no --> L["Premium locked<br/>Show 'Enter licence key'"]
@@ -386,7 +386,7 @@ flowchart TD
 
     <h3 style="margin:22px 0 6px;font-size:17px">How it plugs into phorg</h3>
     <div class="grid two">
-      <div class="tile"><h4>UI side</h4><p>An "Activate" screen to paste a key, a "Trial: N days left" badge, and a lock overlay on the FaceFind &amp; Sharing tabs when not entitled.</p></div>
+      <div class="tile"><h4>UI side</h4><p>An "Activate" screen to paste a key, a "Trial: N days left" badge, and a lock overlay on the Hapzea &amp; Sharing tabs when not entitled.</p></div>
       <div class="tile"><h4>Server side</h4><p>The <code>/api/facefind/*</code> and <code>/api/share/*</code> endpoints check an <code>is_entitled()</code> gate and refuse if unlicensed — so hiding the UI can't be bypassed by calling the API directly.</p></div>
     </div>
 
